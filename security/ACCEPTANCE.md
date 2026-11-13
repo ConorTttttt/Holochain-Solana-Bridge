@@ -7,15 +7,19 @@
 Run from the repository root with Node.js 20 or later:
 
     node --test security/test/adversarial.test.mjs
+    node --test security/test/solvency-model.test.mjs
     node --test observer/test/verify.test.mjs
     node --check security/test/adversarial.test.mjs
+
+The separately runnable solvency-model suite was actually executed under Node v22.16.0 (7/7 passing); see [the dated execution evidence](evidence/2026-11-13-solvency-tests.md). SEC-01 through SEC-07 remain unexecuted by SEC in the isolated environment pending full-checkout CI.
 
 SEC-01 through SEC-07 assert current denial behavior, refund-after-observation, missing PDA provenance, missing finalized-chain proof, mismatch rejection and inability of two matching snapshots to grant issuance. SPEC-01 through SPEC-04 exercise **only an in-test reference model** of reserved/paid obligations, recovery identity and replay. A passing SPEC test does not establish on-chain or Unyt economic guarantees.
 
 ### Reproducibility and honest status
 
 - Reviewed tree: main commit 4da2eee91aede92a35121e725fc7b44309fef427.
-- JS syntax and unit-test logs: attach real output and exact Node version to Issue #10 PR; if not executed, mark NOT RUN.
+- JS model tests: **EXECUTED**, 7/7 pass on Node v22.16.0; identical Git blob SHA verified, logged in `security/evidence/2026-11-13-solvency-tests.md`.
+- JS observer-backed adversarial fixture tests: **NOT RUN by SEC**; require full-checkout CI run and logs.
 - Anchor compilation and generated IDL: NOT RUN by SEC; depend on #7 and #11.
 - Solana local validator: NOT RUN by SEC; no on-chain adversarial exploit evidence.
 - RAVE 0.15.0 and production Unyt DNA: NOT RUN / exact deployed source and execution proofs not available in this repo.
