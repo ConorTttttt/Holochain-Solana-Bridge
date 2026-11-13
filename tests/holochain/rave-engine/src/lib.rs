@@ -56,3 +56,22 @@ mod published_execution_smoke {
         assert!(result.is_err(), "undefined Rhai variable must fail closed");
     }
 }
+
+#[cfg(test)]
+mod published_parked_standing_types {
+    use rave_engine::types::ParkedLinkStanding;
+
+    #[test]
+    fn non_parked_standings_cannot_satisfy_signer_precondition() {
+        fn is_parked(value: &ParkedLinkStanding) -> bool {
+            matches!(value, ParkedLinkStanding::Parked(_))
+        }
+        for value in [
+            ParkedLinkStanding::NotHeld,
+            ParkedLinkStanding::NotAParkedLink,
+            ParkedLinkStanding::Unparked,
+        ] {
+            assert!(!is_parked(&value));
+        }
+    }
+}
