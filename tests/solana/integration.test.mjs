@@ -83,8 +83,80 @@ const receiptFor = (owner, n) => {
   return PublicKey.findProgramAddressSync([Buffer.from('deposit'), owner.toBuffer(), le], programId);
 };
 
+/**
+ * Independently reconstruct liabilities from ALL on-chain receipt bytes after
+ * each serial successful/rejected bridge transaction. The config and vault
+ * are fetched in one RPC snapshot; the receipt scan is bounded below by its
+ * slot to prevent an older confirmed view from being mistaken for solvency.
+ * The concurrent-deposit/race tests reconcile after BOTH transactions settle.
+ */
+async function assertCustodyConservation(label, minContextSlot) {
+  const commitment = 'confirmed';
+  const configResult = await connection.getAccountInfoAndContext(config, {
+    commitment, ...(minContextSlot === undefined ? {} : { minContextSlot }),
+  });
+  if (!configResult.value) {
+    const withoutConfig = await connection.getProgramAccounts(programId, {
+      commitment, filters: [{ dataSize: 218 }],
+      minContextSlot: configResult.context.slot,
+    });
+    assert.equal(withoutConfig.length, 0, label + ': orphan receipts without a config');
+    return;
+  }
+  same(configResult.value.owner, programId);
+  const initial = decodeConfig(Buffer.from(configResult.value.data));
+  const [vaultKey] = vaultFor(new PublicKey(initial.mint));
+  const result = await connection.getMultipleAccountsInfoAndContext([config, vaultKey], {
+    commitment, minContextSlot: configResult.context.slot,
+  });
+  const [rawConfig, rawVault] = result.value;
+  assert.ok(rawConfig && rawVault, label + ': missing custody accounts');
+  same(rawConfig.owner, programId);
+  same(rawVault.owner, TOKEN_PROGRAM_ID);
+  const cfg = decodeConfig(Buffer.from(rawConfig.data));
+  const vault = decodeTokenAccount(Buffer.from(rawVault.data));
+  assert.equal(cfg.mint, initial.mint, label + ': mint changed during reconciliation');
+  assert.equal(cfg.bump, configBump, label + ': noncanonical config bump');
+  assert.equal(vault.mint, cfg.mint, label + ': incorrect vault mint');
+  assert.equal(vault.authority, config.toBase58(), label + ': incorrect vault token authority');
+  assert.equal(vault.hasDelegate, false, label + ': unexpected vault delegate');
+  assert.equal(vault.hasCloseAuthority, false, label + ': unexpected vault close authority');
+  assert.equal(Buffer.from(rawVault.data).readUInt32LE(109), 0, label + ': native/wrapped vault');
+  const scan = await connection.getProgramAccounts(programId, {
+    commitment, withContext: true,
+    minContextSlot: result.context.slot, filters: [{ dataSize: 218 }],
+  });
+  let activeReceipts = 0n;
+  for (const entry of scan.value) {
+    const receipt = decodeReceipt(Buffer.from(entry.account.data));
+    const [identity, bump] = receiptFor(new PublicKey(receipt.depositor), new BN(receipt.nonce));
+    same(entry.pubkey, identity);
+    assert.equal(receipt.bump, bump, label + ': wrong receipt bump');
+    assert.equal(receipt.config, config.toBase58(), label + ': receipt config mismatch');
+    assert.equal(receipt.vault, vaultKey.toBase58(), label + ': receipt vault mismatch');
+    assert.equal(receipt.mint, cfg.mint, label + ': receipt mint mismatch');
+    assert.equal(receipt.scope, cfg.scope, label + ': receipt scope mismatch');
+    if (!receipt.refunded) activeReceipts += BigInt(receipt.amount);
+  }
+  assert.equal(BigInt(cfg.totalActive), activeReceipts, label + ': liabilities != active receipt sum');
+  assert.ok(BigInt(vault.amount) >= activeReceipts, label + ': vault cannot cover active receipts');
+  assert.equal(BigInt(vault.amount), BigInt(cfg.totalActive), label + ': unexpected custody surplus');
+}
 async function send(ix, signers) {
-  return sendAndConfirmTransaction(connection, new Transaction().add(ix), signers, { commitment: 'confirmed' });
+  const signature = await sendAndConfirmTransaction(connection, new Transaction().add(ix), signers, { commitment: 'confirmed' });
+  let included;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    included = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
+    if (included?.meta) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.ok(included?.meta, 'successful transaction not in validator ledger: ' + signature);
+  assert.equal(included.meta.err, null, 'claimed-success transaction actually failed: ' + signature);
+  transactionEvidence.push({ label: 'confirmed-on-chain-success', signature, slot: included.slot,
+    error: included.meta.err, logs: included.meta.logMessages,
+    recentBlockhash: included.transaction.message.recentBlockhash });
+  await assertCustodyConservation('successful transaction ' + signature, included.slot);
+  return signature;
 }
 async function fund(keypair) {
   const signature = await connection.requestAirdrop(keypair.publicKey, 3 * LAMPORTS_PER_SOL);
@@ -106,13 +178,16 @@ async function submitOnChain(ix, signers) {
   assert.ok(included?.meta, 'transaction not included: ' + signature);
   assert.deepEqual(included.meta.err, confirmation.value.err, 'confirmation and transaction mismatch');
   assert.ok(included.meta.logMessages?.length, 'no validator execution logs');
-  return { signature, error: included.meta.err, logs: included.meta.logMessages };
+  return { signature, slot: included.slot, blockTime: included.blockTime,
+    recentBlockhash: included.transaction.message.recentBlockhash,
+    error: included.meta.err, logs: included.meta.logMessages };
 }
 async function rejectsInstruction(buildIx, signers, message) {
   const ix = await buildIx(); // must encode successfully
   const result = await submitOnChain(ix, signers);
   assert.notEqual(result.error, null, message + ': unexpectedly succeeded');
   transactionEvidence.push({ label: message, ...result });
+  await assertCustodyConservation('rejected transaction ' + message, result.slot);
   return result;
 }
 const same = (a, b) => assert.equal(a.toBase58(), b.toBase58());
