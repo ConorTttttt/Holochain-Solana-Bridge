@@ -3,16 +3,16 @@ name: S0 cross-agent integration snapshot (NOT production)
 on:
   pull_request:
     branches: [agent/ci/11-build-pipeline]
-  push:
-    branches: [integration/s0/11-all-agent-snapshot]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: s0-integration-${{ github.ref }}
-  cancel-in-progress: true
+  # The PR event freezes a source SHA. Do not cancel expensive validator jobs
+  # if a developer pushes another snapshot before this one finishes.
+  group: s0-integration-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
   cross-lane-js:
@@ -23,13 +23,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: {persist-credentials: false}
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.16.0'
           package-manager-cache: false
-      - name: Assert integration snapshot provenance exists
+      - name: Assert immutable source snapshot and record the checkout SHA
         run: |
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
           test -s ci-integration-snapshot.json
           node -e 'const m=require("./ci-integration-snapshot.json"); if(!m.sources?.SOL || !m.sources?.OBS || !m.sources?.SEC || !m.sources?.RAVE)process.exit(1); console.log(JSON.stringify(m.sources))'
       - name: Install actual Observer and Solana Node dependencies and record lock graph
@@ -45,8 +52,19 @@ jobs:
         with:
           name: integration-localnet-evidence-NO-KEYS
           path: .
+      - name: Verify genuine compiler artifacts and Anchor IDL against disposable program ID
+        run: |
+          set -euo pipefail
+          test -s target/deploy/deposit_prototype.so
+          test -s target/idl/deposit_prototype.json
+          test -s target/localnet-evidence/program-id.txt
+          readelf -h target/deploy/deposit_prototype.so | grep -E 'Machine:.*(Linux BPF|BPF)'
+          trusted_id="$(cat target/localnet-evidence/program-id.txt)"
+          bash scripts/ci/record.sh generated-idl-contract node observer/scripts/verify-idl.mjs target/idl/deposit_prototype.json "$trusted_id"
       - name: Execute all offline cross-lane suites; never accept hidden skips
         run: bash scripts/ci/record.sh cross-lane-suites node scripts/ci/run-cross-lane-tests.mjs
+      - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
+        run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -63,12 +81,17 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.95.0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: {persist-credentials: false}
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Install pinned Rust
         run: |
           source scripts/ci/toolchain.env
           bash scripts/ci/record.sh rave-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
           rustc --version
+      - name: Verify downloaded published rave_engine 0.15.0 crate integrity
+        run: bash scripts/ci/record.sh rave-crate-integrity bash tests/holochain/rave-engine/verify-crate.sh
       - name: Run actual published-crate API harness outside root workspace
         run: |
           set -euo pipefail
@@ -100,7 +123,10 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: {persist-credentials: false}
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.16.0'
@@ -157,5 +183,9 @@ jobs:
             target/idl/deposit_prototype.json
             target/deploy/deposit_prototype.so
             target/localnet-evidence/*.txt
+            target/localnet-evidence/active-receipt.json
+            target/localnet-evidence/refunded-receipt.json
+            target/localnet-evidence/two-active-receipts.json
+            target/localnet-evidence/two-refunded-receipts.json
           if-no-files-found: error
           retention-days: 14

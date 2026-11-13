@@ -4,10 +4,13 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const cases = [
+  ['observer-main', 'observer/test/verify.test.mjs'],
+  ['observer-idl-contract', 'observer/test/idl-contract.test.mjs'],
   ['sol-layout', 'tests/solana/layout.test.mjs'],
   ['security-adversarial', 'security/test/adversarial.test.mjs'],
   ['security-solvency', 'security/test/solvency-model.test.mjs'],
   ['rave-shadow', 'tests/holochain/shadow-review.test.mjs'],
+  ['rave-shadow-cli', 'tests/holochain/shadow-cli.test.mjs'],
   ['rave-attack-model', 'tests/holochain/economic-attack-model.test.mjs'],
 ];
 const integrated = existsSync('ci-integration-snapshot.json');

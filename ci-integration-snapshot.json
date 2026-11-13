@@ -2,7 +2,7 @@
   "status": "integration-only / DO NOT MERGE",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "ecc0b4b01e1f6d0d418b6b44794a395fe0e9c7df"
+    "sha": "ab0d9a9205b3c669894bbc78a02e9af289f95b10"
   },
   "sources": {
     "SOL": {
@@ -28,5 +28,7 @@
   "created": "2026-11-13",
   "sourceUpdates": {
     "SOL": "Refreshed all current SOL PR #35 changes through 37b3530, including raw account-decoder / multi-receipt validator regression coverage, stronger generated-IDL PDA-seed tests and evidence docs. Source branch unchanged."
-  }
+  },
+  "ciIntegrationUpdate": "CI overlay includes fixed public-ID preparation, SHA-isolated workflows and required reviewed-lock provenance; this is not a merge of the specialist branches.",
+  "securityBoundary": "ALL localnet snapshots untrusted, all Holochain intake quarantined; creditEligible false and issuance/withdrawal disabled."
 }
