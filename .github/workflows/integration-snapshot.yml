@@ -187,5 +187,9 @@ jobs:
             target/localnet-evidence/refunded-receipt.json
             target/localnet-evidence/two-active-receipts.json
             target/localnet-evidence/two-refunded-receipts.json
+            target/localnet-evidence/restart-state.json
+            target/localnet-evidence/restart-after.json
+            target/localnet-evidence/restart-validator-before.log
+            target/localnet-evidence/restart-validator-after.log
           if-no-files-found: error
           retention-days: 14

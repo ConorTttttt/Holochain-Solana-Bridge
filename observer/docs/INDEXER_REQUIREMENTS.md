@@ -1,5 +1,8 @@
 # OBS Sprint 0 validation and next-sprint transaction-indexer contract
 
+> **2026-11-13 UPDATE — historic S0 planning snapshot.** This document records the *pre-artifact* requirements and intentionally retains its original "IDL outstanding" warnings as historical context. The real Anchor-generated IDL, compiled program and active/refunded account fixtures are now independently byte-compared (exact hashes, layout offsets, PDA bumps) in [TRANSACTION_EVIDENCE_V1.md](./TRANSACTION_EVIDENCE_V1.md). Read that file for current OBS #13/#17 implementation, evidence schema, RPC trust limitations and open validator-transaction and real-SDK regression acceptance gates. Any statement below saying the real IDL is still unavailable is superseded by that dated artifact inspection; actual raw signed getTransaction/getBlock fixture remains absent. Both documents prohibit Holochain issuance.
+
+
 **Status 2026-11-13:** provisional source-layout validation only. No compiled/generated Anchor IDL, local-validator trace, inclusion proof, transaction indexer or Holochain credit path. Dependency: SOL #7; implementation: OBS #8; indexer handoff: OBS #13/#17.
 
 ## Provisional serialization and PDA layout

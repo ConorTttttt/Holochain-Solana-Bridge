@@ -279,3 +279,56 @@ test('SPEC-04: migration/recovery cannot reset global one-time withdrawal identi
   s.settle(globalId);
   assert.throws(() => s.reserve(globalId, 100n, true), /global replay/);
 });
+
+
+// Sprint 1 adversarial probes: actual Observer parsing/reconciliation (synthetic RPC
+// envelope). They demonstrate trust limitations, NEVER Solana consensus finality.
+test('SEC-13 one RPC copied twice must not become independent provider evidence', async () => {
+  const one = await observed({ slot: 100 });
+  const joined = reconcileObservations(one, one);
+  assert.deepEqual(joined.checkedBy, [one.source, one.source]);
+  assert.equal(joined.creditEligible, false);
+  // RED FLAG for future callers: checkedBy.length === 2 is NOT a 2-provider quorum.
+});
+
+test('SEC-14 fabricated finalized RPC response stays explicitly untrusted', async t => {
+  if (!hasV2Observer) return t.skip('Requires OBS v2 four-account RPC interface');
+  const { observeRpc } = await import('../../observer/src/verify.mjs');
+  const s = snapshot({ slot: 999999 });
+  const methods = [];
+  const maliciousRpc = async (_url, options) => {
+    const { method, params } = JSON.parse(options.body);
+    methods.push(method);
+    let result;
+    if (method === 'getGenesisHash') result = a.genesis;
+    else if (method === 'getMultipleAccounts') {
+      assert.equal(params[1].commitment, 'finalized');
+      result = { context: { slot: s.slot }, value: s.accounts.map(account => ({
+        owner: account.owner, executable: false, lamports: 10000,
+        space: account.raw.length, data: [account.raw.toString('base64'), 'base64'],
+      })) };
+    } else throw new Error('Unexpected RPC method');
+    return { ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result }) };
+  };
+  const value = await observeRpc({
+    rpcUrl: 'http://127.0.0.1:8899', expected, genesisHash: a.genesis,
+    fetchFn: maliciousRpc,
+  });
+  assert.deepEqual(methods, ['getGenesisHash', 'getMultipleAccounts']);
+  assert.equal(value.finalizedSlot, 999999);
+  assert.equal(value.transactionVerified, false);
+  assert.equal(value.evidenceTrust, 'untrusted_rpc_snapshot');
+  assert.equal(value.creditEligible, false);
+  assert.throws(() => issueHolochainCredit(value), /CREDITING_DISABLED/);
+});
+
+test('SEC-15 mismatched RPC genesis is rejected before snapshot intake', async t => {
+  if (!hasV2Observer) return t.skip('Requires OBS v2 getGenesisHash validation');
+  const { observeRpc } = await import('../../observer/src/verify.mjs');
+  const fake = async () => ({
+    ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result: key(99) }),
+  });
+  await assert.rejects(() => observeRpc({
+    rpcUrl: 'http://127.0.0.1:8899', expected, genesisHash: a.genesis, fetchFn: fake,
+  }), /genesis hash mismatch/);
+});

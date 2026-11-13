@@ -1,3 +1,46 @@
+# Frozen latest-source Sprint 0 checkpoint — 13 November 2026
+
+**Release verdict at this freeze: latest integrated CI NOT YET VERIFIED; P0 STOP for economic settlement; non-economic Sprint 1 engineering only.** No automatic merge to `main`.
+
+## Immutable snapshot source map
+
+| Lane | PR | Captured source commit |
+| --- | --- | --- |
+| CI | #32 | `70161c6b5fda0fddb4efb44485385e9358886d19` |
+| SOL | #35 | `3d48f9335a23344d3a24625d2c6b9a8ead116751` |
+| OBS | #36 | `60137aedc878eaf5428362a9a83cb44467a19736` |
+| RAVE | #34 | `df8753b4e108b596c5b6cf40354e29e33d083139` |
+| SEC | #33 | `aaa590dcfa93e7cc10f14c2607b601cb402db5a5` |
+
+Previous integration commit `ee37bd03a19df53401c7c941b35a544ff388b05a`. PR #37 now points to the single resulting child commit; every CI job must prove `git rev-parse HEAD` matches its PR head and archive `ci-artifacts/source-commit.sha`. The manifest cannot embed the commit SHA of which it is itself a part. Keep the new PR head fixed for its entire test run. Specialist branches remain untouched.
+
+## New required execution versus historical evidence
+
+**New integration:** 15 named offline test suites are mandatory: OBS verify/IDL/transaction/finalized indexer/durable ledger/public-real-localnet fixture, SOL layout, SEC adversarial/solvency/Sprint 1 economic attacks, RAVE shadow/shadow CLI/attack-model/test-only adapter/transaction-shadow. Each must have `# tests > 0`, `# pass = # tests`, zero failed/skipped/todo/cancelled. Full OBS `npm test` is separately required.
+
+Separate true-integration gates: pinned Rust/Anchor/SBPF compilation, genuine generated IDL and account-layout checks, actual Solana local-validator lifecycle + init-capture/u64-max adversarial custody scenarios, **two-process retained-ledger validator restart**, real account-to-Observer-to-RAVE quarantine handoff, verified public `rave_engine=0.15.0` archive + `cargo test --locked`, secret scanner and lock integrity checks. A green offline test is NOT an on-chain or deployed Unyt proof.
+
+**These refreshed tests, hashes and any failures are not yet known at freeze**; a running, queued or old successful job is not completion. New binary SHA256: unverified; new IDL SHA256: unverified; new public transaction/restart artifact hashes: unverified; new test counts/failures/skips: unverified. Report exact counts and SHA from this commit's Actions logs after completion.
+
+Historical (different source) [Actions 43505857690](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43505857690) successfully ran actual validator/Observer shadow/RAVE crate checks on `57ed7b34c0f902b90780b3216f24578609132f7b`: prior SBPF SHA256 `311440cab7605156dd4312840509a1bf203f883f161dcc2e825483e0754354d1`, IDL SHA256 `f3d5d0450dd63ee9d5abd5b7eefcaba59f82d69f0a7af07f0f3160542c6da3cb`. These **are not** refreshed build outputs.
+
+## Source dependency provenance
+
+- `Cargo.lock` approved SHA256 `9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24f0a24f5`.
+- `observer/package-lock.json` approved SHA256 `87578ffa1a3f0d1f0102f58ac649e25cd2a9d2902889bc946213fb2f136f0f62`.
+- `tests/solana/package-lock.json` approved SHA256 `24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6`.
+- `tests/holochain/rave-engine/Cargo.lock` approved SHA256 `e4f82e37be720566dcea35a59e3681777444cbe6584ad1c7b8730c2367f0f001`.
+
+All four remain Git-tracked in the frozen integration tree and locked-install/digest-gated. CI workspace, OBS npm, RAVE Cargo locks are tracked on source branches. **SOL source PR #35 does not yet track its own npm lock**, despite the reviewed lock in integration; owner must approve/commit independently. The integration-only SOL runner uses `npm ci` without changing SOL's source branch. Host SBPF builds deliberately generate ephemeral public program IDs, so ELF byte hashes can differ despite pinned dependencies.
+
+## Public-only evidence and security restrictions
+
+Upload only public ELF, generated IDL, tool/version and hash logs, public validator RPC account bytes/signatures, public retained-ledger restart before/after snapshots and logs. Never upload `target/deploy/*-keypair.json`, `target/localnet-secrets/`, mnemonics, wallets, API keys or production funds. Artifact contents must be independently inspected.
+
+**Sprint 1 decision:** continued isolated non-economic development is acceptable; **current cross-agent baseline not certified until the exact new SHA passes all required checks, has actual public evidence and independent SEC sign-off**. Sprint 2 indexer and RAVE shadow development may proceed as untrusted read-only R&D, but no issuance, mainnet, collateral proof or withdrawals. Invariant `B >= F + H + W + O`; blocked: refundable collateral, independent finality/inclusion, malicious RPC, first-initialize and upgrade authority, trusted deployed Unyt DNA, fork/park/recovery/migration replay and irrevocable payout controls. Preserve `creditEligible:false`, `CREDITING_DISABLED`, `WITHDRAWALS_DISABLED`.
+
+---
+
 # Sprint 0 integration report — execution checkpoint (13 November 2026)
 
 **Gate verdict: BLOCKED / DRAFT / NOT FOR MAIN.** This report distinguishes observed GitHub Actions results from work that is merely coded or expected to run. Source of truth is CI logs and downloadable public build artifacts, not PR descriptions. There is no production bridge.

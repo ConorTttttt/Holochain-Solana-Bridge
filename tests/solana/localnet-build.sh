@@ -66,10 +66,21 @@ sha256sum target/idl/deposit_prototype.json target/deploy/deposit_prototype.so \
   | tee target/localnet-evidence/artifact-sha256.txt
 printf '%s\n' "$program_id" > target/localnet-evidence/program-id.txt
 
-# Both test commands are required. npm ci MUST install exactly the reviewed,
-# Git-tracked tests/solana/package-lock.json graph. The on-chain suite refuses
-# the public placeholder program ID. Never run npm install on the localnet lane.
-npm --prefix tests/solana ci --no-audit --no-fund
+# Both test commands are required. npm dependency resolution must succeed,
+# not silently skip. The on-chain suite refuses the public placeholder ID.
+npm --prefix tests/solana ci --ignore-scripts --no-audit --no-fund
 npm --prefix tests/solana test
-NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
-echo "LOCALNET BUILD AND TRANSACTION TESTS PASSED"
+# Each mode requires an EMPTY validator ledger, because config PDA is
+# singleton: the first-initializer attack and full-u64 mint cannot run after
+# normal initialization. Anchor legacy test starts/resets its own validator.
+# The tests explicitly fail if config unexpectedly persists between runs.
+for scenario in lifecycle init-capture u64-max; do
+  echo "Executing isolated validator scenario: $scenario"
+  BRIDGE_TEST_MODE="$scenario" NO_DNA=1 anchor test --skip-build --validator legacy \
+    --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
+done
+# Separate two-process retained-ledger restart: it deploys the same compiled
+# ELF into a brand new disposable ledger, leaves a positive liability, kills
+# the validator, restarts WITHOUT --reset and reconstructs live receipts.
+bash tests/solana/restart-validator.sh
+echo "LOCALNET BUILD, THREE TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"

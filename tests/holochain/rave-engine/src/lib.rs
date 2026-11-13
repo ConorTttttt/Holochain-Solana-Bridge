@@ -75,3 +75,51 @@ mod published_parked_standing_types {
         }
     }
 }
+
+
+#[cfg(test)]
+mod sprint1_published_crate_adversarial {
+    use rave_engine::reserve::ReserveUnits;
+    use rave_engine::types::UnitMap;
+    use rave_engine::prelude::RhaiEngine;
+    use serde_json::{json, Value};
+
+    fn accepts_shape(input: Value) -> bool {
+        let Ok(amounts) = UnitMap::try_from(input) else { return false; };
+        ReserveUnits {
+            debit_unit_index: "1".to_string(),
+            credit_unit_index: "0".to_string(),
+        }.accepts(&amounts)
+    }
+
+    #[test]
+    fn exact_reserve_over_javascript_safe_integer_limit() {
+        // Real published ReserveUnits amount-shape check, not bridge solvency.
+        assert!(accepts_shape(json!({
+            "1": "-9007199254740993",
+            "0": "9007199254740993"
+        })));
+    }
+
+    #[test]
+    fn malformed_or_nonconserving_unit_maps_never_pass_shape_validation() {
+        // Treat both conversion failures and ReserveUnits refusal as denial.
+        for amount in [
+            json!({ "1": "-5.01", "0": "5.00" }),
+            json!({ "1": "-5", "0": "5", "2": "1" }),
+            json!({ "1": "0", "0": "0" }),
+            json!({ "1": "5", "0": "-5" }),
+            json!({ "1": "not-a-number", "0": "5" }),
+            json!({ "1": "-2", "0": null }),
+        ] {
+            assert!(!accepts_shape(amount.clone()), "must refuse {amount}");
+        }
+    }
+
+    #[test]
+    fn malformed_messagepack_code_fails_published_rhai_engine() {
+        // MessagePack reserves 0xc1; this cannot encode the required Rhai string.
+        let result = RhaiEngine::new().execute(&json!({}), vec![0xc1], None);
+        assert!(result.is_err(), "invalid code must fail closed");
+    }
+}
