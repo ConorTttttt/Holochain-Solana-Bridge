@@ -72,10 +72,18 @@ test('Vault classic SPL token layout and unapproved authorities', () => {
   tokenAccount.writeBigUInt64LE(250_000n, 64); tokenAccount[108] = 1;
   assert.deepEqual(decodeTokenAccount(tokenAccount), {
     mint: encode58(mint), authority: encode58(configKey), amount: '250000',
-    hasDelegate: false, state: 1, hasCloseAuthority: false,
+    hasDelegate: false, state: 1, isNative: false, hasCloseAuthority: false,
   });
   const delegated = Buffer.from(tokenAccount); delegated.writeUInt32LE(1, 72);
   assert.equal(decodeTokenAccount(delegated).hasDelegate, true);
+  const wrappedSol = Buffer.from(tokenAccount); wrappedSol.writeUInt32LE(1, 109);
+  assert.equal(decodeTokenAccount(wrappedSol).isNative, true);
+  const invalidNative = Buffer.from(tokenAccount); invalidNative.writeUInt32LE(2, 109);
+  assert.throws(() => decodeTokenAccount(invalidNative), /native|option/i);
+  const invalidDelegate = Buffer.from(tokenAccount); invalidDelegate.writeUInt32LE(2, 72);
+  assert.throws(() => decodeTokenAccount(invalidDelegate), /delegate|option/i);
+  const invalidCloseAuthority = Buffer.from(tokenAccount); invalidCloseAuthority.writeUInt32LE(2, 129);
+  assert.throws(() => decodeTokenAccount(invalidCloseAuthority), /close authority|option/i);
 });
 
 const rustSource = new URL('../../programs/deposit_prototype/src/lib.rs', import.meta.url);
