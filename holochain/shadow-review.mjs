@@ -27,7 +27,7 @@ export function reviewShadow(observation, binding, journal) {
       'vaultAddress', 'mint', 'depositor', 'recipientCore', 'holochainScope', 'receiptDigest']) {
       if (!isText(observation[field])) flag('INVALID_' + field);
     }
-    if (observation.id !== \`\${observation.genesisHash}:\${observation.program}:\${observation.receiptAddress}\`) {
+    if (observation.id !== `${observation.genesisHash}:${observation.program}:${observation.receiptAddress}`) {
       flag('DEPOSIT_IDENTITY_MISMATCH');
     }
     if (!/^[0-9a-f]{64}$/i.test(observation.receiptDigest ?? '')) flag('INVALID_RECEIPT_DIGEST');
@@ -56,7 +56,7 @@ export function reviewShadow(observation, binding, journal) {
   if (!(journal instanceof Map)) flag('NO_SHARED_AUDIT_JOURNAL');
   if (observation && binding && journal instanceof Map && isText(observation.id)) {
     const prior = journal.get(observation.id);
-    const target = \`\${binding.dnaHash}:\${binding.agreementHash}:\${binding.deploymentEpoch}\`;
+    const target = `${binding.dnaHash}:${binding.agreementHash}:${binding.deploymentEpoch}`;
     if (prior) {
       if (prior.target !== target) flag('CROSS_AGREEMENT_OR_EPOCH_REPLAY');
       if (observation.finalizedSlot < prior.slot) flag('STALE_SNAPSHOT');
