@@ -1,99 +1,111 @@
-# Sprint 0 / Issue #7 — actual execution evidence (2026-11-13)
+# Sprint 0 / Issue #7 — actual Anchor SBPF and localnet evidence
 
-Branch: `agent/sol/7-anchor-build`. This is an **honest partial result**, not
-completion of the SBPF build acceptance gate.
+**Status:** Genuine compile, disposable-localnet deployment and deposit/refund
+lifecycle **PASSED** in GitHub Actions run
+[43499386297](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297)
+at 2026-11-13 20:23 UTC, using branch head
+`bc4c907a4fc8e0ef5af073c06285ad248225f017`. This establishes a
+**localnet-only** executable prototype, not a production bridge or
+cross-chain economic-finality guarantee.
 
-## Executed in the available sandbox
+## Real execution and exact toolchain
 
-Environment checks and observed outputs:
+Workflow: `.github/workflows/sol-verify-temporary.yml` (SOL-owned temporary
+test runner; CI owns the permanent workflow).
+No JavaScript simulation is cited as validator evidence.
 
-```text
-$ rustc -V
-bash: rustc: command not found
-$ cargo -V
-bash: cargo: command not found
-$ anchor --version
-bash: anchor: command not found
-$ solana --version
-bash: solana: command not found
-$ node --version
-v22.16.0
-$ npm --version
-10.9.2
-$ git --version
-git version 2.47.3
-$ git ls-remote https://github.com/ConorTttttt/Holochain-Solana-Bridge.git HEAD
-fatal: unable to access 'https://github.com/ConorTttttt/Holochain-Solana-Bridge.git/':
-Could not resolve host: github.com
-```
+- Ubuntu 24.04 GitHub Actions runner; Node `22.16.0`, npm `10.9.2`.
+- Host Rust `rustc 1.95.0`, Cargo `1.95.0`; required because locked Anchor
+  CLI's `solana-sbpf 0.23.0` uses `Layout::dangling_ptr` and
+  `cargo-platform 0.3.3` requires a newer Rust than 1.89.
+- Anchor CLI `1.2.2` installed from pinned upstream tag, Solana CLI
+  `4.1.2`, SBPF platform-tools `v1.57`, `--arch v3`.
+- `cargo check --workspace --all-targets` — **PASS**.
+- Create fresh disposable program and payer keypairs **only under ignored
+  `target/`**; `anchor keys sync` — **PASS**.
+- `NO_DNA=1 anchor build --tools-version v1.57 --arch v3` — **PASS**.
+  Nonempty compiled SBPF binary verified as actual eBPF ELF (machine 247),
+  and generated IDL matched the ephemeral source/program keypair ID.
+- `npm --prefix tests/solana install --no-audit --no-fund` — **PASS**.
+- `npm --prefix tests/solana test` — **6 passed, 0 failed, 1 skipped**;
+  the skip is OBS PR #36's `isNative` decoder test because its code is
+  still separate from SOL's `main`-based PR.
+- `NO_DNA=1 anchor test --skip-build --validator legacy` — **PASS**:
+  actual test-validator starts and deploys the built executable; the
+  deposit/refund localnet suite reports **6 passed, 0 failed, 0 skipped**,
+  including mint freeze rejection, config init, deposit, adversarial
+  failures, admin pausing, one refund, replay rejection and u64-max nonce.
+- End-of-script marker: `LOCALNET BUILD AND TRANSACTION TESTS PASSED`.
 
-GitHub source inspection and file edits used the linked GitHub connector, NOT
-a successful git clone or local checkout.
+[Download the archived public-only CI artifacts](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297/artifacts/14073462857).
+The artifact includes unabridged `cargo-check.log`, `localnet-build.log`,
+`versions.log`, the generated IDL, ELF binary, public program ID and the
+active/refunded **real validator account-byte snapshots**. No signing keys,
+wallet material or local-validator ledger are uploaded. SHA-256 of the ZIP
+archive as reported by GitHub Actions is
+`24179fbd628de82fe0ced5b3df421cb1e81a3e03d4f94adaf84c5cdb2766de8d`.
 
-```text
-$ node --check /mnt/data/sol_sprint0/tests/solana/integration.test.mjs
-(exit 0; syntax only; Node did not load test dependencies)
-$ node --test /mnt/data/sol_sprint0/tests/solana/layout.test.mjs
-TAP version 13
-1..6
-# tests 6
-# pass 4
-# fail 0
-# skipped 2
-```
+## Exact successful-run public artifacts
 
-The layout test above ran against a separately copied, source-matched
-`observer/src/decode.mjs` in an isolated scratch directory. Its fifth check,
-which reads the original Rust source, was explicitly **SKIPPED** because the
-Rust file was not available as a checkout. The sixth test, which requires a
-generated Anchor IDL, was also **SKIPPED** because no IDL exists. Therefore this result verifies
-offline fixture/decoder compatibility only; it does **not** independently
-verify source, on-chain layout, or an actual generated IDL. The integration
-test was syntax-checked but **NOT RUN**.
+| Item | Value |
+|---|---|
+| Disposable localnet program ID | `FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG` |
+| Generated `idl/deposit_prototype.json` | 13,002 bytes, SHA-256 `a81ccda8b91e90d1522cc922bac88aecae71e872d4b22ead9196ccceaf9d41f9` |
+| Compiled `deploy/deposit_prototype.so` | 221,624 bytes, SHA-256 `ddbc9a56d1d7d2d0edc55153f099ed016dc6a26b30057b7bd8703c8ac7dd9dd5` |
+| Validator genesis hash | `FcVMLgegDkZKX8ec4ELY41RwNDJFZE9nVfZvd9oSmQM8` |
+| Active snapshot | slot 33, `localnet-evidence/active-receipt.json` |
+| Refunded snapshot | slot 67, `localnet-evidence/refunded-receipt.json` |
 
-## NOT RUN / NOT VERIFIED
+These hashes are specific to the **one disposable CI run**. Re-running
+`anchor keys sync` creates another public program ID and typically new hashes.
+Neither private program key nor developer wallet keypair was published.
 
-- `anchor build`, `cargo check`/Rust compilation, SBPF artifact: **NOT RUN**.
-- `anchor keys sync` with an actual disposable program keypair: **NOT RUN**.
-- Generated IDL at `target/idl/deposit_prototype.json`: **ABSENT/NOT VERIFIED**.
-- `solana-test-validator` and `anchor test`: **NOT RUN**.
-- On-chain initialization, deposits, refunds, failure tests, deploy/upgrade
-  control, account layouts, PDA checks: **NOT EXECUTED**.
-- No `Cargo.lock` or npm `package-lock.json` was generated; full
-  dependency-graph reproducibility cannot yet be asserted.
+## On-chain Borsh / PDA / custody evidence
 
-## Source audit notes (not substitute for running Anchor)
+The IDL discriminator and field-order checks passed against the generated
+IDL. The archived accounts additionally contain exact sizes and serialized
+bytes:
 
-- The Rust workspace already pins `anchor-lang = =1.2.2` and
-  `anchor-spl = =1.2.2`; Anchor CLI 1.2.2 and Solana 4.1.2/platform-tools
-  v1.57 are upstream-recommended. Host Rust 1.89.0 is pinned in this PR
-  **without executing that compiler**.
-- Source-derived sizes: BridgeConfig 114 bytes, DepositReceipt 218 bytes,
-  including 8-byte Anchor discriminator. Refer to OBS handoff for offsets,
-  seeds and derived discriminators. The observer expects those same sizes.
-- Classic SPL `Token` program type is used rather than a Token-2022 interface;
-  source/vault/destination have token mint/authority constraints.
-- `total_active` uses checked u64 add/sub, the SPL transfers are
-  `TransferChecked`, and a receipt PDA includes depositor + u64-LE nonce.
-  These properties are **source inspection**, not a tested compiler/runtime
-  guarantee.
-- First-initialize front-running remains an acknowledged configuration
-  capture risk: any first signer can initialize the unique config PDA.
-  No deployment/public-operator authorization scheme was invented in Sprint
-  0; require separate review before any public network.
-- The allowed test mint's mint authority is not revoked; freeze authority
-  is explicitly required to be absent. Do not infer fixed supply.
-- The localnet program ID is a placeholder until `anchor keys sync`.
-  No generated IDL is published or claimed verified.
-- Refunds and `creditEligible: false` remain unchanged; Holochain issuance
-  and production withdrawals are not added.
+| Account | Public address | Size | Actual recorded values |
+|---|---|---:|---|
+| BridgeConfig | `8cgyh99E7fmUyAFshwss8ZQZacpxWTyCm1ApFJFC7999` | 114 | config PDA bump 255; active `total_active=250000, paused=false`; after refund `total_active=0, paused=true` |
+| DepositReceipt | `BdR4H8M6pYafRkmEM57ydhH4yGKw2q1KokyvUkxLZ2VH` | 218 | receipt PDA bump 248; nonce 42017; amount 250000; refunded false → true |
+| SPL vault | `FsTLDdsAHYtbFCRXk1Px6mi47t1tYQadF42qQP5DWebT` | 165 | vault PDA bump 254; SPL token authority = config PDA; amount 250000 → 0; no native/delegate/close authority |
+| Allowed SPL mint | `7t6r6MTjf6RBMoLtkPmEpK9RkG3fdw28JoimYP61hKy9` | 82 | classic SPL Token mint, no freeze authority |
 
-## Next verification gate for SOL / CI / OBS
+Both BridgeConfig and DepositReceipt are owned by the deployed program;
+the vault and mint are owned by the classic SPL Token program. Using the
+fixture's actual program ID and recorded depositor/mint/nonce bytes, the
+canonical `SHA256(seeds || bump || programID || "ProgramDerivedAddress")`
+derivation independently reproduced all three addresses and bumps (config
+255, vault 254, receipt 248). These are **actual localnet RPC fixtures**,
+not arbitrary hand-filled Borsh fixtures.
 
-On a host with Rust/AVM/Solana installed, run the exact localnet commands in
-`tests/solana/README.md` and capture unabridged stdout/stderr, lockfiles,
-built binary/IDL hashes, positive and negative test results, public program
-address and localnet genesis. OBS must compare generated IDL and live
-serialized accounts to `tests/solana/OBSERVER_HANDOFF.md` before declaring
-its decoder verified. Independent SEC reviewer must inspect any change to
-economic authority, custody or refund semantics.
+Relevant on-chain transaction signatures are recorded in both JSON snapshots.
+The snapshots use a *single local RPC* with `finalized` commitment and are
+**not independent consensus proofs**.
+
+## Continued hardening (newer than the passing run)
+
+The subsequent SOL test-only commit
+`32c17fb8bc604edf345d294501299f9e0479eb36` adds cross-checks of live
+validator bytes against the Observer decoder, byte-for-byte account-state
+rollback assertions after rejected transactions, wrong-vault substitution,
+two simultaneously active receipts, and partial-refund conservation. Its
+**new tests are pending their own Actions run**; the successful run above
+must not be misrepresented as execution of those additional assertions.
+
+## Outstanding security / reproducibility gates
+
+- Full OBS PR #36 integrated native COption / verified-IDL handoff remains
+  separate; pending cross-branch integration workflow, not the completed
+  localnet run.
+- Cargo and npm dependency lockfiles were resolved ephemerally but not
+  human-reviewed/committed; **byte-for-byte reproducibility is open**.
+- Validator race/crash tests, program-upgrade governance, independently
+  authenticated Solana finality, trustless custody and Holochain economic
+  safety have **not** been demonstrated.
+- First-initialize config capture remains a public-deployment risk.
+- Refunds remain enabled; Holochain `creditEligible: false` remains mandatory.
+  No public network deployment, real-value deposit, issuance or withdrawal
+  authorization is permitted by this localnet result.
