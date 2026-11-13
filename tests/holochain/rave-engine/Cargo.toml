@@ -1,0 +1,9 @@
+[package]
+name = "rave-bridge-s0-harness"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rave_engine = "=0.15.0"
+serde_json = "=1.0.145"
