@@ -2,6 +2,24 @@
 
 **Status: PARTIAL / NOT ACCEPTED.** Existing PR #36 remains draft; the new transaction-aware, finalized-indexer and durable-ledger suites have **not** had a complete real-`@solana/kit@8.6.0` execution at the current OBS source SHA. No issuance, no withdrawal authorization and no mainnet assets.
 
+## 21:53 UTC continuation — genuine integrated CI failure triage and OBS-only fix
+
+The frozen PR #37 integration snapshot [run 43510726021](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43510726021), Observer job 132179960441, executed the newer OBS suite with **real pinned @solana/kit 8.6.0**: **45 tests, 38 pass, 7 fail, 0 skip**. This is a real red result, not the earlier pre-indexer 20/20 green. All 7 failures came from signed transaction tests: six halted at `missing signed transaction signatures` (the code wrongly asserted that decoded Kit signatures were a native Map) and one returned `ReferenceError: signature is not defined` in a negative test.
+
+Corrective commits on the **OBS branch only**:
+
+- `3c460ef`: recognize Kit's **address-keyed SignaturesMap object**, tie the supplied transaction id to the first actual static signer, validate all header-required signer keys and perform Ed25519 checks by address. Do not rely on arbitrary object-property iteration order.
+- `db1fa7c`: apply the same SDK-correct signature lookup in the historical block indexer; malformed unrelated transactions now invalidate a claimed containing block instead of being silently ignored during signature search.
+- `e85b8eb`: replace remaining undefined-signature negative-test references, assert actual SDK-decoded object shape for legacy/v0, and add finalized `getTransaction`/containing-`getBlock` agreement, numeric v1 negotiation and incomplete-block rejection regressions.
+
+**Retest status: PENDING.** No Actions run against these correction commits has passed yet; this host can inspect the CI logs and write OBS-owned Git blobs through the GitHub connector, but `git clone` and `npm ci` are blocked by outbound DNS. Do not treat the 38/45 red run as fixed until CI #32/#37 takes this updated exact OBS source SHA and archives `npm ci --ignore-scripts && npm run check && npm test` output (including signed positive legacy/v0/v1 and current real-localnet tests). Keep the PR draft and `creditEligible:false`.
+
+### Other failures outside this lane
+
+Same frozen integration: SOL validator job 132179958788 failed at its Node module import (`BPF_LOADER_UPGRADEABLE_PROGRAM_ID` CommonJS named export), after 7/7 layout tests passed; Agent 2 owns that fix and must regenerate finalized transaction/block witnesses. The published RAVE crate job 132179959342 had 7/8 pass (large integer model); Agent 4 owns it. No file on those branches was edited by OBS.
+
+---
+
 ## Actual executed commands and outcomes
 
 ### Earlier integration CI (immutable, OBS **pre-transaction/indexer** version)
