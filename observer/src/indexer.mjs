@@ -93,7 +93,9 @@ export async function fetchFinalizedTransaction({rpcUrl,signature,genesisHash,fe
   });
   need(identical.length===1,'transaction absent/duplicated within claimed finalized block');
   const found={...identical[0],slot:tx.slot};
-  need(sameJSON(found,tx),'getTransaction contradicts containing finalized getBlock');
+  need(sameJSON({version:found.version,transaction:found.transaction,meta:found.meta},
+    {version:tx.version,transaction:tx.transaction,meta:tx.meta}),
+    'getTransaction contradicts containing finalized getBlock');
   return {rpcTransaction:tx,blockhash:block.blockhash,source:new URL(rpcUrl).host,
     finalizedClaim:true, creditEligible:false};
 }
