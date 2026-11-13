@@ -69,3 +69,31 @@ This starts a throwaway local validator bound to 127.0.0.1:8899; checks health, 
 Isolated draft PR #37 overlays snapshots of SOL #35, OBS #36, SEC #33, and RAVE #34 onto CI #32 without editing source branches. In initial real Actions run `43496860124`, SOL layout: 5 passed/1 IDL check skipped (a **failing** gate); SEC adversarial: 5 passed/6 failed (older synchronous fixture assumption vs OBS's async, canonical-PDA validation); SEC solvency 7/7 passed; RAVE shadow 9/9 passed; RAVE recovery model 5/5 passed. Actual `rave_engine 0.15.0` compiled but its Rust **test harness** failed `E0382` (moved `serde_json::Value`). Owners notified on their PRs; no validation was loosened. The integrated tests intentionally remain red until repaired and independently reviewed.
 
 **Open gates:** a strict successful SBPF binary build in CI, full SOL local-validator transaction lifecycle, committed/reviewed root and npm lockfiles, integrated SEC/OBS API compatibility, successful RAVE Rust harness tests, deployed DNA equivalence, and independent economic safety review. **No issuance, mainnet or production withdrawal approval is implied by any green build.**
+
+## Verified upstream dependency graph and evidence (13 November 2026)
+
+The `otter-sec/anchor` tag `v1.2.2` has upstream locked Cargo graph SHA `44b39bfaae08071f49ba8daf1ee8602b0544704b`. It explicitly contains:
+
+- `anchor-cli 1.2.2 -> cargo_metadata 0.23.1 -> cargo-platform 0.3.3`; the last crate rejects host Rust 1.89 (requires >=1.91).
+- `anchor-cli 1.2.2 -> solana-sbpf 0.23.0` (direct). `solana-sbpf/src/aligned_memory.rs:294` calls `core::alloc::Layout::dangling_ptr()`. Rust upstream `core/src/alloc/layout.rs` has `#[stable(feature = "alloc_layout_extra", since = "1.95.0")]` on this method. A 1.91 host fails `E0599`; host **1.95.0** is necessary for this exact installed graph.
+- The SBPF target compiler comes from Solana `platform-tools v1.57`, not from host `rustup`. Anchor 1.2.2 official release notes recommend Solana CLI **4.1.2**, platform-tools **v1.57**, SBPF architecture **v3**. No Anchor or Solana version changes are needed.
+
+Evidence: failing original runs [43492093639](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43492093639), [43492504373](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43492504373); **actual Rust 1.95 CLI install/host check PASS** in run [43496437684](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43496437684).
+
+**Real compiled program:** independent integration run [43499276656](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499276656) created `target/deploy/deposit_prototype.so` (221624 bytes), SHA256 `0a07b91b039de5098c0ab6b048f66831750f589f3bcdc28aa4a5adf7a809b066`, confirmed with `readelf -h` as **ELF64 Linux BPF**. Generated Anchor IDL SHA256 `966ae71537239dc3008a123e0a94a2a3052016598f609ed2ac32cf92845f37ad`, whose public address matched disposable key source and TOML. **SOL Borsh/IDL layout 7/7 PASS with real IDL**. Download actual logs, IDL and executable from [artifact 14074120871](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499276656/artifacts/14074120871).
+
+**Real on-chain transaction test:** independent SOL workflow [43499386297](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297) compiled a second SBPF/IDL and passed 6/6 actual local-validator transaction assertions (0 fail/skip), artifact [14073462857](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297/artifacts/14073462857). Its standalone layout suite had 6 passed and 1 **explicit skip** for unmerged Observer-v2; do **not** count as full integrated layout coverage.
+
+**Cross-agent results:** integrated dependency-backed OBS unit checks **20/20 PASS**; SEC adversarial **16/16 PASS**, SEC solvency **7/7 PASS**, RAVE shadow **9/9 PASS**, RAVE replay model **5/5 PASS**. A newer RAVE 0.15.0 Rust harness compiled with its real published dependencies and ran **5/5 PASS** (run [43501475103](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43501475103)), but that job correctly failed its old lock digest. The *only* generated RAVE Cargo.lock change was the new direct `rmp-serde` dependency, matching source `=1.3.0`; the lock integrity expected digest was updated to the newly checked `e4f82e37be720566dcea35a59e3681777444cbe6584ad1c7b8730c2367f0f001`. No checks were disabled.
+
+**Integrated failures corrected but awaiting another whole-workflow pass:** snapshot PR #37 previously failed `Provided owner is not allowed` after accidentally creating the same ATA twice; current SOL #35 correctly supplies a fresh `Keypair.generate()` for a distinct refund destination, now carried into the integration-only snapshot. The separate offline cross-lane job skipped the required generated-IDL check, correctly marking the job red; the integration workflow now downloads *real* IDL from the local-validator build job (no synthetic IDL), and its strict test aggregator still fails if IDL is missing or any test skips. Both PRs remain drafts until latest combined Actions runs actually complete.
+
+### Fail-closed lock graph manifest
+
+`scripts/ci/check-lock-digest.sh` records and validates these actual lockfile digests:
+- Root `Cargo.lock`: `9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24bf0a24f5`
+- Observer `package-lock.json`: `87578ffa1a3f0d1f0102f58ac649e25cd2a9d2902889bc946213fb2f136f0f62`
+- SOL `tests/solana/package-lock.json`: `24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6`
+- RAVE harness `Cargo.lock` (5-test source): `e4f82e37be720566dcea35a59e3681777444cbe6584ad1c7b8730c2367f0f001`.
+
+The validator, Rust host, Observer and RAVE CI lanes reject a changed graph even if compilation itself succeeds. Raw lockfile bytes and logs are retained in Actions artifacts. **This is strict graph drift detection, NOT a substitute for separately committed and reviewed lockfiles** in the root workspace and source-owned OBS/SOL/RAVE paths. No offline/byte-for-byte reproducible build or integrated green suite is claimed until those gates independently pass. IDL/.so hashes vary with each fresh local program ID. Do not check in generated wallet keys or upload them. No deployed Unyt DNA or production economic functions are exercised.
