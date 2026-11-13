@@ -22,12 +22,11 @@ if [ "$public_id" = 'Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS' ]; then
   exit 1
 fi
 # The key material stays under ignored target/deploy and must never be uploaded.
-# Anchor 1.2.2 'keys sync' serializes the WHOLE Anchor.toml when its ID differs,
-# materializing implicit [features]/[hooks] defaults and normalizing cluster
-# case. That unrelated edit is correctly rejected by the source guard. Write
-# ONLY the two precise public-ID declarations first, then let Anchor independently
-# check that both are already synchronized (and therefore do not need a TOML
-# rewrite). Fail closed if either original declaration is missing/ambiguous.
+# Anchor 1.2.2 'keys sync' serializes the WHOLE Anchor.toml, including implicit
+# [features]/[hooks] defaults and normalized cluster casing. That unrelated
+# mutation fails the source guard. Write ONLY the two precise public-ID
+# declarations; the required real Anchor build checks their consistency.
+# Fail closed if either original declaration is missing/ambiguous.
 python3 - "$public_id" <<'PY'
 from pathlib import Path
 import re, sys, tomllib
@@ -54,8 +53,10 @@ toml_path.write_text(updated_toml)
 src_path.write_text(updated_src)
 print('PASS: replaced only exact localnet and Rust PUBLIC program-ID declarations')
 PY
-# Assert Anchor agrees; no serialization should be necessary.
-anchor keys sync
+# Anchor 1.2.2 "keys sync" reserializes Anchor.toml and can insert implicit
+# defaults unrelated to the ID. We have already synchronized both exact public
+# declarations above; do NOT run a second writer that mutates configuration.
+# The real Anchor build is the independent compile-time check of these values.
 node --input-type=module - "$public_id" <<'NODE'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
