@@ -128,7 +128,7 @@ test('Kit decodes transaction-v1 message-first envelope with inline keys',()=>{
     keyBytes(blockhash),Buffer.from([0,1]),keyBytes(depositor),
   ]);
   const tx=rpcFromMessage(1,v1,emptyMeta(1));
-  const decoded=decodeFinalizedWire(tx,signature);
+  const decoded=decodeFinalizedWire(tx,tx.expectedSignature);
   assert.equal(decoded.compiledMessage.version,1);
   assert.equal(decoded.compiledMessage.staticAccounts.length,1);
   assert.equal(decoded.instructions.length,0);
