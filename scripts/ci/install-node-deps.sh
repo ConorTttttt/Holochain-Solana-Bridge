@@ -13,6 +13,11 @@ if node -e 'const p=require("./"+process.argv[1]+"/package.json"); process.exit(
     npm --prefix "$dir" install --package-lock-only --ignore-scripts --no-audit --no-fund
   fi
   npm --prefix "$dir" ci --ignore-scripts --no-audit --no-fund
+  # Do not accept a changed registry resolution just because npm ci passed.
+  case "$dir" in
+    observer) bash scripts/ci/check-lock-digest.sh observer "$dir/package-lock.json" ;;
+    tests/solana) bash scripts/ci/check-lock-digest.sh solana "$dir/package-lock.json" ;;
+  esac
   sha256sum "$dir/package-lock.json" | tee "ci-artifacts/${dir//\//-}-package-lock.sha256"
   cp "$dir/package-lock.json" "ci-artifacts/${dir//\//-}-package-lock.json"
 else
