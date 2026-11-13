@@ -77,5 +77,6 @@ jobs:
           path: |
             target/localnet-evidence/
             target/idl/deposit_prototype.json
+            target/deploy/deposit_prototype.so
           if-no-files-found: error
           retention-days: 14
