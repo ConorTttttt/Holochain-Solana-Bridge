@@ -1,6 +1,9 @@
-# Development placeholder: run `anchor keys sync` after generating the program keypair.
+# Development placeholder: generate a disposable localnet program keypair in target/deploy,
+# then run anchor keys sync locally. Never commit the generated private key.
 [toolchain]
 anchor_version = "1.2.2"
+solana_version = "=4.1.2"
+package_manager = "npm"
 
 [programs.localnet]
 deposit_prototype = "Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS"
@@ -11,3 +14,6 @@ wallet = "~/.config/solana/id.json"
 
 [workspace]
 members = ["programs/deposit_prototype"]
+
+[scripts]
+test = "cd tests/solana && npm run test:integration"
