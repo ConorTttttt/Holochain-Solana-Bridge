@@ -84,3 +84,39 @@ The upstream package registry lists `@solana/kit` version 8.6.0 and the official
 2. SOL #7 must publish generated `target/idl/deposit_prototype.json` plus public deployed program address and real localnet receipt/config/vault/mint bytes. Invoke `npm run verify:idl -- ../target/idl/deposit_prototype.json <public-localnet-program-id>` and compare the output to the **same** deployed program, its account bumps and finalized RPC results. Synthetic IDL tests cannot close this gate.
 3. SEC #10 test fixtures must use async `await verifySnapshot(...)`, canonical PDAs, and four accounts; the obsolete positive test for substituted receipt addresses must become an explicit negative test.
 4. Report transaction-origin verification and economic eligibility as **false** even after a green local validator snapshot suite: refunds remain possible and RPC snapshots are non-authoritative.
+
+## OBS continuation — 2026-11-13 (new transaction/indexer revision; NO runtime acceptance claim)
+
+The historic S0 command log above predates `src/transaction.mjs`, `src/indexer.mjs`, `src/ledger.mjs` and their new tests. They are present on PR #36 but **no `node --test` or `npm ci` of this updated branch has been observed**.
+
+Actual local command attempt (Node 22.16.0, npm 10.9.2):
+
+```text
+$ npm view @solana/kit@8.6.0 version --fetch-retries=0 --fetch-timeout=5000
+npm error code EAI_AGAIN
+npm error syscall getaddrinfo
+npm error request to https://registry.npmjs.org/@solana%2fkit failed
+exit 1
+```
+
+GitHub connector's V8 JavaScript parser successfully parsed all six new `src/{transaction,indexer,ledger}.mjs` and `test/{transaction,indexer,ledger}.test.mjs` scripts **after removing ESM imports and exports for parser-only analysis**. This is a narrow syntax check, **not** executing Node tests, resolving real SDK imports or executing application code.
+
+Downloaded genuine Anchor/SBPF artifact 14073462857 from passing SOL run 43499386297, then ran local Python JSON/SHA256/byte-offset comparison (NOT a full Anchor recompile). Observed:
+- `idl/deposit_prototype.json`: 13,002 bytes, SHA256 `a81ccda8b91e90d1522cc922bac88aecae71e872d4b22ead9196ccceaf9d41f9`.
+- `deploy/deposit_prototype.so`: 221,624 bytes, SHA256 `ddbc9a56d1d7d2d0edc55153f099ed016dc6a26b30057b7bd8703c8ac7dd9dd5`.
+- IDL deployed-localnet program ID `FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG`, deposit discriminator `f223c68952e1f2b6`, correct account Borsh offsets/field types/sizes 114/218 and PDA seeds. Two actual account snapshots (slots 33/67) were decoded; active/refunded amount 250000, vault 250000→0, config.total_active 250000→0, nonce 42017, PDA bumps 255/254/248, classic SPL vault.
+- **No raw finalized signed transaction** exists in that artifact. Transaction inclusion/CPI verification remains UNTESTED against genuine localnet tx bytes; SOL agent was asked to capture raw `getTransaction/getBlock` to close the gate.
+
+`observer/package-lock.json` was then committed **unchanged** from Agent 1's successful integrated CI PR #37. Verified lockfileVersion 3; root dependency `@solana/kit: 8.6.0`; 48 package entries; exact Git blob `ad4997c2c59aa9129138f8838c79f83752fe5e08`. This proves source provenance of the resolved lock but **not `npm ci` execution on the newly modified OBS branch**.
+
+Next required running commands from a network-enabled integration checkout:
+
+```sh
+cd observer
+npm ci --ignore-scripts
+npm run check
+npm test
+npm run verify:idl -- ../target/idl/deposit_prototype.json <TRUSTED_EPHEMERAL_LOCALNET_PROGRAM_ID>
+```
+
+Use the actual SOL artifact/validator-generated IDL and new raw transaction/block fixtures. Do not claim positive signed-verifier results until the full new suite passes. Always keep `creditEligible:false` and PR draft.
