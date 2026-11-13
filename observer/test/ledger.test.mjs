@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { DepositLedger } from '../src/ledger.mjs';
 
@@ -115,5 +116,32 @@ test('recovery rejects corrupted evidence, recomputed unauthorized claims, malfo
   const recovered=new DepositLedger(filename,options);
   assert.equal(recovered.checkpoint,21);
   assert.equal(Object.keys(recovered.processed).length,1);
+  recovered.close();
+});
+
+test('abrupt worker termination preserves fsynced cursor, evidence and exclusive-lock recovery',t=>{
+  const filename=pathFor(t);
+  const moduleUrl=new URL('../src/ledger.mjs',import.meta.url).href;
+  const childCode=`
+    import { DepositLedger } from ${JSON.stringify(moduleUrl)};
+    const ledger=new DepositLedger(process.argv[1],${JSON.stringify(options)});
+    ledger.commit({checkpoint:21,block:{slot:21,blockhash:'block-21'},
+      evidence:[${JSON.stringify(fixture(1))}]});
+    process.exit(0); // abrupt exit: deliberately no close() / no lock-file cleanup
+  `;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',childCode,filename],
+    {encoding:'utf8',timeout:10000});
+  assert.equal(child.status,0,child.stderr);
+  assert.equal(existsSync(filename+'.lock'),true);
+  assert.throws(()=>new DepositLedger(filename,options),/EEXIST/,
+    'a crashed worker must never auto-steal a potentially active lock');
+  // A human/operator must first establish that the previous PID is gone.
+  unlinkSync(filename+'.lock');
+  const recovered=new DepositLedger(filename,options);
+  assert.equal(recovered.checkpoint,21);
+  assert.equal(Object.keys(recovered.processed).length,1);
+  recovered.commit({checkpoint:21,block:{slot:21,blockhash:'block-21'},
+    evidence:[fixture(1)]});
+  assert.equal(Object.keys(recovered.processed).length,1,'replay after crash is idempotent');
   recovered.close();
 });
