@@ -227,3 +227,41 @@ object, so large `u64` RPC integer literals are not inadvertently rounded
 during fixture capture. These outputs are **generated at validator execution**;
 they do not yet exist for the latest SOL commit and must not be described as
 executed or independently finalized. All signing keys are excluded.
+
+## 13 November 2026 — missing signature incident and regression (source changes only)
+
+**Failure provenance:** integration snapshot
+`4949b5693dccba1ff373a276a75c27db2f045005`, Actions run
+`43520697998`, local-validator lifecycle scenario. Five lifecycle
+subtests passed before the enhanced sixth test aborted at JS transaction
+serialization, with `Signature verification failed / Missing signature`
+from `submitOnChain`. The stale snapshot's freeze-authority instruction
+named the **owner** as required authority but signed only as the **attacker**;
+this was not an on-chain rejection. It does not invalidate earlier executed
+transactions, but the expanded lifecycle suite did **not** pass.
+
+**Source correction:** the SOL branch already changed the freeze-authority
+fixture to name/sign as the attacker (current authority deliberately
+invalid), requiring a real included transaction with
+`getTransaction.meta.err !== null`. Additional regression coverage now:
+
+- `sdk-compat.test.mjs`: independently proves that a fee payer **and**
+  transfer owner must sign; missing owner and wrongly substituted owner
+  signatures fail locally and are **not** counted as on-chain denials.
+- `integration.test.mjs`: additionally submits a fully signed attacker-
+  depositor transaction referencing a token source owned by a different
+  wallet. Anchor's `token::authority = depositor` constraint must reject
+  the included transaction; the harness requires non-null execution
+  `meta.err` and an absent receipt.
+
+**Verification status:** These new assertions are **source commits, not
+validated localnet results**. This editing environment lacks Cargo, Anchor
+and `solana-test-validator`; a stale workflow rerun against the old
+integration snapshot cannot verify them. CI must pin a new immutable
+integration snapshot containing this newer SOL head, then execute
+`cargo check --workspace --all-targets` and
+`bash tests/solana/localnet-build.sh`, capture all three isolated validator
+modes and retained-ledger restart, and publish freshly generated signed
+`getTransaction`, `getBlock`, `getMultipleAccounts` fixtures with
+IDL/ELF hashes. Mark the suite PASS only after matching tested source SHAs
+and zero unexplained failures. Do not auto-merge or enable issuance.
