@@ -2,7 +2,7 @@
   "status": "integration-only / DO NOT MERGE",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "ab0d9a9205b3c669894bbc78a02e9af289f95b10"
+    "sha": "f54146671a6f204e8d7ab860244e4089f43f3dd1"
   },
   "sources": {
     "SOL": {
@@ -30,5 +30,14 @@
     "SOL": "Refreshed all current SOL PR #35 changes through 37b3530, including raw account-decoder / multi-receipt validator regression coverage, stronger generated-IDL PDA-seed tests and evidence docs. Source branch unchanged."
   },
   "ciIntegrationUpdate": "CI overlay includes fixed public-ID preparation, SHA-isolated workflows and required reviewed-lock provenance; this is not a merge of the specialist branches.",
-  "securityBoundary": "ALL localnet snapshots untrusted, all Holochain intake quarantined; creditEligible false and issuance/withdrawal disabled."
+  "securityBoundary": "ALL localnet snapshots untrusted, all Holochain intake quarantined; creditEligible false and issuance/withdrawal disabled.",
+  "lockSourceStatus": "All four reviewed-hash candidate lockfiles are now Git-tracked in this integration snapshot, while SOL/OBS/RAVE specialist branches still require individual lockfile commits/reviews; CI root lock is Git-tracked.",
+  "lockExecution": "CI cargo check --locked; integration RAVE cargo test --locked; npm ci for cross-lane source packages; SOL localnet npm install still pending source-owner migration to npm ci.",
+  "integratedSuccess": {
+    "sha": "57ed7b34c0f902b90780b3216f24578609132f7b",
+    "actionsRun": 43505857690,
+    "result": "pass",
+    "shadowHandoff": "2/2 real finalized local validator account-fixture tests pass, quarantine-only",
+    "provenanceJobStatus": "separate CI workflow failed for missing source-committed locks at that SHA"
+  }
 }

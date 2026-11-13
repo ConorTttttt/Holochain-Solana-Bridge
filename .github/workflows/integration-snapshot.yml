@@ -100,7 +100,7 @@ jobs:
           tmp="$(mktemp -d -t rave-engine-s0.XXXXXXXX)"
           trap 'rm -rf -- "$tmp"' EXIT
           cp -R tests/holochain/rave-engine/. "$tmp/"
-          bash scripts/ci/record.sh rave-rust-tests cargo test --manifest-path "$tmp/Cargo.toml" --all-targets
+          bash scripts/ci/record.sh rave-rust-tests cargo test --locked --manifest-path "$tmp/Cargo.toml" --all-targets
           test -s "$tmp/Cargo.lock"
           cp "$tmp/Cargo.lock" ci-artifacts/rave-engine-Cargo.lock
           sha256sum ci-artifacts/rave-engine-Cargo.lock | tee ci-artifacts/rave-engine-lock.sha256
