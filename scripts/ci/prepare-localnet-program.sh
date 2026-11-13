@@ -37,22 +37,35 @@ NODE
 printf '%s\n' "$public_id" > ci-artifacts/localnet-program-id.txt
 # Ensure CI's ID sync does not mutate the economic source outside the program-ID lines.
 python3 - <<'PY'
-import re, subprocess, sys
-paths = subprocess.check_output(['git','diff','--name-only'], text=True).splitlines()
-allowed = {'Anchor.toml','programs/deposit_prototype/src/lib.rs'}
+import re, subprocess, sys, tomllib
+from pathlib import Path
+paths = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+allowed = {'Anchor.toml', 'programs/deposit_prototype/src/lib.rs'}
 if set(paths) - allowed:
-    sys.exit('Unexpected tracked file modified by key sync: ' + ', '.join(set(paths)-allowed))
+    sys.exit('Unexpected tracked file modified by key sync: ' + ', '.join(set(paths) - allowed))
 for path in paths:
-    current=open(path).read()
-    original=subprocess.check_output(['git','show',f'HEAD:{path}'], text=True)
-    if path=='Anchor.toml':
-        regex=r'(deposit_prototype\s*=\s*")[1-9A-HJ-NP-Za-km-z]{32,44}(")'
+    current = Path(path).read_text()
+    original = subprocess.check_output(['git', 'show', f'HEAD:{path}'], text=True)
+    if path == 'Anchor.toml':
+        # Anchor CLI may rewrite comments/spacing. Compare TOML semantics, not bytes,
+        # but allow *only* the disposable PUBLIC program id to change.
+        current_cfg = tomllib.loads(current)
+        original_cfg = tomllib.loads(original)
+        for cfg in (current_cfg, original_cfg):
+            programs = cfg.get('programs', {}).get('localnet', {})
+            if not isinstance(programs.get('deposit_prototype'), str):
+                sys.exit('Missing localnet program ID while inspecting Anchor.toml')
+            programs['deposit_prototype'] = '<EPHEMERAL_PUBLIC_PROGRAM_ID>'
+        if current_cfg != original_cfg:
+            sys.exit('Key sync changed Anchor.toml settings beyond localnet public program ID')
     else:
-        regex=r'(declare_id!\(")[1-9A-HJ-NP-Za-km-z]{32,44}("\))'
-    masked=lambda s: re.sub(regex, r'\1<PROGRAM_ID>\2', s)
-    if masked(current)!=masked(original):
-        sys.exit('Key sync changed non-ID program source/config: '+path)
-print('PASS: temporary source changes limited to synchronized public program ID')
+        id_pattern = r'(declare_id!\(")[1-9A-HJ-NP-Za-km-z]{32,44}("\))'
+        normalize = lambda text: re.sub(id_pattern, r'\1<EPHEMERAL_PUBLIC_PROGRAM_ID>\2', text)
+        if normalize(current) == current or normalize(original) == original:
+            sys.exit('Rust public program ID declaration not recognized')
+        if normalize(current) != normalize(original):
+            sys.exit('Key sync changed Rust source beyond public program ID')
+print('PASS: key sync preserved all TOML configuration semantics and Rust source except the public program ID')
 PY
 rm -f target/idl/deposit_prototype.json target/deploy/deposit_prototype.so
 echo "LOCALNET_KEY_PREPARED: private key remains under ignored target/deploy (never uploaded)."
