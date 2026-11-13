@@ -178,3 +178,15 @@ test('rejects fabricated vault delta, source delta, missing CPI, and substituted
   await assert.rejects(verifyDepositCandidates({...args,expected:{...expected,vault:pub(40)},
     rpcTransaction}),/noncanonical pinned config\/vault/);
 });
+
+test('rejects a matching RPC signature string if Ed25519 signature bytes are forged',async()=>{
+  const {rpcTransaction,expected}=await twoDeposits();
+  const corrupted=Buffer.from(rpcTransaction.transaction[0],'base64');
+  corrupted[20]^=1; // Change signed bytes, not the signed message.
+  const forgedSignature=encode58(corrupted.subarray(1,65));
+  await assert.rejects(verifyDepositCandidates({
+    rpcTransaction:{...rpcTransaction,transaction:[corrupted.toString('base64'),'base64']},
+    signature:forgedSignature,expected,genesisHash,idl:syntheticIdl(),
+    finalizedClaim:true,blockhash,
+  }),/invalid Ed25519 transaction signature/);
+});
