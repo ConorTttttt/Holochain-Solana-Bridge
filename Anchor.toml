@@ -1,0 +1,13 @@
+# Development placeholder: run `anchor keys sync` after generating the program keypair.
+[toolchain]
+anchor_version = "1.2.2"
+
+[programs.localnet]
+deposit_prototype = "Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[workspace]
+members = ["programs/deposit_prototype"]
