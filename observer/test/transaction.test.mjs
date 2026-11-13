@@ -165,7 +165,18 @@ test('2 separate deposit instructions produce 2 immutable receipt identities and
       'configBump','receiptBump'].map(k=>[k,cand[k]])),
     finalizedSlot:501,refunded:false,
   };
-  assert.equal(attachReceiptObservation(cand,observation).creditEligible,false);
+  const evidence=attachReceiptObservation(cand,observation);
+  assert.equal(evidence.kind,'solana-deposit-evidence-v1');
+  assert.equal(evidence.id,cand.id);
+  assert.equal(evidence.occurrenceId,cand.occurrenceId);
+  assert.equal(evidence.receiptSnapshot,observation);
+  assert.equal(evidence.transactionVerified,true);
+  assert.equal(evidence.independentConsensusVerified,false);
+  assert.equal(evidence.creditEligible,false);
+  assert.equal(evidence.refundedAtObservation,false);
+  assert.equal(Object.isFrozen(evidence),true);
+  assert.throws(()=>attachReceiptObservation(cand,{...observation,creditEligible:true}),
+    /invalid receipt observation/);
   assert.throws(()=>attachReceiptObservation(cand,{...observation,recipientCore:'00'.repeat(32)}),
     /snapshot mismatch/);
 });
