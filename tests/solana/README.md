@@ -127,6 +127,8 @@ recorded account bytes in combined CI; independently review first-init
 front-running, unrestricted mint authority for disposable test tokens, and
 upgrade authority. Existing **historically passing** tests do not cover simultaneous receipt
 creation; that scenario is now implemented but awaits a new CI execution.
-Ledger-preserving validator restarts, forks, full validator failure recovery
+A true ledger-preserving validator restart is now implemented in
+`restart-validator.sh` / `restart-reconcile.test.mjs`, but no new CI
+execution has yet verified it. Forks, full validator failure recovery
 and production collateral/credit issuance remain unverified (issuance is
 intentionally disabled).
