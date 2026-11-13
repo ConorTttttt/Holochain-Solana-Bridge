@@ -68,7 +68,7 @@ jobs:
     name: Required Rust host and Anchor SBF compilation
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env: {NO_DNA: '1', CARGO_TERM_COLOR: always}
+    env: {NO_DNA: '1', CARGO_TERM_COLOR: always, RUSTUP_TOOLCHAIN: '1.95.0'}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {persist-credentials: false}
