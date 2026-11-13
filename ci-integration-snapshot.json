@@ -26,7 +26,7 @@
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "6d53b33ad8ca4b37d2a86201d29a2c7090da6c22",
+  "parentIntegrationCommit": "19bf4878cf6f9351b22f3a91bdc0c01a8914b9df",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/run-cross-lane-tests.mjs",
@@ -112,7 +112,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "UNVERIFIED: immutable snapshot pending PR #37 Actions; historical failed runs retained.",
+  "latestExecutionStatus": "Previous exact integrated SHA 19bf4878 red: OBS 54/55 pass, missing-second-signature assertion mismatch. New exact-head run pending.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -123,6 +123,10 @@
     {
       "path": "tests/solana/verify-witness-bundle.mjs",
       "reason": "Source SOL regex literal incorrectly contains two backslashes for each .rpc.json extension; integration temporary test correction; reported to SOL PR #35."
+    },
+    {
+      "path": "observer/test/indexer.test.mjs",
+      "reason": "CI 43527503901 OBS 54/55: source test regex too narrow for missing second signature; verifier already correctly rejects; reported to OBS PR #36."
     }
   ],
   "conductorStatus": "BLOCKED: no authenticated deployed Unyt DNA/WASM, matching conductor, live zome calls, multi-peer verification. This is a release blocker, not a test skip.",
@@ -139,6 +143,18 @@
   },
   "ciBaseMerged": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "47c58c1db37b14f0d01abd16c7ea5545b4e7df1e"
+    "sha": "4a97505d9f624da481fe24b6649e9c94974870d9"
+  },
+  "executedIntermediate": {
+    "commit": "19bf4878cf6f9351b22f3a91bdc0c01a8914b9df",
+    "sharedRun": 43527503901,
+    "integrationRun": 43527503883,
+    "observer": {
+      "total": 55,
+      "pass": 54,
+      "fail": 1,
+      "skip": 0
+    },
+    "summary": "Intermediate SHA immutable; fixing test regex only; jobs not all completed."
   }
 }
