@@ -21,6 +21,7 @@ const cases = [
   ['security-replay-ledger', 'security/test/replay-ledger-adversarial.test.mjs'],
   ['security-signed-transaction-provenance', 'security/test/transaction-provenance-adversarial.test.mjs'],
   ['security-checkpoint-forgery', 'security/test/indexer-checkpoint-regression.test.mjs'],
+  ['security-ledger-corruption', 'security/test/ledger-corruption-boundary.test.mjs'],
   ['security-solana-rave-numeric-conversion', 'security/test/solana-rave-numeric-gate.test.mjs'],
   ['rave-shadow', 'tests/holochain/shadow-review.test.mjs'],
   ['rave-shadow-cli', 'tests/holochain/shadow-cli.test.mjs'],
