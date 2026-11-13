@@ -1,0 +1,81 @@
+# TEMPORARY SOL lane verification; remove after collecting genuine compiler/validator evidence.
+# Permanent workflows are owned by the CI lane (PR #32).
+name: SOL disposable localnet verification (temporary)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/sol-verify-temporary.yml'
+      - 'rust-toolchain.toml'
+      - 'Anchor.toml'
+      - 'Cargo.toml'
+      - 'programs/**'
+      - 'tests/solana/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Actual Rust Anchor SBPF and validator deposit-refund
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NO_DNA: '1'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install exact Rust 1.95.0
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup default 1.95.0
+          rustc -V
+      - name: Install exact Solana CLI 4.1.2
+        run: |
+          sh -c "$(curl -fsSL https://release.anza.xyz/v4.1.2/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install exact Anchor CLI 1.2.2
+        run: |
+          cargo install --git https://github.com/otter-sec/anchor --tag v1.2.2 anchor-cli --locked
+          anchor --version
+      - name: Compile Rust host and run real SBPF/validator test lifecycle
+        run: |
+          mkdir -p target/localnet-evidence
+          set -o pipefail
+          cargo check --workspace --all-targets 2>&1 | tee target/localnet-evidence/cargo-check.log
+          bash tests/solana/localnet-build.sh 2>&1 | tee target/localnet-evidence/localnet-build.log
+      - name: Collect status, hashes and tool versions without keys
+        if: always()
+        run: |
+          mkdir -p target/localnet-evidence
+          {
+            (rustc -V || true)
+            (cargo -V || true)
+            (solana --version || true)
+            (anchor --version || true)
+            (node --version || true)
+          } > target/localnet-evidence/versions.log 2>&1
+          if [ -s target/idl/deposit_prototype.json ]; then
+            sha256sum target/idl/deposit_prototype.json >> target/localnet-evidence/artifacts-sha256.txt
+          else
+            echo 'IDL not generated' > target/localnet-evidence/idl-status.txt
+          fi
+          if [ -s target/deploy/deposit_prototype.so ]; then
+            sha256sum target/deploy/deposit_prototype.so >> target/localnet-evidence/artifacts-sha256.txt
+          else
+            echo 'SBPF binary not generated' > target/localnet-evidence/sbpf-status.txt
+          fi
+      - name: Upload public-only logs and generated IDL; never keypairs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: solana-localnet-verification-evidence
+          path: |
+            target/localnet-evidence/
+            target/idl/deposit_prototype.json
+          if-no-files-found: error
+          retention-days: 14
