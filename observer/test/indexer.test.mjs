@@ -63,9 +63,13 @@ function rpcMock(options={}) {
         case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
         case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
         case 'getSlot':result=100;break;
-        case 'getBlocks':result=options.listConflict && isB ? [20,21]:[20];break;
+        case 'getBlocks':result=options.parentBroken ? [20,21] : options.listConflict && isB ? [20,21]:[20];break;
         case 'getBlock':result=options.prunedBlock && isB ? null :
-          {...baseBlock,blockhash:options.blockConflict && isB ? pub(44):baseBlock.blockhash,
+          {...baseBlock,
+            ...(req.params[0]===21 ? {
+              blockhash:pub(27),parentSlot:options.parentBroken ? 19:20,
+              previousBlockhash:options.parentBroken ? pub(28):baseBlock.blockhash,
+            } : {blockhash:options.blockConflict && isB ? pub(44):baseBlock.blockhash}),
             transactions:options.unsupported ? [{version:2,meta:{err:null},transaction:[]}]:[]};break;
         default:throw Error('Unexpected '+req.method);
       }
@@ -97,6 +101,7 @@ test('scans produced finalized blocks and commits skipped slots, restart perform
 for(const [name,variation,pattern] of [
   ['provider blockhash disagreement',{blockConflict:true},/disagree about block/],
   ['provider list disagreement',{listConflict:true},/produced-slot enumeration/],
+  ['parent-chain discontinuity',{parentBroken:true},/parent-chain discontinuity/],
   ['pruned archive',{pruned:true},/historical data pruned/],
   ['missing historical block',{prunedBlock:true},/missing\/pruned finalized block/],
   ['unsupported transaction version',{unsupported:true},/unsupported transaction version/],
