@@ -9,6 +9,19 @@ in CI run [43499386297](https://github.com/ConorTttttt/Holochain-Solana-Bridge/a
 Exact binary/IDL hashes, account bytes, public signatures and outstanding risks:
 [`VERIFIED_LOCALNET.md`](VERIFIED_LOCALNET.md).
 
+**Sprint 1 continuation (not yet CI-verified):** `integration.test.mjs` now
+includes actual `getTransaction().meta.err` verification with
+`skipPreflight: true`, two depositor wallets, concurrent nonce attempts,
+partial refunds, failed SPL CPI atomic rollback, token-program and authority
+substitution, and loader/upgrade-authority inspection. The runner executes
+three isolated fresh-validator modes: `lifecycle`, `init-capture` and
+`u64-max`. The attack test deliberately demonstrates that the *first
+initializer can seize the administrator, mint and Holochain scope*. Read
+[`SPRINT1_SECURITY_ASSESSMENT.md`](SPRINT1_SECURITY_ASSESSMENT.md) before
+interpreting test results. **These new tests have not yet been shown to pass
+in GitHub Actions; the historic pass below applies only to its exact
+older SHA.**
+
 ## Verified localnet toolchain (transitive lockfiles still pending)
 
 - Host Rust `1.95.0` from `rust-toolchain.toml` (IDL builds may use a
@@ -112,6 +125,8 @@ refund and reusing a nonce after refund. Failed transfers must roll back.
 PR #36's v2 actual SDK/`isNative` decoder against the real binary/IDL and
 recorded account bytes in combined CI; independently review first-init
 front-running, unrestricted mint authority for disposable test tokens, and
-upgrade authority. Existing passing tests do not yet cover simultaneous
-receipt creation, restarts, forks, rollback, full validator failure recovery,
-or production collateral/credit issuance (intentionally disabled).
+upgrade authority. Existing **historically passing** tests do not cover simultaneous receipt
+creation; that scenario is now implemented but awaits a new CI execution.
+Ledger-preserving validator restarts, forks, full validator failure recovery
+and production collateral/credit issuance remain unverified (issuance is
+intentionally disabled).
