@@ -1,0 +1,12 @@
+{
+  "name": "holochain-solana-deposit-observer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only finalized Solana deposit snapshots. NEVER authorizes Holochain credit.",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli.mjs && node --check src/verify.mjs && node --check src/decode.mjs"
+  },
+  "engines": {"node": ">=20"}
+}
