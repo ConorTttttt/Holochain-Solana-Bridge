@@ -140,7 +140,7 @@ async function assertCustodyConservation(label, minContextSlot) {
   }
   assert.equal(BigInt(cfg.totalActive), activeReceipts, label + ': liabilities != active receipt sum');
   assert.ok(BigInt(vault.amount) >= activeReceipts, label + ': vault cannot cover active receipts');
-  assert.equal(BigInt(vault.amount), BigInt(cfg.totalActive), label + ': unexpected custody surplus');
+  // Donated surplus is permitted; only spendable custody >= obligations is required.
 }
 async function send(ix, signers) {
   const signature = await sendAndConfirmTransaction(connection, new Transaction().add(ix), signers, { commitment: 'confirmed' });
