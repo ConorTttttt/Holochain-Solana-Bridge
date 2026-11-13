@@ -54,11 +54,34 @@ const U64_MAX = (1n << 64n) - 1n;
 const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
 assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
 const transactionEvidence = [];
+// Archive the ORIGINAL JSON-RPC text to avoid SDK deserialization or
+// JSON.stringify rounding raw u64 fields such as account.rentEpoch.
+// RPC is deliberately hardcoded to the disposable localhost validator.
+async function rawPublicRpc(method, params) {
+  const response = await fetch(RPC, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  assert.ok(response.ok, method + ': HTTP ' + response.status);
+  const raw = await response.text();
+  const parsed = JSON.parse(raw);
+  assert.equal(parsed.error, undefined, method + ': ' + JSON.stringify(parsed.error));
+  assert.ok(parsed.result !== null && parsed.result !== undefined, method + ': missing RPC result');
+  return { raw, parsed };
+}
+function savePublicRpc(name, response) {
+  assert.match(name, /^[a-zA-Z0-9-]+\.rpc\.json$/, 'unsafe public RPC fixture filename');
+  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL(name, directory), response.raw + '\n', { mode: 0o600 });
+  return name;
+}
 async function saveTransactionEvidence() {
-  // Re-fetch every unique signed transaction at FINALIZED commitment so that
-  // confirmed status alone cannot be mistaken for the requested block evidence.
-  // These records are from a disposable local validator, NOT a consensus proof
-  // or a cross-chain credit authorization.
+  // Every signed success and failure is re-fetched at FINALIZED commitment.
+  // Preserve FULL JSON-RPC getTransaction/getBlock responses, including
+  // signatures, message versions, instruction accounts and execution metadata.
+  // This LOCALNET evidence does not establish independent Solana finality.
   const finalized = [];
   const signatures = new Map();
   for (const entry of transactionEvidence) {
@@ -80,19 +103,35 @@ async function saveTransactionEvidence() {
       'finalized transaction/status disagreement: ' + signature);
     if ('error' in expected) assert.deepEqual(tx.meta.err, expected.error,
       'confirmed/finalized execution disagreement: ' + signature);
-    const block = await connection.getBlock(tx.slot, {
-      commitment: 'finalized', transactionDetails: 'none', rewards: false,
-      maxSupportedTransactionVersion: 0,
-    });
-    assert.ok(block?.blockhash, 'finalized local-validator block unavailable: ' + signature);
+    const transactionResponse = await rawPublicRpc('getTransaction', [signature, {
+      commitment: 'finalized', encoding: 'json', maxSupportedTransactionVersion: 0,
+    }]);
+    const rawTx = transactionResponse.parsed.result;
+    assert.equal(rawTx.slot, tx.slot, 'SDK/raw getTransaction slot disagreement');
+    assert.ok(rawTx.transaction?.signatures?.includes(signature), 'RPC transaction signature missing');
+    assert.deepEqual(rawTx.meta?.err, tx.meta.err, 'SDK/raw getTransaction error disagreement');
+    const blockResponse = await rawPublicRpc('getBlock', [tx.slot, {
+      commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
+      rewards: false, maxSupportedTransactionVersion: 0,
+    }]);
+    const block = blockResponse.parsed.result;
+    assert.ok(block.blockhash, 'finalized local-validator block unavailable: ' + signature);
+    const included = block.transactions.find((item) =>
+      item.transaction?.signatures?.includes(signature));
+    assert.ok(included, 'signed transaction missing from finalized block: ' + signature);
+    assert.deepEqual(included.meta?.err, rawTx.meta.err,
+      'getBlock and getTransaction execution disagreement: ' + signature);
+    const txFile = savePublicRpc('getTransaction-' + signature + '.rpc.json', transactionResponse);
+    const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
       previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
-      blockTime: tx.blockTime, version: tx.version,
-      messageRecentBlockhash: tx.transaction.message.recentBlockhash,
-      meta: { err: tx.meta.err, logMessages: tx.meta.logMessages,
-        preTokenBalances: tx.meta.preTokenBalances,
-        postTokenBalances: tx.meta.postTokenBalances },
+      blockTime: tx.blockTime, version: rawTx.version,
+      messageRecentBlockhash: rawTx.transaction.message.recentBlockhash,
+      meta: { err: rawTx.meta.err, logMessages: rawTx.meta.logMessages,
+        preTokenBalances: rawTx.meta.preTokenBalances,
+        postTokenBalances: rawTx.meta.postTokenBalances },
+      getTransactionRawFile: txFile, getBlockRawFile: blockFile,
     });
   }
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);
@@ -104,11 +143,16 @@ async function saveTransactionEvidence() {
       transactions: transactionEvidence, finalized,
     }, null, 2) + '\n', { mode: 0o600 });
 }
-// Evidence files contain only public keys and publicly readable Solana account
-// bytes. Never serialize, log or upload payer/depositor private keypairs.
+// Only public account bytes/keys/signatures may be archived; NEVER wallet keys.
 async function capturePublicAccountFixture(label, keys, signatures) {
-  const result = await connection.getMultipleAccountsInfoAndContext(keys, 'finalized');
+  const addresses = keys.map((key) => key.toBase58());
+  const response = await rawPublicRpc('getMultipleAccounts', [addresses, {
+    commitment: 'finalized', encoding: 'base64',
+  }]);
+  const result = response.parsed.result;
+  assert.equal(result.value.length, keys.length, 'getMultipleAccounts count mismatch');
   assert.ok(result.value.every(Boolean), 'finalized evidence snapshot is missing an account');
+  const rawFile = savePublicRpc('getMultipleAccounts-' + label + '.rpc.json', response);
   const fixture = {
     kind: 'localnet-finalized-rpc-account-snapshot-not-consensus-proof',
     label,
@@ -116,13 +160,14 @@ async function capturePublicAccountFixture(label, keys, signatures) {
     programId: programId.toBase58(),
     slot: result.context.slot,
     signatures,
-    accounts: result.value.map((account, index) => ({
-      address: keys[index].toBase58(),
-      owner: account.owner.toBase58(),
-      lamports: account.lamports,
-      executable: account.executable,
-      dataBase64: Buffer.from(account.data).toString('base64'),
-    })),
+    getMultipleAccountsRawFile: rawFile,
+    accounts: result.value.map((account, index) => {
+      assert.equal(account.data?.[1], 'base64', 'RPC must return base64 account bytes');
+      return {
+        address: addresses[index], owner: account.owner, lamports: account.lamports,
+        executable: account.executable, dataBase64: account.data[0],
+      };
+    }),
   };
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
