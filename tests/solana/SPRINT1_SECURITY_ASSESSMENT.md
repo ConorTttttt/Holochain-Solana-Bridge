@@ -204,3 +204,26 @@ pinning the current SOL head. Until then: do not mark expanded/restart tests
 passing, do not claim first-initializer localnet attack executed, and do
 not copy the old IDL/ELF hashes into a new manifest. npm/Cargo lockfiles
 cannot be accepted without real resolution and review.
+
+
+## 13 November 2026 — raw RPC fixture capture (code only; validator re-run required)
+
+The test harness now makes localhost-only JSON-RPC requests and archives the **verbatim
+response JSON** to `target/localnet-evidence/`:
+
+- `getTransaction-<signature>.rpc.json` includes the full finalized signed
+  transaction, message account keys/instructions, version, `meta.err`, logs
+  and transaction metadata for **both successes and rejected included txs**.
+- `getBlock-<slot>.rpc.json` includes the full finalized block/transactions,
+  not merely a blockhash; the harness asserts the signed transaction occurs
+  in that block with the same execution error.
+- `getMultipleAccounts-<label>.rpc.json` includes the unmodified context,
+  account data `[base64, "base64"]`, owners, executable flags, lamports,
+  rent epochs and account metadata. Normalized legacy `<label>.json` snapshots
+  remain available and identify the raw-response companion file.
+
+The JSON-RPC response is stored as received, rather than reserializing an SDK
+object, so large `u64` RPC integer literals are not inadvertently rounded
+during fixture capture. These outputs are **generated at validator execution**;
+they do not yet exist for the latest SOL commit and must not be described as
+executed or independently finalized. All signing keys are excluded.

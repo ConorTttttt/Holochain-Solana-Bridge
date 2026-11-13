@@ -57,3 +57,13 @@ SEC-14 uses an adversary-supplied RPC `getGenesisHash` and `getMultipleAccounts`
 **CI (Agent 1):** integrate both PR #33 and #34 tests independently; archive exact source SHAs, Node/Rust versions, full logs, zero skipped applicable tests, generated IDL and validator evidence. Do not run a real-conductor gate as a passing stub.
 
 **Release restriction:** No self-approval, no live tokens, no spendable Holochain credit, no Solana withdrawal, and no elevation of RPC observations or RAVE enum states into settlement proofs.
+
+
+## Independent SEC follow-up — 13 November 2026 (post-integration failures)
+
+See **[INDEPENDENT_GATES_2026-11-13.md](INDEPENDENT_GATES_2026-11-13.md)** for per-finding severity, preconditions, actual versus pending reproduction evidence, mitigation, unknowns and required acceptance tests. This supersedes any implication above that the new S1 SOL, OBS or RAVE suites are already green.
+
+- Actual SOL local-validator job `43510726154` stopped at unsupported CommonJS named import **before** executing the new attacker-first initializer, concurrent deposit, u64-max or restart tests. The initializer vulnerability is **source-confirmed; executable attack not independently reproduced**.
+- OBS job `43510726021` reported **38/45 pass**, seven failures; updated head now handles address-keyed `SignaturesMap` but post-fix integrated execution is pending. The new SEC independent signed-wire/adversarial probes have been committed under `security/test/transaction-provenance-adversarial.test.mjs`; their Kit-backed execution is **not claimed**.
+- Published RAVE `rave_engine =0.15.0` test run `43510726154` reports **7/8 pass**, with the large decimal-string ReserveUnits assertion false; no proof of rounding or truncation. Independent JS/JSON BigInt **reference** boundary checks passed locally **4/4**, but are not RAVE execution.
+- Credit, withdrawal and independently authenticated finality remain **P0 DENIED**. Real verified Unyt DNA/coordinator/conductor and cross-history replay validation remain required.

@@ -1,5 +1,5 @@
 {
-  "status": "FROZEN TEST CANDIDATE — NO PASSED RUNS YET; NO MAIN MERGE OR ECONOMIC AUTHORIZATION",
+  "status": "FROZEN P0 INTEGRATION TEST CANDIDATE — UNEXECUTED; NO MAIN MERGE OR ECONOMIC AUTHORIZATION",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
     "sha": "9f620bc7a6bbc5b920ea1cba87ec46bc0e293dd2"
@@ -7,60 +7,55 @@
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "0b5901af9007213a6801dc8f3ddc6c6d21c70564",
+      "sha": "db3692c0fa7fd6ef5dc36a5ac1360ff5636337be",
       "pr": 35
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
-      "sha": "755137c500c9c369e07c540ecc4a51f6fff1857d",
+      "sha": "a38362a7a7041cb8290a5b8b787e47ee5d76137b",
       "pr": 36
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
-      "sha": "b846c5cfb442ee735204e1e034eaf93bd5e88e28",
+      "sha": "f7318f32e0640e7aa2cf9950503cbfa2034cc16e",
       "pr": 34
     },
     "SEC": {
       "branch": "agent/sec/10-threat-model",
-      "sha": "aaa590dcfa93e7cc10f14c2607b601cb402db5a5",
+      "sha": "b34162443669a5111eaaefd8645b9552b3971f9e",
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "24b60e72ac78afbab5562c605094c3146bddd653",
+  "parentIntegrationCommit": "4949b5693dccba1ff373a276a75c27db2f045005",
   "sourceUpdatePaths": {
     "CI": [
+      "scripts/ci/run-cross-lane-tests.mjs",
+      ".github/workflows/integration-snapshot.yml",
+      "tests/integration/s0-public-rpc-fixtures.test.mjs",
       "scripts/ci/SPRINT1_READINESS_2026-11-13.md",
-      "scripts/ci/check-lock-digest.sh",
-      "scripts/ci/run-cross-lane-tests.mjs"
+      "scripts/ci/SHADOW_MODE_CONDUCTOR_HANDOFF.md",
+      "ci-integration-snapshot.json"
     ],
     "SOL": [
-      "tests/solana/INITIALIZATION_MITIGATION_PROPOSAL.md",
-      "tests/solana/README.md",
+      "tests/solana/OBSERVER_HANDOFF.md",
       "tests/solana/SPRINT1_SECURITY_ASSESSMENT.md",
-      "tests/solana/integration.test.mjs",
-      "tests/solana/localnet-build.sh",
-      "tests/solana/package-lock.json",
-      "tests/solana/package.json",
-      "tests/solana/sdk-compat.mjs",
-      "tests/solana/sdk-compat.test.mjs"
+      "tests/solana/integration.test.mjs"
     ],
     "OBS": [
       "observer/docs/P0_VALIDATION_2026-11-13.md",
-      "observer/src/indexer.mjs",
-      "observer/src/transaction.mjs",
-      "observer/test/indexer.test.mjs",
-      "observer/test/transaction.test.mjs"
+      "observer/test/ledger.test.mjs"
     ],
     "RAVE": [
-      "holochain/research/S1_ECONOMIC_STANDING_AND_SANDBOX.md",
-      "holochain/research/S1_SANDBOX_GATE.md",
-      "holochain/research/UNYT_RELEASE_PROVENANCE.md",
-      "holochain/transaction-shadow.mjs",
-      "tests/holochain/rave-engine/Cargo.lock",
-      "tests/holochain/rave-engine/Cargo.toml",
-      "tests/holochain/rave-engine/src/lib.rs",
-      "tests/holochain/sandbox/verify-unyt-release.sh",
-      "tests/holochain/transaction-provenance-journal.test.mjs"
+      "holochain/research/RAVE_015_NUMERIC_BOUNDARIES.md",
+      "tests/holochain/test-only-adapter.test.mjs"
+    ],
+    "SEC": [
+      "security/INDEPENDENT_GATES_2026-11-13.md",
+      "security/SPRINT1_GATES.md",
+      "security/test/historical-localnet-accounts.test.mjs",
+      "security/test/numeric-boundary-reference.test.mjs",
+      "security/test/replay-ledger-adversarial.test.mjs",
+      "security/test/transaction-provenance-adversarial.test.mjs"
     ]
   },
   "method": "Immutable source blobs atomically overlaid onto previous integration tree; parent is prior frozen integration; no specialist branch edits",
@@ -75,32 +70,40 @@
     "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
   "sourceLockReview": "RAVE new direct serde/zfuel references already existed as transitive pinned packages; generated graph compared linewise with old lock, digest computed from current source. Current-head locked execution still unverified.",
-  "testPolicy": "16 explicit offline suites including RAVE provenance journal; full OBS npm test; strict real SBPF/IDL; SOL localnet lifecycle/restart; RAVE published crate; SEC/shadow; zero failures, unjustified skips and missing artifacts",
+  "testPolicy": "20 mandatory offline suites (including 4 additional independent SEC); full OBS SDK suite; real SBPF/IDL; SOL three isolated validator modes + retained-ledger restart; public JSON-RPC fixture coherence; real RAVE Rust; strict quarantine-only shadow; zero unjustified skips",
   "previousFailingExecution": {
-    "commit": "24b60e72ac78afbab5562c605094c3146bddd653",
-    "ciRun": 43510726021,
-    "validatorRaveRun": 43510726154,
-    "offline": {
-      "tests": 117,
-      "pass": 110,
-      "fail": 7,
-      "skip": 0
-    },
+    "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
+    "ciRun": 43520698081,
+    "validatorRaveRun": 43520697998,
     "observer": {
-      "tests": 45,
-      "pass": 38,
-      "fail": 7,
-      "skip": 0
-    },
-    "raveRust": {
-      "tests": 8,
-      "pass": 7,
+      "tests": 48,
+      "pass": 47,
       "fail": 1,
       "skip": 0
     },
-    "solana": "blocked at CommonJS import before enhanced scenarios"
+    "offline": {
+      "tests": 125,
+      "pass": 124,
+      "fail": 1,
+      "skip": 0
+    },
+    "raveRust": {
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "skip": 0
+    },
+    "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "NEW SNAPSHOT UNEXECUTED AT FREEZE — require immutable-head Actions logs; older green is not proof",
+  "latestExecutionStatus": "UNEXECUTED, pending new SHA GitHub Actions evidence",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
-  "created": "2026-11-13"
+  "created": "2026-11-13",
+  "integrationOnlyPatches": [
+    {
+      "path": "observer/test/indexer.test.mjs",
+      "reason": "CI-only test fixture interval filtering for getBlocks(21,21), not present in OBS source SHA. Must backport and retest in PR #36."
+    }
+  ],
+  "conductorStatus": "BLOCKED - no exact Unyt source-equivalent DNA, conductor or reviewed real zome-call harness",
+  "rawWireStatus": "JSON-encoding public RPC receipts present in SOL source; signed wire bytes for independent OBS verification still needed"
 }

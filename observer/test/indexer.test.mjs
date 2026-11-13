@@ -80,7 +80,15 @@ function rpcMock(options={}) {
         case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
         case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
         case 'getSlot':result=100;break;
-        case 'getBlocks':result=(options.parentBroken || options.bothProduced) ? [20,21] : options.listConflict && isB ? [20,21]:[20];break;
+        case 'getBlocks':{
+          // Real getBlocks(start,end) must never return out-of-range slots.
+          // The old mock returned slot 20 for getBlocks(21,21), hiding the
+          // downstream signature regression behind a fixture-only failure.
+          const produced=(options.parentBroken || options.bothProduced ||
+            (options.listConflict && isB)) ? [20,21] : [20];
+          result=produced.filter(slot=>slot>=req.params[0] && slot<=req.params[1]);
+          break;
+        }
         case 'getBlock':result=options.prunedBlock && isB ? null :
           {...baseBlock,
             ...(req.params[0]===21 ? {

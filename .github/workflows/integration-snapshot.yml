@@ -63,6 +63,8 @@ jobs:
           bash scripts/ci/record.sh generated-idl-contract node observer/scripts/verify-idl.mjs target/idl/deposit_prototype.json "$trusted_id"
       - name: Execute all offline cross-lane suites; never accept hidden skips
         run: bash scripts/ci/record.sh cross-lane-suites node scripts/ci/run-cross-lane-tests.mjs
+      - name: Require original public Solana RPC transaction/block/account witnesses
+        run: bash scripts/ci/record.sh real-rpc-fixture-coherence node --test tests/integration/s0-public-rpc-fixtures.test.mjs
       - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
         run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -189,6 +191,9 @@ jobs:
             target/localnet-evidence/two-refunded-receipts.json
             target/localnet-evidence/restart-state.json
             target/localnet-evidence/restart-after.json
+            # Captured PUBLIC localhost Solana JSON-RPC, no keypairs or ledger data.
+            target/localnet-evidence/*.rpc.json
+            target/localnet-evidence/sprint1-*-transactions.json
             target/localnet-evidence/restart-validator-before.log
             target/localnet-evidence/restart-validator-after.log
           if-no-files-found: error

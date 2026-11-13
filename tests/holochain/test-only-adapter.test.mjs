@@ -92,3 +92,25 @@ test('stale slot and contradictory receipt bytes are refused within one process 
     inert(record);
   }
 });
+
+
+test('exact u64 decimal strings above JS safe integer remain non-economic, never coerced', () => {
+  for (const exact of ['9007199254740993', '18446744073709551615']) {
+    const record = ingest({
+      amountBaseUnits: exact, mintSupplyBaseUnits: exact,
+      activeVaultBaseUnits: exact, activeLiabilitiesBaseUnits: exact,
+    });
+    assert.equal(record.verdict, 'quarantined', 'valid u64 must remain decimal text');
+    inert(record);
+  }
+  // JS Number would round 2^53+1. The boundary must refuse it, not
+  // coerce or silently change the deposited economic identity.
+  const numeric = ingest({ amountBaseUnits: Number('9007199254740993') });
+  assert.equal(numeric.verdict, 'rejected');
+  assert.ok(numeric.findings.includes('INVALID_amountBaseUnits'));
+  inert(numeric);
+  const outOfRange = ingest({ amountBaseUnits: '18446744073709551616' });
+  assert.equal(outOfRange.verdict, 'rejected');
+  assert.ok(outOfRange.findings.includes('INVALID_amountBaseUnits'));
+  inert(outOfRange);
+});

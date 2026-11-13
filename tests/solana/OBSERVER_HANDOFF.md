@@ -159,3 +159,18 @@ RPC finalized snapshots are still *untrusted RPC observations*, not proof of
 consensus finality or issuance eligibility; `creditEligible: false` must
 remain mandatory. Full OBS/SEC/CI combined regression and independent
 review are still required.
+
+
+## Sprint 1 raw transaction and block fixtures — pending new on-chain execution
+
+The current SOL harness will export verbatim public-only JSON-RPC response
+files under `target/localnet-evidence/`: `getTransaction-<signature>.rpc.json`,
+`getBlock-<slot>.rpc.json`, and `getMultipleAccounts-<label>.rpc.json`.
+The `sprint1-<mode>-transactions.json` index links signed successful and
+included rejected transactions to those complete raw responses. The
+`<label>.json` account summaries link to the exact base64 response and slot.
+
+**Do not use historical run 43499386297 as evidence of these new fixtures.**
+They are available to OBS only after CI executes all fresh-ledger modes on the
+current SOL SHA and uploads its `target/localnet-evidence/` directory.
+No private keys or economic authorization are included.
