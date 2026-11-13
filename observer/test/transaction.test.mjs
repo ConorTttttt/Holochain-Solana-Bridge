@@ -214,6 +214,11 @@ test('v0 lookup-table address metadata must be fully resolved; refuses missing A
   assert.throws(()=>decodeFinalizedWire({
     ...tx,meta:{...tx.meta,loadedAddresses:undefined},
   },tx.expectedSignature),/lookup resolution unavailable/);
+  assert.throws(()=>decodeFinalizedWire({
+    ...tx,meta:{...tx.meta,loadedAddresses:{
+      writable:[pub(41),pub(43)],readonly:[pub(42)],
+    }},
+  },tx.expectedSignature),/lookup resolution unavailable\/inconsistent/);
 });
 
 
