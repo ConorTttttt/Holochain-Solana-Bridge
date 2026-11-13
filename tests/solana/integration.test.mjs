@@ -328,4 +328,132 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     ]);
     await capturePublicAccountFixture('two-refunded-receipts', [receiptA, receiptB, config, vault, mint], {});
   });
+  await t.test('independent wallet accounting, concurrent deposits, rollback and authority attacks', async () => {
+    await mintTo(connection, owner, mint, strangerSource, owner, 300_000n);
+    const tracked = [
+      { who: owner.publicKey, n: nonce, amount, refunded: true },
+      { who: owner.publicKey, n: new BN(U64_MAX.toString()), amount: 1n, refunded: true },
+      { who: owner.publicKey, n: new BN('42020'), amount: 15_000n, refunded: true },
+      { who: owner.publicKey, n: new BN('42021'), amount: 9_000n, refunded: true },
+    ];
+    let sourceBalance = (await getAccount(connection, source)).amount;
+    let strangerBalance = (await getAccount(connection, strangerSource)).amount;
+    async function reconcile(label) {
+      const [rawConfig, rawVault] = await connection.getMultipleAccountsInfo([config, vault], 'confirmed');
+      assert.ok(rawConfig && rawVault, label + ': missing custody accounts');
+      assert.equal(rawConfig.data.length, 114);
+      assert.equal(rawVault.data.length, 165);
+      const decodedConfig = decodeConfig(Buffer.from(rawConfig.data));
+      const decodedVault = decodeTokenAccount(Buffer.from(rawVault.data));
+      let expectedLiabilities = 0n;
+      for (const record of tracked) {
+        const [address, bump] = receiptFor(record.who, record.n);
+        const raw = await connection.getAccountInfo(address, 'confirmed');
+        assert.ok(raw, label + ': missing receipt ' + address.toBase58());
+        same(raw.owner, programId);
+        const decoded = decodeReceipt(Buffer.from(raw.data));
+        assert.equal(decoded.depositor, record.who.toBase58());
+        assert.equal(decoded.nonce, record.n.toString());
+        assert.equal(decoded.amount, record.amount.toString());
+        assert.equal(decoded.refunded, record.refunded);
+        assert.equal(decoded.bump, bump);
+        assert.equal(decoded.config, config.toBase58());
+        assert.equal(decoded.vault, vault.toBase58());
+        assert.equal(decoded.mint, mint.toBase58());
+        if (!record.refunded) expectedLiabilities += record.amount;
+      }
+      assert.equal(BigInt(decodedConfig.totalActive), expectedLiabilities, label + ': active receipt total');
+      assert.equal(BigInt(decodedVault.amount), expectedLiabilities, label + ': vault balance');
+      assert.ok(BigInt(decodedVault.amount) >= BigInt(decodedConfig.totalActive), label + ': insolvency');
+      assert.equal((await getAccount(connection, source)).amount, sourceBalance, label + ': owner source');
+      assert.equal((await getAccount(connection, strangerSource)).amount, strangerBalance, label + ': second source');
+    }
+    async function rejectedWithoutChanges(label, instruction, signers, extra = []) {
+      const keys = [config, vault, source, strangerSource, ...extra];
+      const before = await connection.getMultipleAccountsInfo(keys, 'confirmed');
+      await rejectsInstruction(() => Promise.resolve(instruction), signers, label);
+      const after = await connection.getMultipleAccountsInfo(keys, 'confirmed');
+      for (let i = 0; i < keys.length; i++) {
+        assert.deepEqual(after[i]?.data, before[i]?.data, label + ': changed account data');
+        assert.equal(after[i]?.lamports, before[i]?.lamports, label + ': changed account rent');
+      }
+    }
+    await reconcile('after funding second wallet');
+    const n1 = new BN('60001'), n2 = new BN('60002');
+    const [r1] = receiptFor(owner.publicKey, n1), [r2] = receiptFor(attacker.publicKey, n2);
+    const concurrent = await Promise.all([
+      submitOnChain(await depositIx({ n: n1, receiptKey: r1, amt: 13_000n }), [owner]),
+      submitOnChain(await depositIx({
+        signer: attacker.publicKey, from: strangerSource, n: n2, receiptKey: r2, amt: 17_000n,
+      }), [attacker]),
+    ]);
+    for (let i = 0; i < concurrent.length; i++) {
+      assert.equal(concurrent[i].error, null, 'different-wallet simultaneous deposit rejected');
+      transactionEvidence.push({ label: 'parallel-valid-deposit-' + i, ...concurrent[i] });
+    }
+    tracked.push({ who: owner.publicKey, n: n1, amount: 13_000n, refunded: false });
+    tracked.push({ who: attacker.publicKey, n: n2, amount: 17_000n, refunded: false });
+    sourceBalance -= 13_000n; strangerBalance -= 17_000n;
+    await reconcile('two independent wallets with active deposits');
+    await connection.confirmTransaction(concurrent[1].signature, 'finalized');
+    await capturePublicAccountFixture('sprint1-two-wallets-live', [r1, r2, config, vault, mint],
+      { ownerDeposit: concurrent[0].signature, strangerDeposit: concurrent[1].signature });
+
+    const failedNonce = new BN('60003'), [failedReceipt] = receiptFor(owner.publicKey, failedNonce);
+    await rejectedWithoutChanges('failed SPL transfer rolls back receipt init',
+      await depositIx({ n: failedNonce, receiptKey: failedReceipt, amt: sourceBalance + 1n }),
+      [owner], [failedReceipt]);
+    await rejectedWithoutChanges('incorrect vault account rejected',
+      await depositIx({ n: failedNonce, receiptKey: failedReceipt, vaultKey: source, amt: 1n }),
+      [owner], [failedReceipt]);
+    await rejectedWithoutChanges('token-program substitution rejected',
+      await depositIx({ n: failedNonce, receiptKey: failedReceipt, tokenProg: SystemProgram.programId, amt: 1n }),
+      [owner], [failedReceipt]);
+    await rejectedWithoutChanges('unauthorized admin configuration update',
+      await program.methods.setPaused(true).accountsStrict({ admin: attacker.publicKey, config }).instruction(),
+      [attacker], [r1, r2]);
+    await rejectedWithoutChanges('unauthorized mintTo rejected',
+      createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint]);
+    await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
+      createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
+      [attacker], [vault]);
+    await reconcile('after attempted CPI rollback and authority substitution');
+
+    const partSignature = await send(await refundIx({ receiptKey: r1 }), [owner]);
+    transactionEvidence.push({ label: 'partial-aggregate-refund', signature: partSignature, error: null });
+    tracked.find((x) => x.n.eq(n1)).refunded = true;
+    await reconcile('one of two wallet deposits refunded');
+    const strangerDestination = await createAccount(connection, attacker, mint, attacker.publicKey, Keypair.generate());
+    const otherSignature = await send(await refundIx({
+      signer: attacker.publicKey, to: strangerDestination, receiptKey: r2,
+    }), [attacker]);
+    transactionEvidence.push({ label: 'second-wallet-refund', signature: otherSignature, error: null });
+    tracked.find((x) => x.n.eq(n2)).refunded = true;
+    await reconcile('second wallet refunded');
+    assert.equal((await getAccount(connection, strangerDestination)).amount, 17_000n);
+
+    const raceNonce = new BN('60004'), [raceReceipt] = receiptFor(owner.publicKey, raceNonce);
+    const sameNonceRace = await Promise.all([
+      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 73n }), [owner]),
+      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 74n }), [owner]),
+    ]);
+    assert.equal(sameNonceRace.filter((x) => x.error === null).length, 1,
+      'same nonce race must have exactly one success');
+    assert.equal(sameNonceRace.filter((x) => x.error !== null).length, 1,
+      'duplicate nonce must be rejected by the validator');
+    sameNonceRace.forEach((outcome, i) =>
+      transactionEvidence.push({ label: 'same-wallet-duplicate-nonce-race-' + i, ...outcome }));
+    const wonAmount = sameNonceRace[0].error === null ? 73n : 74n;
+    tracked.push({ who: owner.publicKey, n: raceNonce, amount: wonAmount, refunded: false });
+    sourceBalance -= wonAmount;
+    await reconcile('exactly one racing nonce receipt remains active');
+    await rejectedWithoutChanges('reusing racing receipt rejected',
+      await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 1n }), [owner], [raceReceipt]);
+    const raceRefundSignature = await send(await refundIx({ receiptKey: raceReceipt }), [owner]);
+    transactionEvidence.push({ label: 'race-winner-refund', signature: raceRefundSignature, error: null });
+    tracked.find((x) => x.n.eq(raceNonce)).refunded = true;
+    await reconcile('all competing deposits refunded');
+    await saveTransactionEvidence();
+  });
+
 });
