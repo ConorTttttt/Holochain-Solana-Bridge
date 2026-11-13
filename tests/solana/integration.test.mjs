@@ -457,3 +457,103 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   });
 
 });
+
+test('isolated first-initializer capture attack (not safe for public deployment)', {
+  timeout: 150_000, skip: mode !== 'init-capture'
+}, async () => {
+  assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
+  assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
+  const operator = Keypair.generate(), attacker = Keypair.generate();
+  await fund(operator); await fund(attacker);
+  const maliciousMint = await createMint(connection, attacker, attacker.publicKey, null, 6);
+  const operatorMint = await createMint(connection, operator, operator.publicKey, null, 6);
+  const maliciousScope = Array(32).fill(42);
+  const firstIx = await program.methods.initialize(maliciousScope).accountsStrict({
+    admin: attacker.publicKey, config, mint: maliciousMint, vault: vaultFor(maliciousMint)[0],
+    tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+  }).instruction();
+  const captureSignature = await send(firstIx, [attacker]);
+  transactionEvidence.push({ label: 'first-caller-can-seize-configuration', signature: captureSignature, error: null });
+  const captured = await program.account.bridgeConfig.fetch(config);
+  same(captured.admin, attacker.publicKey);
+  same(captured.mint, maliciousMint);
+  assert.deepEqual([...captured.scope], maliciousScope);
+  const operatorInitIx = await program.methods.initialize(scope).accountsStrict({
+    admin: operator.publicKey, config, mint: operatorMint, vault: vaultFor(operatorMint)[0],
+    tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+  }).instruction();
+  await rejectsInstruction(() => Promise.resolve(operatorInitIx), [operator],
+    'authorized operator cannot initialize after attacker captured singleton');
+  const operatorPauseIx = await program.methods.setPaused(true).accountsStrict({
+    admin: operator.publicKey, config,
+  }).instruction();
+  await rejectsInstruction(() => Promise.resolve(operatorPauseIx), [operator],
+    'operator cannot pause attacker-controlled config');
+  const attackerPause = await program.methods.setPaused(true).accountsStrict({
+    admin: attacker.publicKey, config,
+  }).instruction();
+  const pauseSignature = await send(attackerPause, [attacker]);
+  transactionEvidence.push({ label: 'attacker-can-update-captured-config', signature: pauseSignature, error: null });
+  assert.equal((await program.account.bridgeConfig.fetch(config)).paused, true);
+  await connection.confirmTransaction(pauseSignature, 'finalized');
+  await capturePublicAccountFixture('sprint1-initializer-capture',
+    [config, vaultFor(maliciousMint)[0], maliciousMint],
+    { capture: captureSignature, attackerPause: pauseSignature });
+  await saveTransactionEvidence();
+});
+
+test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes', {
+  timeout: 150_000, skip: mode !== 'u64-max'
+}, async () => {
+  assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
+  assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
+  const admin = Keypair.generate();
+  await fund(admin);
+  const mint = await createMint(connection, admin, admin.publicKey, null, 6);
+  const source = await createAccount(connection, admin, mint, admin.publicKey);
+  const destination = await createAccount(connection, admin, mint, admin.publicKey, Keypair.generate());
+  const [vault] = vaultFor(mint);
+  const maxNonce = new BN(U64_MAX.toString()), [receipt, bump] = receiptFor(admin.publicKey, maxNonce);
+  await mintTo(connection, admin, mint, source, admin, U64_MAX);
+  const initIx = await program.methods.initialize(scope).accountsStrict({
+    admin: admin.publicKey, config, mint, vault, tokenProgram: TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+  }).instruction();
+  const initSignature = await send(initIx, [admin]);
+  transactionEvidence.push({ label: 'u64-init', signature: initSignature, error: null });
+  const depositIx = await program.methods.deposit(maxNonce, recipient, new BN(U64_MAX.toString()))
+    .accountsStrict({ depositor: admin.publicKey, config, mint, source, vault, receipt,
+      tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId }).instruction();
+  const depositSignature = await send(depositIx, [admin]);
+  transactionEvidence.push({ label: 'u64-max-deposit', signature: depositSignature, error: null });
+  const [cfgRaw, vaultRaw, receiptRaw] = await connection.getMultipleAccountsInfo([config, vault, receipt]);
+  assert.equal(decodeConfig(Buffer.from(cfgRaw.data)).totalActive, U64_MAX.toString());
+  assert.equal(decodeTokenAccount(Buffer.from(vaultRaw.data)).amount, U64_MAX.toString());
+  assert.equal(decodeReceipt(Buffer.from(receiptRaw.data)).nonce, U64_MAX.toString());
+  assert.equal(decodeReceipt(Buffer.from(receiptRaw.data)).amount, U64_MAX.toString());
+  assert.equal(decodeReceipt(Buffer.from(receiptRaw.data)).bump, bump);
+  assert.equal(decodeReceipt(Buffer.from(receiptRaw.data)).refunded, false);
+  assert.equal((await getAccount(connection, source)).amount, 0n);
+  assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
+  await rejectsInstruction(() => Promise.resolve(createMintToInstruction(mint, source, admin.publicKey, 1n)),
+    [admin], 'mint supply increment beyond u64 max must fail');
+  assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
+  assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), U64_MAX.toString());
+  const refundIx = await program.methods.refund().accountsStrict({
+    depositor: admin.publicKey, config, mint, vault, receipt, destination, tokenProgram: TOKEN_PROGRAM_ID,
+  }).instruction();
+  const refundSignature = await send(refundIx, [admin]);
+  transactionEvidence.push({ label: 'u64-max-refund', signature: refundSignature, error: null });
+  assert.equal((await getAccount(connection, vault)).amount, 0n);
+  assert.equal((await getAccount(connection, destination)).amount, U64_MAX);
+  assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
+  assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
+  await rejectsInstruction(() => Promise.resolve(refundIx), [admin],
+    'repeated full-u64 refund must not underflow total_active');
+  assert.equal((await getAccount(connection, vault)).amount, 0n);
+  assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
+  await connection.confirmTransaction(refundSignature, 'finalized');
+  await capturePublicAccountFixture('sprint1-u64-refunded', [receipt, config, vault, mint],
+    { deposit: depositSignature, refund: refundSignature });
+  await saveTransactionEvidence();
+});
