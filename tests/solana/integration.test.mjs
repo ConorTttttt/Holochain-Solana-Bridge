@@ -5,10 +5,12 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, VersionedTransaction, sendAndConfirmTransaction } from '@solana/web3.js';
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
@@ -54,6 +56,19 @@ const U64_MAX = (1n << 64n) - 1n;
 const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
 assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
 const transactionEvidence = [];
+// Bind every witness to the tested checkout and the *actual generated*
+// artifacts, not to the historical passing build or a declared placeholder.
+// No signing material is read: these files contain only the public IDL/ELF.
+const artifactBinding = {
+  sourceCommitSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+  idlSha256: createHash('sha256').update(
+    readFileSync(new URL('../../target/idl/deposit_prototype.json', import.meta.url))
+  ).digest('hex'),
+  elfSha256: createHash('sha256').update(
+    readFileSync(new URL('../../target/deploy/deposit_prototype.so', import.meta.url))
+  ).digest('hex'),
+};
+assert.match(artifactBinding.sourceCommitSha, /^[0-9a-f]{40}$/, 'unknown tested source commit');
 // Archive the ORIGINAL JSON-RPC text to avoid SDK deserialization or
 // JSON.stringify rounding raw u64 fields such as account.rentEpoch.
 // RPC is deliberately hardcoded to the disposable localhost validator.
@@ -110,6 +125,29 @@ async function saveTransactionEvidence() {
     assert.equal(rawTx.slot, tx.slot, 'SDK/raw getTransaction slot disagreement');
     assert.ok(rawTx.transaction?.signatures?.includes(signature), 'RPC transaction signature missing');
     assert.deepEqual(rawTx.meta?.err, tx.meta.err, 'SDK/raw getTransaction error disagreement');
+    // JSON encoding exposes parsed instructions but does not retain the
+    // signed transaction bytes. Obtain a second raw base64 RPC response so
+    // Observer can independently decode the original on-wire signatures.
+    const signedResponse = await rawPublicRpc('getTransaction', [signature, {
+      commitment: 'finalized', encoding: 'base64', maxSupportedTransactionVersion: 0,
+    }]);
+    const rawSigned = signedResponse.parsed.result;
+    assert.equal(rawSigned.slot, tx.slot, 'base64 getTransaction slot disagreement');
+    assert.deepEqual(rawSigned.meta?.err, rawTx.meta?.err, 'base64/json execution disagreement');
+    assert.equal(rawSigned.version, rawTx.version, 'base64/json version disagreement');
+    assert.ok(Array.isArray(rawSigned.transaction) && rawSigned.transaction.length === 2,
+      'signed transaction must be a [base64, encoding] pair');
+    assert.equal(rawSigned.transaction[1], 'base64', 'signed RPC transaction must use base64');
+    const encodedTransaction = rawSigned.transaction[0];
+    assert.equal(typeof encodedTransaction, 'string');
+    const signedBytes = Buffer.from(encodedTransaction, 'base64');
+    assert.equal(signedBytes.toString('base64'), encodedTransaction, 'noncanonical base64 signed bytes');
+    const decodedSigned = VersionedTransaction.deserialize(signedBytes);
+    assert.equal(decodedSigned.signatures.length, rawTx.transaction.signatures.length,
+      'signed byte count disagrees with parsed RPC signatures');
+    assert.ok(decodedSigned.signatures.length > 0 &&
+      decodedSigned.signatures.every((bytes) => bytes.some((byte) => byte !== 0)),
+      'missing signature bytes in finalized transaction');
     const blockResponse = await rawPublicRpc('getBlock', [tx.slot, {
       commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
       rewards: false, maxSupportedTransactionVersion: 0,
@@ -122,6 +160,7 @@ async function saveTransactionEvidence() {
     assert.deepEqual(included.meta?.err, rawTx.meta.err,
       'getBlock and getTransaction execution disagreement: ' + signature);
     const txFile = savePublicRpc('getTransaction-' + signature + '.rpc.json', transactionResponse);
+    const signedTxFile = savePublicRpc('getTransaction-base64-' + signature + '.rpc.json', signedResponse);
     const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
@@ -131,7 +170,8 @@ async function saveTransactionEvidence() {
       meta: { err: rawTx.meta.err, logMessages: rawTx.meta.logMessages,
         preTokenBalances: rawTx.meta.preTokenBalances,
         postTokenBalances: rawTx.meta.postTokenBalances },
-      getTransactionRawFile: txFile, getBlockRawFile: blockFile,
+      getTransactionRawFile: txFile, getTransactionBase64RawFile: signedTxFile,
+      getBlockRawFile: blockFile,
     });
   }
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);
@@ -140,7 +180,7 @@ async function saveTransactionEvidence() {
     JSON.stringify({
       kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
       mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
-      transactions: transactionEvidence, finalized,
+      ...artifactBinding, transactions: transactionEvidence, finalized,
     }, null, 2) + '\n', { mode: 0o600 });
 }
 // Only public account bytes/keys/signatures may be archived; NEVER wallet keys.
@@ -158,6 +198,7 @@ async function capturePublicAccountFixture(label, keys, signatures) {
     label,
     genesisHash: await connection.getGenesisHash(),
     programId: programId.toBase58(),
+    ...artifactBinding,
     slot: result.context.slot,
     signatures,
     getMultipleAccountsRawFile: rawFile,
