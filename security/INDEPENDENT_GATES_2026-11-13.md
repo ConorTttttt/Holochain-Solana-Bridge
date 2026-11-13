@@ -103,3 +103,21 @@ cargo +1.95.0 test --locked --manifest-path tests/holochain/rave-engine/Cargo.to
 **Development-readiness:** source-level threat model and test harnesses can continue under draft PRs, but current enhanced suite is RED; no declaration of a green integration baseline.
 
 **Economic-release approval:** **DENIED / P0 STOP SHIP**. Uncontrolled initialization, refundable collateral, unauthenticated finality, economic replay/recovery across actual deployed Unyt and unreviewed upgrade/mint authority remain open. A green CI build alone would not close these trust assumptions.
+
+
+## Additional historical real-localnet account-byte check
+
+The OBS branch retains real-localnet `observer/fixtures/localnet-active-receipt.json` (reported finalized slot **33**) and `localnet-refunded-receipt.json` (slot **67**) for the **same** program `FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG` and genesis `FcVMLgegDkZKX8ec4ELY41RwNDJFZE9nVfZvd9oSmQM8`. I independently base64-decoded all four account bytes per state and checked Anchor/SPL integer offsets, without relying on the Observer's decode helpers:
+
+| Historical measured field | Active slot 33 | Refunded slot 67 |
+| --- | ---: | ---: |
+| Receipt amount (u64 at offset 208) | 250000 | 250000 |
+| Receipt nonce (u64 at 200) | 42017 | 42017 |
+| Receipt refunded (byte 216) | false | true |
+| Config total active (u64 at 105) | 250000 | 0 |
+| Vault SPL amount (u64 at 64) | 250000 | 0 |
+| Mint supply (u64 at 36) | 1000000 | 1000000 |
+
+Data lengths: receipt 218, config 114, vault 165, mint 82. **All five accounting comparisons and identity checks passed in the direct fixture decode:** initially `config.total_active = vault.amount = live receipt.amount`; after refund both fall by exactly 250000 while receipt amount/nonce persist and refunded flag becomes true; mint supply stays fixed in these fixtures.
+
+New regression `security/test/historical-localnet-accounts.test.mjs` was committed to repeat this independent raw-byte check once OBS fixtures are overlaid. **New test file is not claimed to have passed integrated Node CI.** These historically generated localnet JSON files are evidence of how an earlier transaction behaved, **not independently authenticated RPC consensus, not the new multi-depositor/max-u64/restart test execution, and not a reserve-solvency proof for Holochain issuance.**
