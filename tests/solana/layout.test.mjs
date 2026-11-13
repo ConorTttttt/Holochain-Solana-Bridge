@@ -82,9 +82,35 @@ const rustSource = new URL('../../programs/deposit_prototype/src/lib.rs', import
 test('Rust source size constants and PDA seeds remain synchronized',
   { skip: !existsSync(rustSource) && 'Rust source unavailable in isolated offline copy' }, () => {
     const source = readFileSync(rustSource, 'utf8');
+    for (const [name, expected] of [
+      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'total_active', 'bump']],
+      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipient_core', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
+    ]) {
+      const body = source.match(new RegExp('pub struct ' + name + ' \\{([\\s\\S]*?)\\}'))?.[1];
+      assert.ok(body, 'missing Rust account: ' + name);
+      assert.deepEqual([...body.matchAll(/pub ([a-z_]+):/g)].map((m) => m[1]), expected);
+    }
     assert.match(source, /BridgeConfig\s*\{\s*pub const SIZE: usize = 32 \+ 32 \+ 32 \+ 1 \+ 8 \+ 1;/);
     assert.match(source, /DepositReceipt\s*\{\s*pub const SIZE: usize = \(32 \* 6\) \+ 8 \+ 8 \+ 1 \+ 1;/);
     assert.match(source, /seeds = \[b"config"\]/);
     assert.match(source, /seeds = \[b"vault", mint\.key\(\)\.as_ref\(\)\]/);
     assert.match(source, /seeds = \[b"deposit", depositor\.key\(\)\.as_ref\(\), &nonce\.to_le_bytes\(\)\]/);
+  });
+
+
+const generatedIdl = new URL('../../target/idl/deposit_prototype.json', import.meta.url);
+test('when generated, IDL discriminators and account fields match observer schema',
+  { skip: !existsSync(generatedIdl) && 'anchor build has not generated an IDL here' }, () => {
+    const idl = JSON.parse(readFileSync(generatedIdl, 'utf8'));
+    for (const [name, fields] of [
+      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'totalActive', 'bump']],
+      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipientCore', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
+    ]) {
+      const account = idl.accounts.find((a) => a.name === name);
+      assert.ok(account, 'missing Anchor IDL account ' + name);
+      assert.deepEqual(Buffer.from(account.discriminator), discriminator(name));
+      const type = idl.types.find((a) => a.name === name);
+      assert.ok(type, 'missing Anchor IDL type ' + name);
+      assert.deepEqual(type.type.fields.map((f) => f.name), fields);
+    }
   });
