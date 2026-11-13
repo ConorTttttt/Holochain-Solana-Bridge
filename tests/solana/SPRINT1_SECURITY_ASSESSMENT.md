@@ -161,3 +161,46 @@ implement withdrawals, burn/mint interlocks or production value transfers.
 - Agent 1 owns `.github/**`, global integration and snapshot promotion;
   do not edit integration PR #37 or merge main. Agent 4 / SEC must
   independently review the above initialization and custody authority risks.
+
+
+## 13 November 2026 — SOL verifier hardening (NOT validator-tested)
+
+The SOL test source has been strengthened since the last passing run
+`43499386297` (old source `bc4c907`). The enhancements are **not yet
+execution evidence**, even though the changed JavaScript was checked for
+syntactic validity in the agent's V8 environment.
+
+- After each serial successful or **actually included and rejected** program
+  transaction, the test reads the config and vault from RPC, enumerates all
+  218-byte program receipt accounts, rederives canonical depositor+nonce
+  identities, validates each receipt's scope/mint/config/vault/bump, sums
+  active amounts as exact BigInts, proves `total_active == sum(active)`
+  and `vault.amount >= total_active`. It permits donated vault surplus.
+  Concurrent transactions are reconciled after both outcomes settle;
+  RPC snapshots are not atomic cross-request consensus proofs.
+- For every `sendAndConfirmTransaction` success, the test now requires
+  `getTransaction().meta.err === null`, a real signature, execution slot
+  and validator logs. Negative transactions already use signed raw sends
+  with preflight bypass and require `meta.err !== null`.
+- At the end of each mode the harness re-reads each unique transaction at
+  `finalized` commitment, compares confirmed/finalized `meta.err`,
+  requires a finalized `getBlock(slot)` response and archives blockhash,
+  previous blockhash, parent slot, logs and token balance metadata. These
+  records are localnet RPC observations, not independent finality proofs.
+- All three modes archive actual Upgradeable Loader ProgramData upgrade
+  authority and SPL mint/freeze authorities. The prior freeze-authority
+  negative test had signed with the *wrong wallet*, risking a client-side
+  signature failure; it now signs as the claimed unauthorized actor so an
+  on-chain Token Program rejection is required.
+- The independently reviewable **design-only** mitigation proposal is
+  `tests/solana/INITIALIZATION_MITIGATION_PROPOSAL.md`. Rust custody policy
+  and Holochain issuance controls are unchanged.
+
+**Outstanding:** The current SOL branch has no passing new validator run;
+`anchor`, `solana-test-validator` and Cargo are unavailable in the
+current agent container. The earlier Actions workflow path has been removed,
+so a new run must be orchestrated by the CI lane on a combined checkout
+pinning the current SOL head. Until then: do not mark expanded/restart tests
+passing, do not claim first-initializer localnet attack executed, and do
+not copy the old IDL/ELF hashes into a new manifest. npm/Cargo lockfiles
+cannot be accepted without real resolution and review.
