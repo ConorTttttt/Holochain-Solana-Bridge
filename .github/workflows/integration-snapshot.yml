@@ -81,6 +81,7 @@ jobs:
           test -s "$tmp/Cargo.lock"
           cp "$tmp/Cargo.lock" ci-artifacts/rave-engine-Cargo.lock
           sha256sum ci-artifacts/rave-engine-Cargo.lock | tee ci-artifacts/rave-engine-lock.sha256
+          bash scripts/ci/record.sh rave-lock-integrity bash scripts/ci/check-lock-digest.sh rave ci-artifacts/rave-engine-Cargo.lock
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -143,6 +144,10 @@ jobs:
             sha256sum tests/solana/package-lock.json | tee ci-artifacts/solana-package-lock.sha256
             cp tests/solana/package-lock.json ci-artifacts/solana-package-lock.json
           fi
+      - name: Verify exact published workspace and Solana Node graphs
+        run: |
+          bash scripts/ci/record.sh sol-workspace-lock bash scripts/ci/check-lock-digest.sh workspace Cargo.lock
+          bash scripts/ci/record.sh sol-node-lock bash scripts/ci/check-lock-digest.sh solana tests/solana/package-lock.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
