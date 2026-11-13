@@ -22,11 +22,11 @@
     },
     "SEC": {
       "branch": "agent/sec/10-threat-model",
-      "sha": "6933d3609a94cd11375e20f88b8de5657e2a1db7",
+      "sha": "b5b8c4b90bb848092cd088122e2a3e1c76c45ca7",
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "19bf4878cf6f9351b22f3a91bdc0c01a8914b9df",
+  "parentIntegrationCommit": "338f3b6c3f98631916b1d5f2cc3535fd9e629c6b",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/run-cross-lane-tests.mjs",
@@ -35,7 +35,7 @@
       "scripts/ci/SPRINT1_READINESS_2026-11-13.md",
       "scripts/ci/SHADOW_MODE_CONDUCTOR_HANDOFF.md",
       "ci-integration-snapshot.json",
-      "tests/integration/s0-signed-wire-evidence.test.mjs",
+      "observer/test/s0-signed-wire-evidence.test.mjs",
       "tests/solana/integration.test.mjs (CI-only wire evidence instrumentation)",
       "tests/solana/verify-witness-bundle.mjs (integration-only regex correction)"
     ],
@@ -72,7 +72,8 @@
       "security/evidence/2026-11-13-independent-shadow-decision.md",
       "security/test/indexer-checkpoint-regression.test.mjs",
       "security/test/solana-rave-numeric-gate.test.mjs",
-      "security/test/ledger-corruption-boundary.test.mjs"
+      "security/test/ledger-corruption-boundary.test.mjs",
+      "security/evidence/2026-11-13-agent5-exact-head-gates.md"
     ]
   },
   "method": "Latest immutable specialist blobs plus two explicitly tracked CI-only SOL witness-test adjustments, merged into updated CI base with two parents. No specialist branch rewrites.",
@@ -112,7 +113,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "Previous exact integrated SHA 19bf4878 red: OBS 54/55 pass, missing-second-signature assertion mismatch. New exact-head run pending.",
+  "latestExecutionStatus": "Exact-head CI still required. 338f3b6 OBS unit+RAVE Rust passed; validator and Anchor running. Relocated OBS signed-wire replay test into observer package to resolve @solana/kit without unreviewed dependency graph.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -127,6 +128,10 @@
     {
       "path": "observer/test/indexer.test.mjs",
       "reason": "CI 43527503901 OBS 54/55: source test regex too narrow for missing second signature; verifier already correctly rejects; reported to OBS PR #36."
+    },
+    {
+      "path": "observer/test/s0-signed-wire-evidence.test.mjs",
+      "reason": "CI-owned E2E replay test resides in observer/test for correct pinned @solana/kit module resolution; does not change OBS production code."
     }
   ],
   "conductorStatus": "BLOCKED: no authenticated deployed Unyt DNA/WASM, matching conductor, live zome calls, multi-peer verification. This is a release blocker, not a test skip.",

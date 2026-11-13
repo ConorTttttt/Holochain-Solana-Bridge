@@ -28,3 +28,7 @@ Snapshot inputs advanced again: SOL `a6316b78`, OBS `babf3c43`, RAVE `f27f8262`,
 ### First exact-head execution: evidence-based regression
 
 On integrated SHA `19bf4878`, [Actions shared run 43527503901](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43527503901) executes OBS **54/55 pass, 1 failure, 0 skips**. The missing-second-signature fixture expects only an `invalid Ed25519` diagnostic although production verifier correctly rejects it as `missing required signer signature`. The integration-only test adjustment selects the specific expected rejection per fixture, retains durable checkpoint assertions, and awaits OBS source backport. The full validator/RAVE outcomes from this intermediate SHA remain separately reportable. Next snapshot merges CI branch `4a97505d` (24 required suites), without modifying the specialist branch.
+
+### Required signed-wire replay packaging correction
+
+The new CI-only Observer signed-wire replay test was relocated from `tests/integration/` to `observer/test/` so Node resolves the **already pinned** `observer/node_modules/@solana/kit` in the real CI job. No new dependency, SDK upgrade or production implementation change. The workflow still runs the dedicated explicit test against original SOL validator artifacts, and missing artifacts remain fatal. SEC's latest independent evidence-only commitment `b5b8c4b9` is included in the frozen input manifest; no independent economic authorization implied.

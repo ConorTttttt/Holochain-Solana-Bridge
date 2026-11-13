@@ -8,9 +8,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
-import { encode58, decodeReceipt } from '../../observer/src/decode.mjs';
-import { fetchFinalizedTransaction } from '../../observer/src/indexer.mjs';
-import { verifyWireSignatures, verifyDepositCandidates } from '../../observer/src/transaction.mjs';
+import { encode58, decodeReceipt } from '../src/decode.mjs';
+import { fetchFinalizedTransaction } from '../src/indexer.mjs';
+import { verifyWireSignatures, verifyDepositCandidates } from '../src/transaction.mjs';
 
 const root='target/localnet-evidence/';
 function load(name) {
