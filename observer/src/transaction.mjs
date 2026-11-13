@@ -61,15 +61,16 @@ function ensureDelta(meta, keyIndex, mint, owner, delta) {
 function checkIdl(idl, program) {
   need(idl && typeof idl === 'object', 'actual Anchor IDL required');
   validateGeneratedIdl(idl, {expectedProgramId:program});
-  const ix = idl.instructions?.find(x => x.name === 'deposit');
+  const norm = x => typeof x === 'string' ? x.replace(/_([a-z])/g,(_,c)=>c.toUpperCase()) : x;
+  const ix = idl.instructions?.find(x => norm(x.name) === 'deposit');
   need(ix && Array.isArray(ix.discriminator) && hex(ix.discriminator) === hex(disc('deposit')), 'generated deposit discriminator mismatch');
   need(Array.isArray(ix.accounts) && ix.accounts.length === 8 &&
-    ix.accounts.map(x => x.name).join(',') ===
+    ix.accounts.map(x => norm(x.name)).join(',') ===
     'depositor,config,mint,source,vault,receipt,tokenProgram,systemProgram', 'generated deposit accounts differ');
   const args = ix.args || [];
-  need(args.length === 3 && args[0].name === 'nonce' && args[0].type === 'u64' &&
-    args[1].name === 'recipientCore' && JSON.stringify(args[1].type) === JSON.stringify({array:['u8',32]}) &&
-    args[2].name === 'amount' && args[2].type === 'u64', 'generated deposit instruction args differ');
+  need(args.length === 3 && norm(args[0].name) === 'nonce' && args[0].type === 'u64' &&
+    norm(args[1].name) === 'recipientCore' && JSON.stringify(args[1].type) === JSON.stringify({array:['u8',32]}) &&
+    norm(args[2].name) === 'amount' && args[2].type === 'u64', 'generated deposit instruction args differ');
 }
 /** Decode, including v0 lookup-table keys and v1 message configuration, from signed base64 wire bytes. */
 export function decodeFinalizedWire(rpcTransaction, signature) {
@@ -100,8 +101,7 @@ export function decodeFinalizedWire(rpcTransaction, signature) {
     need(!compiledMessage.addressTableLookups?.length && !loaded?.writable?.length && !loaded?.readonly?.length,
       'v1 transaction must not use address lookup tables');
   }
-  need(Array.isArray(rpcTransaction.meta.innerInstructions), 'missing CPI execution metadata');
-  const instructions = [...walkInstructions({compiledMessage,loadedAddresses:loaded,meta:rpcTransaction.meta})];
+  const instructions = [...walkInstructions({compiledMessage,loadedAddresses:loaded,meta:{...rpcTransaction.meta,innerInstructions:rpcTransaction.meta.innerInstructions || []}})];
   return {compiledMessage, instructions, bytes, transactionHash:hash(bytes)};
 }
 /**
@@ -205,6 +205,7 @@ export async function verifyDepositCandidates({
     need(td[9] <= 255, 'invalid SPL decimals');
   }
   if (!deposits.length) return Object.freeze([]);
+  need(Array.isArray(metas.innerInstructions), 'missing CPI execution metadata for deposit');
   // Disallow extra classic SPL instructions touching the vault or any depositor source
   // because per-transaction balance deltas cannot uniquely attribute such movements.
   for (const [n,ix] of instructions.entries()) {
