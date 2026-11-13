@@ -60,6 +60,8 @@ bash tests/solana/localnet-build.sh
 BRIDGE_TEST_MODE=lifecycle NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet
 BRIDGE_TEST_MODE=init-capture NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet
 BRIDGE_TEST_MODE=u64-max NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet
+# Additional two-process retained-ledger restart (run by the shell runner):
+bash tests/solana/restart-validator.sh
 ```
 
 The shell runner also passes `--provider.wallet` pointing at an ignored
@@ -138,11 +140,16 @@ implement withdrawals, burn/mint interlocks or production value transfers.
   `tests/solana/package-lock.json`. CI must resolve, review and commit a
   lockfile intentionally in the coordinated SOL/CI work; do not fabricate one
   or misrepresent exact top-level dependency versions as transitive locking.
-- Live validator *restart with retained ledger*, crash recovery and
-  deterministic rebuilding of total liabilities from all receipts remain
-  outstanding; the isolated test modes **reset** state rather than test a
-  retained-ledger restart. Coordinate a separate CI validator-restart
-  harness rather than claiming it was covered.
+- Retained-ledger restart test **implemented, not yet executed in CI**:
+  `bash tests/solana/restart-validator.sh` starts an independent disposable
+  `solana-test-validator --reset --ledger target/restart-ledger`, deploys the
+  existing compiled SBPF, creates a live 12,345-unit deposit and archives
+  actual finalized public bytes. It then stops that process, starts a
+  **new validator process against the identical ledger WITHOUT --reset**,
+  requires an identical genesis and byte-for-byte persisted accounts, and
+  re-enumerates program receipts to reconstruct the live liability. This
+  is executable code, **not passing recovery evidence until CI runs it**.
+  Crash/power-loss consistency and adversarial forks remain untested.
 - Not proven: program upgrade attack rejection, validator fork/finality,
   Holochain issuance, independent cross-chain collateral solvency, or
   production redemption.
