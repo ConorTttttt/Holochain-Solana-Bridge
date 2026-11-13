@@ -1,0 +1,10 @@
+/target/
+/node_modules/
+*.log
+.env
+.env.*
+!*.env.example
+**/*keypair*.json
+**/*-keypair.json
+**/*.pem
+**/*.key
