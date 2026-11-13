@@ -29,10 +29,10 @@
   "sourceUpdates": {
     "SOL": "Refreshed all current SOL PR #35 changes through 37b3530, including raw account-decoder / multi-receipt validator regression coverage, stronger generated-IDL PDA-seed tests and evidence docs. Source branch unchanged."
   },
-  "ciIntegrationUpdate": "CI overlay includes fixed public-ID preparation, SHA-isolated workflows and required reviewed-lock provenance; this is not a merge of the specialist branches.",
+  "ciIntegrationUpdate": "CI overlay includes fixed public-ID preparation, SHA-isolated workflows and required reviewed-lock provenance; this is not a merge of the specialist branches. Integration-only SOL localnet npm install -> npm ci uses committed, SHA-reviewed lock; source SOL #35 remains unchanged.",
   "securityBoundary": "ALL localnet snapshots untrusted, all Holochain intake quarantined; creditEligible false and issuance/withdrawal disabled.",
   "lockSourceStatus": "All four reviewed-hash candidate lockfiles are now Git-tracked in this integration snapshot, while SOL/OBS/RAVE specialist branches still require individual lockfile commits/reviews; CI root lock is Git-tracked.",
-  "lockExecution": "CI cargo check --locked; integration RAVE cargo test --locked; npm ci for cross-lane source packages; SOL localnet npm install still pending source-owner migration to npm ci.",
+  "lockExecution": "Required root cargo check --locked; RAVE published-crate harness cargo test --locked; Observer, SOL cross-lane, and isolated real SOL validator test lane install committed npm dependency locks via npm ci. Source SOL branch still uses npm install until its owner adopts source-committed lock.",
   "integratedSuccess": {
     "sha": "57ed7b34c0f902b90780b3216f24578609132f7b",
     "actionsRun": 43505857690,
