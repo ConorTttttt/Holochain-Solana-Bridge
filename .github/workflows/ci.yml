@@ -151,7 +151,7 @@ jobs:
       - name: Run both compilations and fail if either fails
         run: |
           set +e
-          bash scripts/ci/record.sh cargo-check cargo check --workspace --all-targets
+          bash scripts/ci/record.sh cargo-check cargo check --locked --workspace --all-targets
           cargo_status=$?
           bash scripts/ci/record.sh cargo-lock-integrity bash scripts/ci/check-lock-digest.sh workspace Cargo.lock
           cargo_lock_status=$?
