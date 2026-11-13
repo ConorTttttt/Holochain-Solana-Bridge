@@ -274,7 +274,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     const [receiptA, bumpA] = receiptFor(owner.publicKey, nA);
     const [receiptB, bumpB] = receiptFor(owner.publicKey, nB);
     await send(await depositIx({ n: nA, receiptKey: receiptA, amt: 15_000n }), [owner]);
-    await send(await depositIx({ n: nB, receiptKey: receiptB, amt: 9_000n }), [owner]);
+    const secondDepositSig = await send(await depositIx({ n: nB, receiptKey: receiptB, amt: 9_000n }), [owner]);
+    await connection.confirmTransaction(secondDepositSig, 'finalized');
     await assertRawState(24_000n, 24_000n, [
       { key: receiptA, n: nA, value: 15_000n, refunded: false, bump: bumpA },
       { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
@@ -286,7 +287,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
     ]);
     await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail');
-    await send(await refundIx({ receiptKey: receiptB }), [owner]);
+    const finalRefundSig = await send(await refundIx({ receiptKey: receiptB }), [owner]);
+    await connection.confirmTransaction(finalRefundSig, 'finalized');
     await assertRawState(0n, 0n, [
       { key: receiptA, n: nA, value: 15_000n, refunded: true, bump: bumpA },
       { key: receiptB, n: nB, value: 9_000n, refunded: true, bump: bumpB },
