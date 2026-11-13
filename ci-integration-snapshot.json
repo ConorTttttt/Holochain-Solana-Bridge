@@ -1,0 +1,31 @@
+{
+  "status": "integration-only",
+  "base": {
+    "branch": "agent/ci/11-build-pipeline",
+    "sha": "0a636fbda3e6a48f836626530466723a8239be79"
+  },
+  "sources": {
+    "SOL": {
+      "branch": "agent/sol/7-anchor-build",
+      "sha": "fef5bdb005bd4e4858a723ef771733cfa1fc2959"
+    },
+    "OBS": {
+      "branch": "agent/obs/8-observer-validation",
+      "sha": "681304c30d062bccd2ebde721c0352bbcab3b813"
+    },
+    "RAVE": {
+      "branch": "agent/rave/9-rave-validation",
+      "sha": "60e450d026e52349e1fbff10937a44c504f6a0e9"
+    },
+    "SEC": {
+      "branch": "agent/sec/10-threat-model",
+      "sha": "56bfbf782ff97db3a4da50bc5d565c9d015af6ef"
+    }
+  },
+  "method": "Overlay changed file blobs onto CI branch; not merged into main or any source branch",
+  "riskNotes": [
+    "SOL rust-toolchain.toml may pin an incompatible host Rust version; CI RUSTUP_TOOLCHAIN=1.95.0 overrides it pending SOL update.",
+    "Observer/Solana Node lockfiles absent at creation; install scripts capture resolved graph as artifacts.",
+    "No Holochain issuance, mainnet deployment, production withdrawals or real funds."
+  ]
+}
