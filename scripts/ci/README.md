@@ -6,9 +6,9 @@ docs/SECURITY_GATES.md.
 
 ## Pinned versions
 
-`scripts/ci/toolchain.env` declares Node 22.16.0, Rust 1.91.0,
+`scripts/ci/toolchain.env` declares Node 22.16.0, Rust 1.95.0,
 Solana/Agave CLI 4.1.2, Anchor 1.2.2, platform-tools v1.57, SBPF v3.
-The workflow pins GitHub Actions to exact commit SHAs. Rust 1.91.0 is required to install Anchor CLI 1.2.2 from its tagged locked dependency graph (cargo-platform 0.3.3 requires rustc 1.91; observed in the first PR Actions run). Prerequisites: Ubuntu
+The workflow pins GitHub Actions to exact commit SHAs. Host Rust 1.95.0 is required by Anchor CLI 1.2.2's locked transitive `solana-sbpf 0.23.0`: it calls `Layout::dangling_ptr()` (stabilized in 1.95). `cargo-platform 0.3.3` separately requires >=1.91. Both failures were recorded in PR #32 Actions runs 43492093639 and 43492504373. The Solana platform-tools v1.57 bundled SBPF Rust/Cargo toolchain is separate from host Rust. Prerequisites: Ubuntu
 24.04 or compatible Linux/WSL, Git, curl, rustup and build dependencies.
 
 ## Exact local smoke checks
@@ -33,7 +33,7 @@ baseline control **not** a replacement for review or managed secret scanning.
 ```bash
 source scripts/ci/toolchain.env
 rustup toolchain install "$RUST_VERSION" --profile minimal
-rustup default "$RUST_VERSION"
+rustup default "$RUST_VERSION"\nexport RUSTUP_TOOLCHAIN="$RUST_VERSION" # override older workspace rust-toolchain on integration snapshots
 sh -c "$(curl -fsSL "https://release.anza.xyz/v${SOLANA_VERSION}/install")"
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$PATH"
 cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
