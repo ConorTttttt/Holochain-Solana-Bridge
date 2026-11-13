@@ -594,7 +594,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       [attacker], [mint]);
     await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
       createSetAuthorityInstruction(mint, owner.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
-      [owner], [mint]);
+      [attacker], [mint]);
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
       [attacker], [vault]);
