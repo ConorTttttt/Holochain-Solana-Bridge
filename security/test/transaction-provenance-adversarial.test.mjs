@@ -122,7 +122,9 @@ test('SEC-TX independent signed-wire and RPC trust-boundary probes', async t => 
     const supplied=encode58(Buffer.from(alteredSig.transaction[0],'base64').subarray(1,65));
     const decoded=decodeFinalizedWire(alteredSig,supplied);
     await assert.rejects(verifyWireSignatures(decoded),/invalid Ed25519/);
-    const changedMessage=mutateWire(tx,Buffer.from(tx.transaction[0],'base64').length-1);
+    // Flip a byte in the recent blockhash, not the trailing compact
+    // instruction count: keep the message decodable and test Ed25519 itself.
+    const changedMessage=mutateWire(tx,Buffer.from(tx.transaction[0],'base64').length-2);
     await assert.rejects(verifyWireSignatures(
       decodeFinalizedWire(changedMessage,tx.signature)),/invalid Ed25519/);
   });

@@ -113,7 +113,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "Required exact-head Actions pending; strengthened full real-witness durable ledger and shadow handoff. Not yet green.",
+  "latestExecutionStatus": "Previous 19bf4878 real validator lifecycle failed Custom 6004 AlreadyRefunded concurrent-wallet suite; SEC synthetic signature test mistakenly mutated instruction count. Reported to SOL/SEC owner. Current exact-head CI is P0 RED until passing.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -132,6 +132,10 @@
     {
       "path": "observer/ci/s0-signed-wire-evidence.mjs",
       "reason": "Explicit CI-only signed-wire replay test inside OBS Node package (but outside default node --test discovery), so standalone OBS tests do not require validator artifacts; uses already pinned @solana/kit."
+    },
+    {
+      "path": "security/test/transaction-provenance-adversarial.test.mjs",
+      "reason": "SEC source P0 tamper test flipped instruction-count byte causing codec parse error; CI test correction flips last recent-blockhash byte, still requires invalid Ed25519. Reported to SEC PR #33."
     }
   ],
   "conductorStatus": "BLOCKED: no authenticated deployed Unyt DNA/WASM, matching conductor, live zome calls, multi-peer verification. This is a release blocker, not a test skip.",
@@ -160,6 +164,18 @@
       "fail": 1,
       "skip": 0
     },
-    "summary": "Intermediate SHA immutable; fixing test regex only; jobs not all completed."
+    "summary": "Intermediate SHA immutable; fixing test regex only; jobs not all completed.",
+    "p0SolanaFailure": {
+      "run": 43527503883,
+      "subtest": "independent wallet accounting, concurrent deposits, rollback and authority attacks",
+      "error": "InstructionError Custom 6004 AlreadyRefunded",
+      "status": "source owner investigation required"
+    },
+    "p0SecurityFailure": {
+      "run": 43527503883,
+      "file": "security/test/transaction-provenance-adversarial.test.mjs",
+      "error": "mutated instruction count causes Codec u8 empty array instead of signature check",
+      "status": "integration-only test fixture corrected pending SEC source backport"
+    }
   }
 }
