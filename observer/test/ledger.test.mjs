@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DepositLedger } from '../src/ledger.mjs';
@@ -85,4 +86,34 @@ test('rejects malformed evidence, swapped occurrence and checkpoint regression',
   assert.throws(()=>a.commit({checkpoint:24,evidence:[{...fixture(2),occurrenceId:fixture(1).occurrenceId}]}),
     /duplicated instruction occurrence/);
   a.close();
+});
+
+test('recovery rejects corrupted evidence, recomputed unauthorized claims, malformed blocks and invalid maps', t => {
+  const filename=pathFor(t);
+  const a=new DepositLedger(filename,options);
+  a.commit({checkpoint:21,block:{slot:21,blockhash:'block-21'},evidence:[fixture(1)]});
+  a.close();
+  const clean=JSON.parse(readFileSync(filename,'utf8'));
+  const id=fixture(1).id;
+  const sha256=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
+  const cases=[
+    state=>{state.processed[id].evidence.amountBaseUnits='999';},
+    state=>{state.processed[id].evidence.creditEligible=true;
+      state.processed[id].fingerprint=sha256(state.processed[id].evidence);},
+    state=>{state.blocks['not-a-slot']='forged-block';},
+    state=>{state.processed=[];},
+    state=>{state.processed[id].occurrenceId='swapped-occurrence';},
+  ];
+  for (const damage of cases) {
+    const altered=structuredClone(clean);
+    damage(altered);
+    writeFileSync(filename,JSON.stringify(altered)+'\n');
+    assert.throws(()=>new DepositLedger(filename,options),/corrupt|incompatible/);
+    assert.equal(existsSync(filename+'.lock'),false,'failed startup must release its writer lock');
+  }
+  writeFileSync(filename,JSON.stringify(clean)+'\n');
+  const recovered=new DepositLedger(filename,options);
+  assert.equal(recovered.checkpoint,21);
+  assert.equal(Object.keys(recovered.processed).length,1);
+  recovered.close();
 });
