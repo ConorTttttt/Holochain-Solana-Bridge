@@ -6,11 +6,17 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
 import { encode58, decodeReceipt } from '../src/decode.mjs';
 import { fetchFinalizedTransaction } from '../src/indexer.mjs';
-import { verifyWireSignatures, verifyDepositCandidates } from '../src/transaction.mjs';
+import { verifyWireSignatures, verifyDepositCandidates, attachReceiptObservation } from '../src/transaction.mjs';
+import { DepositLedger } from '../src/ledger.mjs';
+import { verifySnapshot } from '../src/verify.mjs';
+import { reviewShadow } from '../../holochain/shadow-review.mjs';
+import { issueHolochainCredit, authorizeSolanaWithdrawal } from '../../holochain/evidence-gate.mjs';
 
 const root='target/localnet-evidence/';
 function load(name) {
@@ -113,6 +119,94 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
             assert.ok(candidates.some(x=>x.receiptAddress===receipt.address),'wrong receipt');
             assert.ok(candidates.every(x=>x.creditEligible===false &&
               x.independentConsensusVerified===false),'economic/consensus gate violated');
+
+            // Full real-witness handoff: signed localnet deposit -> OBS verified
+            // receipt snapshot -> crash-consistent evidence ledger -> inert shadow.
+            // Only the SOL local-validator generated these bytes; no fixture
+            // constructs or signs a transaction in this test.
+            const sourceSnapshot = label => {
+              const raw=load(label+'.json');
+              assert.equal(raw.genesisHash,index.genesisHash,'snapshot genesis mismatch');
+              assert.equal(raw.programId,index.programId,'snapshot program mismatch');
+              assert.equal(raw.accounts.length,4,'four-account receipt snapshot required');
+              const [rec,cfg,vlt,mnt]=raw.accounts;
+              const expectedKeys={...expected,receipt:rec.address,
+                config:cfg.address,vault:vlt.address,mint:mnt.address};
+              return {raw,expected:expectedKeys,
+                snapshot:{slot:raw.slot,accounts:raw.accounts.map(account=>({
+                  owner:account.owner,raw:Buffer.from(account.dataBase64,'base64')}))}};
+            };
+            const active=sourceSnapshot('active-receipt');
+            const live=await verifySnapshot({
+              snapshot:active.snapshot,expected:active.expected,
+              genesisHash:index.genesisHash,source:'original-finalized-localnet-archive',
+            });
+            assert.equal(live.transactionVerified,false,'account snapshot is not signed history');
+            const candidate=candidates.find(x=>x.receiptAddress===receipt.address);
+            const evidence=attachReceiptObservation(candidate,live);
+            assert.equal(evidence.kind,'solana-deposit-evidence-v1');
+            assert.equal(evidence.transactionVerified,true);
+            assert.equal(evidence.creditEligible,false);
+            assert.equal(evidence.independentConsensusVerified,false);
+            const dir=mkdtempSync(join(tmpdir(),'real-localnet-shadow-'));
+            const ledgerPath=join(dir,'finalized-ledger.json');
+            const ledgerOptions={genesisHash:index.genesisHash,program:index.programId,
+              trustedDeploymentSlot:item.slot};
+            const binding=Object.freeze({
+              genesisHash:index.genesisHash,program:index.programId,mint:expected.mint,
+              holochainScope:live.holochainScope,dnaHash:'NOT_DEPLOYED_S0',
+              agreementHash:'SHADOW_ONLY_NO_ECONOMICS',deploymentEpoch:'real-localnet-s0',
+            });
+            const shadowJournal=new Map();
+            try {
+              const first=new DepositLedger(ledgerPath,ledgerOptions);
+              try {
+                const committed=first.commit({checkpoint:item.slot,
+                  block:{slot:item.slot,blockhash:item.blockhash},evidence:[evidence]});
+                assert.equal(committed.processed,1);
+                assert.equal(committed.checkpoint,item.slot);
+              } finally { first.close(); }
+              const restart=new DepositLedger(ledgerPath,ledgerOptions);
+              try {
+                assert.equal(restart.checkpoint,item.slot,'durable restart lost checkpoint');
+                assert.equal(Object.keys(restart.processed).length,1,'restart lost real evidence');
+                restart.commit({checkpoint:item.slot,
+                  block:{slot:item.slot,blockhash:item.blockhash},evidence:[evidence]});
+                assert.equal(Object.keys(restart.processed).length,1,'duplicate added liability');
+                assert.throws(()=>restart.commit({checkpoint:item.slot,
+                  evidence:[{...evidence,amountBaseUnits:'1'}]}),
+                  /conflicting duplicate receipt identity/);
+                assert.throws(()=>restart.commit({checkpoint:item.slot,
+                  block:{slot:item.slot,blockhash:'contradictory-blockhash'}}),
+                  /conflicting finalized blockhash/);
+                assert.equal(restart.checkpoint,item.slot);
+              } finally { restart.close(); }
+              const shadowActive=reviewShadow(live,binding,shadowJournal);
+              assert.equal(shadowActive.verdict,'quarantined');
+              assert.equal(shadowActive.creditEligible,false);
+              assert.equal(shadowActive.withdrawalAuthorized,false);
+              const duplicateShadow=reviewShadow(live,binding,shadowJournal);
+              assert.equal(duplicateShadow.verdict,'quarantined');
+              assert.equal(shadowJournal.size,1,'shadow duplicate created extra receipt');
+              const conflicting=reviewShadow({...live,receiptDigest:'f'.repeat(64)},
+                binding,shadowJournal);
+              assert.equal(conflicting.verdict,'rejected','same-slot contradiction accepted');
+              const refunded=sourceSnapshot('refunded-receipt');
+              const refundObservation=await verifySnapshot({
+                snapshot:refunded.snapshot,expected:refunded.expected,
+                genesisHash:index.genesisHash,source:'original-finalized-localnet-archive',
+              });
+              assert.equal(refundObservation.refunded,true);
+              assert.equal(refundObservation.id,live.id,'refund changed receipt identity');
+              const shadowRefund=reviewShadow(refundObservation,binding,shadowJournal);
+              assert.equal(shadowRefund.verdict,'quarantined','refund shadow not quarantined');
+              assert.ok(shadowRefund.findings.includes('REFUND_TRANSITION'));
+              assert.equal(shadowRefund.spendableBaseUnits,'0');
+              assert.equal(shadowRefund.withdrawalAuthorized,false);
+              assert.equal(shadowJournal.size,1);
+              assert.throws(()=>issueHolochainCredit(evidence),/CREDITING_DISABLED/);
+              assert.throws(()=>authorizeSolanaWithdrawal(evidence),/WITHDRAWALS_DISABLED/);
+            } finally { rmSync(dir,{recursive:true,force:true}); }
             depositCount+=candidates.length;
           }
         }

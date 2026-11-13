@@ -88,7 +88,7 @@
     "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
   "sourceLockReview": "RAVE new direct serde/zfuel references already existed as transitive pinned packages; generated graph compared linewise with old lock, digest computed from current source. Current-head locked execution still unverified.",
-  "testPolicy": "24 required offline cross-lane suites incl SEC checkpoint/numeric/ledger tamper and SOL signer SDK; real OBS SDK; generated Anchor SBPF/IDL; 3 separate live-validator modes and retained-ledger restart; SOL source-owned genuine base64 tx and immutable source/IDL/ELF witness bundle; mandatory complete base64 block+OBS replay; RAVE Rust; quarantine-only shadow. No missing/skip allowed.",
+  "testPolicy": "24 required offline cross-lane suites incl SEC checkpoint/numeric/ledger tamper and SOL signer SDK; real OBS SDK; generated Anchor SBPF/IDL; 3 separate live-validator modes and retained-ledger restart; SOL source-owned genuine base64 tx and immutable source/IDL/ELF witness bundle; mandatory complete base64 block+OBS replay; RAVE Rust; quarantine-only shadow. No missing/skip allowed. Dedicated real localnet signed deposit -> OBS receipt -> durable ledger close/restart/duplicate/fork -> shadow active/refund/contradiction is a required subtest; no conductor call.",
   "previousFailingExecution": {
     "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
     "ciRun": 43520698081,
@@ -113,7 +113,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "EXACT-HEAD CI REQUIRED; explicit E2E signed-wire test lives outside OBS default test discovery to avoid requiring live validator artifacts in standalone OBS.",
+  "latestExecutionStatus": "Required exact-head Actions pending; strengthened full real-witness durable ledger and shadow handoff. Not yet green.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
