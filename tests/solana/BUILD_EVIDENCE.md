@@ -35,17 +35,18 @@ $ node --check /mnt/data/sol_sprint0/tests/solana/integration.test.mjs
 (exit 0; syntax only; Node did not load test dependencies)
 $ node --test /mnt/data/sol_sprint0/tests/solana/layout.test.mjs
 TAP version 13
-1..5
-# tests 5
+1..6
+# tests 6
 # pass 4
 # fail 0
-# skipped 1
+# skipped 2
 ```
 
 The layout test above ran against a separately copied, source-matched
 `observer/src/decode.mjs` in an isolated scratch directory. Its fifth check,
 which reads the original Rust source, was explicitly **SKIPPED** because the
-Rust file was not available as a checkout. Therefore this result verifies
+Rust file was not available as a checkout. The sixth test, which requires a
+generated Anchor IDL, was also **SKIPPED** because no IDL exists. Therefore this result verifies
 offline fixture/decoder compatibility only; it does **not** independently
 verify source, on-chain layout, or an actual generated IDL. The integration
 test was syntax-checked but **NOT RUN**.
