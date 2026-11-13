@@ -1,0 +1,6 @@
+# Host Rust toolchain for the Anchor 1.2.2 workspace. SBPF compiler is separately
+# supplied by Solana platform-tools v1.57 (recommended with Solana 4.1.2).
+[toolchain]
+channel = "1.89.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
