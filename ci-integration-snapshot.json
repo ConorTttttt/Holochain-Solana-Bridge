@@ -25,5 +25,8 @@
   "method": "Overlay source branch diff vs main at immutable Git SHAs onto integration tree; no source-branch edits",
   "excludedSourceFile": ".github/workflows/sol-verify-temporary.yml (temporary duplicate verification job)",
   "gatePolicy": "No skipped required suite, no unbuilt SBF, no production authorization",
-  "created": "2026-11-13"
+  "created": "2026-11-13",
+  "sourceUpdates": {
+    "SOL": "Refreshed tests/solana/integration.test.mjs from current SOL PR #35 after actual validator run 43499276656 exposed duplicate ATA creation."
+  }
 }
