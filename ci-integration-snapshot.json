@@ -7,26 +7,26 @@
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "fef1a8ce0e5958814914d973a366c6ca3c26fdf1",
+      "sha": "a6316b78f0e5d14ddec8a57bc725aefeb8c62231",
       "pr": 35
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
-      "sha": "1638ada9ab8fa8156a45f6db4392eedcebaeabea",
+      "sha": "babf3c43fb69e1564b97ce46fc026331d4fdeb52",
       "pr": 36
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
-      "sha": "d752c284dfdef19f873c5da75c66559d87f69b4e",
+      "sha": "f27f82620bc70e70312c4ede0c437ced8191dd4d",
       "pr": 34
     },
     "SEC": {
       "branch": "agent/sec/10-threat-model",
-      "sha": "d8cbff0f5ab3d3e734fb14de944a8024d05f87cd",
+      "sha": "6933d3609a94cd11375e20f88b8de5657e2a1db7",
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "4949b5693dccba1ff373a276a75c27db2f045005",
+  "parentIntegrationCommit": "6d53b33ad8ca4b37d2a86201d29a2c7090da6c22",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/run-cross-lane-tests.mjs",
@@ -36,24 +36,31 @@
       "scripts/ci/SHADOW_MODE_CONDUCTOR_HANDOFF.md",
       "ci-integration-snapshot.json",
       "tests/integration/s0-signed-wire-evidence.test.mjs",
-      "tests/solana/integration.test.mjs (CI-only wire evidence instrumentation)"
+      "tests/solana/integration.test.mjs (CI-only wire evidence instrumentation)",
+      "tests/solana/verify-witness-bundle.mjs (integration-only regex correction)"
     ],
     "SOL": [
       "tests/solana/OBSERVER_HANDOFF.md",
       "tests/solana/SPRINT1_SECURITY_ASSESSMENT.md",
       "tests/solana/integration.test.mjs",
-      "tests/solana/sdk-compat.test.mjs"
+      "tests/solana/sdk-compat.test.mjs",
+      "tests/solana/localnet-build.sh",
+      "tests/solana/verify-witness-bundle.mjs"
     ],
     "OBS": [
       "observer/docs/P0_VALIDATION_2026-11-13.md",
       "observer/test/ledger.test.mjs",
       "observer/test/indexer.test.mjs",
-      "observer/test/transaction.test.mjs"
+      "observer/test/transaction.test.mjs",
+      "observer/test/indexer.test.mjs (new P0 signed second-signer restart)"
     ],
     "RAVE": [
       "holochain/research/RAVE_015_NUMERIC_BOUNDARIES.md",
       "tests/holochain/test-only-adapter.test.mjs",
-      "holochain/research/UNYT_CONDUCTOR_COMPATIBILITY_GATE.md"
+      "holochain/research/UNYT_CONDUCTOR_COMPATIBILITY_GATE.md",
+      ".github/workflows/rave-unyt-release.yml",
+      "tests/holochain/sandbox/inspect-verified-unyt.sh",
+      "holochain/research/UNYT_RELEASE_PROVENANCE.md"
     ],
     "SEC": [
       "security/INDEPENDENT_GATES_2026-11-13.md",
@@ -64,10 +71,11 @@
       "security/test/transaction-provenance-adversarial.test.mjs",
       "security/evidence/2026-11-13-independent-shadow-decision.md",
       "security/test/indexer-checkpoint-regression.test.mjs",
-      "security/test/solana-rave-numeric-gate.test.mjs"
+      "security/test/solana-rave-numeric-gate.test.mjs",
+      "security/test/ledger-corruption-boundary.test.mjs"
     ]
   },
-  "method": "Latest immutable specialist blobs atomically overlaid on prior integration tree; OBS indexer fixture now source-owned; CI adds non-economic wire evidence instrumentation only.",
+  "method": "Latest immutable specialist blobs plus two explicitly tracked CI-only SOL witness-test adjustments, merged into updated CI base with two parents. No specialist branch rewrites.",
   "exceptions": [
     "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
     "No binary/IDL hashes reused across disposable program IDs"
@@ -79,7 +87,7 @@
     "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
   "sourceLockReview": "RAVE new direct serde/zfuel references already existed as transitive pinned packages; generated graph compared linewise with old lock, digest computed from current source. Current-head locked execution still unverified.",
-  "testPolicy": "23 mandatory offline suites (including two new Security gates and Solana signer-SDK suite), real OBS SDK, generated Anchor IDL/SBPF, three clean-ledger local-validator modes, retained-ledger restart, signed base64 transaction + complete finalized block replay through OBS, RAVE Rust, shadow adapter. Missing/skip=fail.",
+  "testPolicy": "24 required offline cross-lane suites incl SEC checkpoint/numeric/ledger tamper and SOL signer SDK; real OBS SDK; generated Anchor SBPF/IDL; 3 separate live-validator modes and retained-ledger restart; SOL source-owned genuine base64 tx and immutable source/IDL/ELF witness bundle; mandatory complete base64 block+OBS replay; RAVE Rust; quarantine-only shadow. No missing/skip allowed.",
   "previousFailingExecution": {
     "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
     "ciRun": 43520698081,
@@ -104,17 +112,21 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "UNVERIFIED: exact new source snapshot must complete both GitHub Actions workflows",
+  "latestExecutionStatus": "UNVERIFIED: immutable snapshot pending PR #37 Actions; historical failed runs retained.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
     {
       "path": "tests/solana/integration.test.mjs",
-      "reason": "Add genuine finalized base64 getTransaction/getBlock capture without modifying SOL business implementation; ask SOL PR #35 to backport evidence instrumentation after owner review."
+      "reason": "Source SOL owns base64 getTransaction; integration only adds genuine complete base64 getBlock capture pending SOL backport."
+    },
+    {
+      "path": "tests/solana/verify-witness-bundle.mjs",
+      "reason": "Source SOL regex literal incorrectly contains two backslashes for each .rpc.json extension; integration temporary test correction; reported to SOL PR #35."
     }
   ],
   "conductorStatus": "BLOCKED: no authenticated deployed Unyt DNA/WASM, matching conductor, live zome calls, multi-peer verification. This is a release blocker, not a test skip.",
-  "rawWireStatus": "CI instrumentation added; genuine locally generated signed-wire payload and OBS replay required on exact-head workflow. No execution claimed.",
+  "rawWireStatus": "Source SOL now owns signed base64 getTransaction and source/IDL/ELF-bound per-mode archive. CI overlays complete base64 getBlock and exact OBS replay until SOL backport. Green requires exact-head GitHub Actions artifacts.",
   "skillSource": {
     "branch": "main",
     "commit": "e1651fec77f1ed5c5f8e760e486c8757adc5e69c",
@@ -124,5 +136,9 @@
       ".github/skills/holochain/"
     ],
     "policy": "Reference-only; no toolchain upgrade. Holochain 0.7 API examples not equivalent to a deployed Unyt DNA."
+  },
+  "ciBaseMerged": {
+    "branch": "agent/ci/11-build-pipeline",
+    "sha": "47c58c1db37b14f0d01abd16c7ea5545b4e7df1e"
   }
 }

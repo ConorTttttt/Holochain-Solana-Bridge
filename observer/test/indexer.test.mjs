@@ -231,3 +231,34 @@ test('getTransaction inclusion refuses unrelated forged signatures in containing
     rpcUrl:urls[0],signature:target.expectedSignature,genesisHash,fetchFn,
   }),/invalid Ed25519 transaction signature/);
 });
+
+test('a resumed scan rejects a forged secondary signature without advancing checkpoint',async t=>{
+  const {options}=input(t);
+  const initial=rpcMock({bothProduced:true});
+  const first=await indexFinalizedRange({...options,toSlot:20,fetchFn:initial.fetchFn});
+  assert.equal(first.checkpoint,20);
+
+  // The durable journal is reopened: the only requested range is [21,21].
+  const poisoned=rpcMock({
+    bothProduced:true,failedTx:signedWire({signerCount:2,forgeSignerIndex:1}),
+    failedAtSlot:21,
+  });
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:poisoned.fetchFn}),
+    /invalid Ed25519 transaction signature/);
+  assert.deepEqual(poisoned.calls.filter(x=>x.method==='getBlocks')
+    .map(x=>x.params.slice(0,2)),[[21,21],[21,21]]);
+  const persisted=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+  assert.equal(persisted.checkpoint,20);
+  assert.deepEqual(Object.keys(persisted.blocks),['20']);
+  assert.equal(Object.keys(persisted.processed).length,0);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+
+  // A subsequent, fully signed history may advance the slot without deposits.
+  const recovered=rpcMock({
+    bothProduced:true,failedTx:signedWire({signerCount:2}),failedAtSlot:21,
+  });
+  const resumed=await indexFinalizedRange({...options,fetchFn:recovered.fetchFn});
+  assert.equal(resumed.checkpoint,21);
+  assert.equal(resumed.processed,0);
+  assert.equal(resumed.creditEligible,false);
+});

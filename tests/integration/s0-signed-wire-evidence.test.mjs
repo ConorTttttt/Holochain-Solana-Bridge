@@ -14,7 +14,7 @@ import { verifyWireSignatures, verifyDepositCandidates } from '../../observer/sr
 
 const root='target/localnet-evidence/';
 function load(name) {
-  assert.match(name,/^[a-zA-Z0-9-]+(?:\\.rpc)?\\.json$/,'unsafe witness filename');
+  assert.match(name,/^[a-zA-Z0-9-]+(?:\.rpc)?\.json$/,'unsafe witness filename');
   return JSON.parse(readFileSync(root+name,'utf8'));
 }
 function checkSigned(raw, signature) {
@@ -39,10 +39,10 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
     assert.equal(index.finalized.length,signed.size,'missing transaction witness');
     for (const item of index.finalized) {
       assert.ok(signed.has(item.signature),'unlisted signature');
-      assert.ok(item.getTransactionWireFile && item.getBlockWireFile,
+      assert.ok(item.getTransactionBase64RawFile && item.getBlockBase64RawFile,
         'signed-wire RPC files missing: SOL source backport or live validator capture required');
-      const txEnvelope=load(item.getTransactionWireFile);
-      const blockEnvelope=load(item.getBlockWireFile);
+      const txEnvelope=load(item.getTransactionBase64RawFile);
+      const blockEnvelope=load(item.getBlockBase64RawFile);
       assert.equal(txEnvelope.error,undefined);
       assert.equal(blockEnvelope.error,undefined);
       const tx=txEnvelope.result, block=blockEnvelope.result;
