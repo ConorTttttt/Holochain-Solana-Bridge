@@ -33,3 +33,45 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod published_execution_smoke {
+    use rave_engine::prelude::RhaiEngine;
+    use serde_json::json;
+
+    // Uses the *published* rave_engine Rhai executor. This is not an Unyt RAVE
+    // transaction, a validated agreement, or an external collateral proof.
+    #[test]
+    fn pure_rhai_engine_executes_an_empty_non_economic_result() {
+        // 0.15.0 expects MessagePack-encoded Rust String for the execution code.
+        let code = rmp_serde::to_vec(&"return #{};".to_string()).expect("encode Rhai source");
+        let result = RhaiEngine::new().execute(&json!({}), code, None);
+        assert!(result.is_ok(), "published engine should execute a pure script: {result:?}");
+    }
+
+    #[test]
+    fn published_engine_rejects_an_undefined_expression() {
+        let code = rmp_serde::to_vec(&"return missing_variable;".to_string()).expect("encode Rhai source");
+        let result = RhaiEngine::new().execute(&json!({}), code, None);
+        assert!(result.is_err(), "undefined Rhai variable must fail closed");
+    }
+}
+
+#[cfg(test)]
+mod published_parked_standing_types {
+    use rave_engine::types::ParkedLinkStanding;
+
+    #[test]
+    fn non_parked_standings_cannot_satisfy_signer_precondition() {
+        fn is_parked(value: &ParkedLinkStanding) -> bool {
+            matches!(value, ParkedLinkStanding::Parked(_))
+        }
+        for value in [
+            ParkedLinkStanding::NotHeld,
+            ParkedLinkStanding::NotAParkedLink,
+            ParkedLinkStanding::Unparked,
+        ] {
+            assert!(!is_parked(&value));
+        }
+    }
+}

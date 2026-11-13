@@ -84,7 +84,9 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   const [vault] = vaultFor(mint);
   const source = await createAccount(connection, owner, mint, owner.publicKey);
   const strangerSource = await createAccount(connection, attacker, mint, attacker.publicKey);
-  const recipientAccount = await createAccount(connection, owner, mint, owner.publicKey);
+  // Explicit non-ATA SPL account: the source above is already owner's ATA.
+  // Recreating the same ATA fails with "Provided owner is not allowed".
+  const recipientAccount = await createAccount(connection, owner, mint, owner.publicKey, Keypair.generate());
   await mintTo(connection, owner, mint, source, owner, 1_000_000n);
 
   const initIx = (mintKey, vaultKey, adminKey = owner.publicKey) => program.methods.initialize(scope)

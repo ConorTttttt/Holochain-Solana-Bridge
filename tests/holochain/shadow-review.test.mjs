@@ -11,6 +11,10 @@ const receipt = Object.freeze({ kind: 'solana-receipt-observation-v1',
   mint: 'mint', depositor: 'depositor', recipientCore: 'recipient',
   holochainScope: 'scope', depositNonce: '1', amountBaseUnits: '123',
   finalizedSlot: 100, receiptDigest: 'a'.repeat(64),
+  configDigest: 'b'.repeat(64), vaultDigest: 'c'.repeat(64), mintDigest: 'd'.repeat(64),
+  mintSupplyBaseUnits: '1000', activeVaultBaseUnits: '500', activeLiabilitiesBaseUnits: '300',
+  configBump: 254, receiptBump: 249, commitmentRequested: 'finalized',
+  transactionVerified: false, evidenceTrust: 'untrusted_rpc_snapshot',
   refunded: false, state: 'active_refundable', creditEligible: false });
 const audit = (changes = {}, context = binding, journal = new Map()) =>
   reviewShadow({ ...receipt, ...changes }, context, journal);
@@ -63,15 +67,41 @@ test('mismatched scope, program or mint: reject', () => {
 });
 test('invalid amount and forged eligibility: reject', () => {
   for (const value of ['0', '-1', '1.5', (1n << 64n).toString()]) {
-    assert.ok(audit({ amountBaseUnits: value }).findings.includes('INVALID_AMOUNT'));
+    assert.ok(audit({ amountBaseUnits: value }).findings.includes('INVALID_amountBaseUnits'));
   }
   assert.ok(audit({ creditEligible: true }).findings.includes('CREDIT_ELIGIBILITY_ESCALATION'));
 });
 test('fail closed with a missing journal or target binding', () => {
-  assert.ok(reviewShadow(receipt, binding, null).findings.includes('NO_SHARED_AUDIT_JOURNAL'));
+  assert.ok(reviewShadow(receipt, binding, null).findings.includes('NO_LOCAL_AUDIT_JOURNAL'));
   assert.ok(reviewShadow(receipt, null, new Map()).findings.includes('MISSING_EXPLICIT_BINDING'));
 });
 test('live economic and withdrawal boundaries remain disabled', () => {
   assert.throws(() => issueHolochainCredit(receipt), /CREDITING_DISABLED/);
   assert.throws(() => authorizeSolanaWithdrawal({}), /WITHDRAWALS_DISABLED/);
+});
+
+test('revised OBS schema: reject claimed transaction verification, evidence escalation and missing digests', () => {
+  assert.ok(audit({ transactionVerified: true }).findings.includes('TRANSACTION_TRUST_ESCALATION'));
+  assert.ok(audit({ evidenceTrust: 'trusted' }).findings.includes('EVIDENCE_TRUST_ESCALATION'));
+  assert.ok(audit({ commitmentRequested: 'confirmed' }).findings.includes('UNEXPECTED_RPC_COMMITMENT'));
+  assert.ok(audit({ configDigest: undefined }).findings.includes('INVALID_configDigest'));
+  assert.ok(audit({ receiptBump: -1 }).findings.includes('INVALID_receiptBump'));
+});
+
+test('revised OBS accounting assertions are untrusted but internally inconsistent amounts reject', () => {
+  assert.ok(audit({ activeLiabilitiesBaseUnits: '501' }).findings.includes('OBSERVED_LIABILITY_INCONSISTENCY'));
+  assert.ok(audit({ mintSupplyBaseUnits: '499' }).findings.includes('OBSERVED_LIABILITY_INCONSISTENCY'));
+  assert.ok(audit({ depositNonce: '1.5' }).findings.includes('INVALID_depositNonce'));
+  assert.ok(audit({ activeVaultBaseUnits: '-20' }).findings.includes('INVALID_activeVaultBaseUnits'));
+});
+
+test('same-slot OBS config/vault/mint conflicts reject; new-slot balance drift remains quarantine', () => {
+  const journal = new Map();
+  audit({}, binding, journal);
+  const conflict = audit({ configDigest: 'e'.repeat(64) }, binding, journal);
+  assert.equal(conflict.verdict, 'rejected');
+  assert.ok(conflict.findings.includes('SAME_SLOT_ACCOUNT_CONFLICT'));
+  const drift = audit({ finalizedSlot: 101, activeVaultBaseUnits: '600', vaultDigest: 'e'.repeat(64) }, binding, journal);
+  assert.equal(drift.verdict, 'quarantined');
+  assert.equal(drift.spendableBaseUnits, '0');
 });

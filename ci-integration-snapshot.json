@@ -2,12 +2,12 @@
   "status": "integration-only / DO NOT MERGE",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "10b903afa31eed3f9600943b43c5409d1b257498"
+    "sha": "ecc0b4b01e1f6d0d418b6b44794a395fe0e9c7df"
   },
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "2c80d53db492002a7a5b74e3e2bca8a8ca307828"
+      "sha": "bc4c907a4fc8e0ef5af073c06285ad248225f017"
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
@@ -15,14 +15,14 @@
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
-      "sha": "c82d7a257c99a7f9dd35c3c392ba2633b502e59f"
+      "sha": "cacd7932e7700b157a5e2f8077a034970b8de2f3"
     },
     "SEC": {
       "branch": "agent/sec/10-threat-model",
-      "sha": "b0af4adbb444e0affb33961c4944f8f38df9cb56"
+      "sha": "29d64efd3ae3f8b92dc03d76c2e8af602f22904f"
     }
   },
-  "method": "Overlay source branch diff vs main at immutable Git SHAs onto integration tree and re-sync CI scripts; all source branches unchanged",
+  "method": "Overlay source branch diff vs main at immutable Git SHAs onto integration tree; no source-branch edits",
   "excludedSourceFile": ".github/workflows/sol-verify-temporary.yml (temporary duplicate verification job)",
   "gatePolicy": "No skipped required suite, no unbuilt SBF, no production authorization",
   "created": "2026-11-13"
