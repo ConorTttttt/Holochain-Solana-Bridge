@@ -105,13 +105,25 @@ export function decodeFinalizedWire(rpcTransaction, signature) {
   need(first instanceof Uint8Array && first.length === 64 && encode58(first) === signature,
     'transaction signature does not match signed bytes');
   const loaded = rpcTransaction.meta.loadedAddresses;
-  if (rpcTransaction.version === 0 && compiledMessage.addressTableLookups?.length) {
-    need(loaded && Array.isArray(loaded.writable) && Array.isArray(loaded.readonly),
-      'v0 address lookup resolution unavailable');
-  }
-  if (rpcTransaction.version === 1) {
-    need(!compiledMessage.addressTableLookups?.length && !loaded?.writable?.length && !loaded?.readonly?.length,
-      'v1 transaction must not use address lookup tables');
+  if (rpcTransaction.version === 0) {
+    const tables = compiledMessage.addressTableLookups || [];
+    const counts = tables.reduce((sum, table) => {
+      need(Array.isArray(table.writableIndexes) && Array.isArray(table.readonlyIndexes),
+        'invalid signed v0 address lookup table shape');
+      sum.writable += table.writableIndexes.length;
+      sum.readonly += table.readonlyIndexes.length;
+      return sum;
+    }, {writable:0, readonly:0});
+    const writable = loaded?.writable || [];
+    const readonly = loaded?.readonly || [];
+    need(Array.isArray(writable) && Array.isArray(readonly) &&
+      writable.length === counts.writable && readonly.length === counts.readonly,
+      'v0 address lookup resolution unavailable/inconsistent with signed indexes');
+    for (const address of [...writable,...readonly]) addressBytes(address);
+  } else {
+    need(!compiledMessage.addressTableLookups?.length &&
+      !loaded?.writable?.length && !loaded?.readonly?.length,
+      'non-v0 transaction cannot contain address lookup table keys');
   }
   const instructions = [...walkInstructions({compiledMessage,loadedAddresses:loaded,meta:{...rpcTransaction.meta,innerInstructions:rpcTransaction.meta.innerInstructions || []}})];
   return {compiledMessage, instructions, bytes, transactionHash:hash(bytes), signedTransaction:tx};
