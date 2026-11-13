@@ -50,21 +50,24 @@ function fixture(t) {
   return join(directory,'ledger.json');
 }
 const baseBlock={blockhash:pub(25),previousBlockhash:pub(26),parentSlot:19,transactions:[]};
-function signedWire({forged=false,failed=true}={}) {
-  // Solana legacy envelope: compact signature count, signature, signed message.
-  // Use real Ed25519 signatures so a corrupted message tests CRYPTO, not parsing.
-  const {publicKey,privateKey}=generateKeyPairSync('ed25519');
-  const signer=Buffer.from(publicKey.export({format:'der',type:'spki'})).subarray(-32);
+function signedWire({forged=false,failed=true,signerCount=1,forgeSignerIndex=-1,missingSecond=false}={}) {
+  // Legacy signed wire with actual Ed25519 signatures for all required signers.
+  // Zero-filled second signature is the on-wire missing-signature placeholder.
+  const pairs=Array.from({length:signerCount},()=>generateKeyPairSync('ed25519'));
+  const signers=pairs.map(({publicKey})=>
+    Buffer.from(publicKey.export({format:'der',type:'spki'})).subarray(-32));
   const message=Buffer.concat([
-    Buffer.from([1,0,0,1]),signer,Buffer.alloc(32,15),Buffer.from([0]),
+    Buffer.from([signerCount,0,0,signerCount]),...signers,Buffer.alloc(32,15),Buffer.from([0]),
   ]);
-  const signature=edSign(null,message,privateKey);
-  if (forged) message[36]^=1; // Change signed recent blockhash after signing.
-  const wire=Buffer.concat([Buffer.from([1]),signature,message]);
+  const signatures=pairs.map(({privateKey})=>edSign(null,message,privateKey));
+  if(missingSecond) signatures[1]=Buffer.alloc(64);
+  if(forgeSignerIndex>=0) signatures[forgeSignerIndex][0]^=1;
+  if(forged) message[4 + signerCount*32]^=1; // Mutate recent blockhash AFTER signing.
+  const wire=Buffer.concat([Buffer.from([signerCount]),...signatures,message]);
   return {
     version:'legacy',slot:20,transaction:[wire.toString('base64'),'base64'],
     meta:{err:failed ? {InstructionError:[0,'InvalidInstructionData']} : null},
-    expectedSignature:encode58(signature),
+    expectedSignature:encode58(signatures[0]),
   };
 }
 function rpcMock(options={}) {
@@ -80,13 +83,13 @@ function rpcMock(options={}) {
         case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
         case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
         case 'getSlot':result=100;break;
-        case 'getBlocks':{
-          // Real getBlocks(start,end) must never return out-of-range slots.
-          // The old mock returned slot 20 for getBlocks(21,21), hiding the
-          // downstream signature regression behind a fixture-only failure.
+        case 'getBlocks': {
+          // getBlocks(start, end) lists produced slots ONLY within the inclusive
+          // requested window. A restarted indexer begins at checkpoint + 1.
+          const [start,end]=req.params;
           const produced=(options.parentBroken || options.bothProduced ||
             (options.listConflict && isB)) ? [20,21] : [20];
-          result=produced.filter(slot=>slot>=req.params[0] && slot<=req.params[1]);
+          result=produced.filter(slot=>slot>=start && slot<=end);
           break;
         }
         case 'getBlock':result=options.prunedBlock && isB ? null :
@@ -165,6 +168,49 @@ test('failed transactions require valid Ed25519 signatures before checkpoint adv
   assert.equal(resumed.checkpoint,21);
   assert.equal(resumed.processed,0,'failed transactions must never issue deposit evidence');
   assert.equal(resumed.creditEligible,false);
+});
+
+test('two correctly signed required signers in a failed transaction allow a no-evidence checkpoint',async t=>{
+  const {options}=input(t);
+  const rpc=rpcMock({bothProduced:true,failedTx:signedWire({signerCount:2}),failedAtSlot:21});
+  const result=await indexFinalizedRange({...options,fetchFn:rpc.fetchFn});
+  assert.equal(result.checkpoint,21);
+  assert.equal(result.processed,0);
+  assert.equal(result.creditEligible,false);
+});
+for(const [label,settings] of [
+  ['forged second signer',{signerCount:2,forgeSignerIndex:1}],
+  ['zero-filled missing second signature',{signerCount:2,missingSecond:true}],
+  ['changed message with two signers',{signerCount:2,forged:true}],
+]) {
+  test('cannot advance checkpoint over '+label,async t=>{
+    const {options}=input(t);
+    const rpc=rpcMock({bothProduced:true,failedTx:signedWire(settings),failedAtSlot:21});
+    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),
+      /invalid Ed25519 transaction signature/);
+    const state=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+    assert.equal(state.checkpoint,20);
+    assert.deepEqual(Object.keys(state.blocks),['20']);
+    assert.equal(Object.keys(state.processed).length,0);
+    assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+  });
+}
+test('a restarted scan refuses an out-of-range RPC listing rather than skipping validation',async t=>{
+  const {options}=input(t);
+  const clean=rpcMock({bothProduced:true});
+  const first=await indexFinalizedRange({...options,toSlot:20,fetchFn:clean.fetchFn});
+  assert.equal(first.checkpoint,20);
+  const invalidRange=async(url,init)=>{
+    const request=JSON.parse(init.body);
+    if(request.method==='getBlocks')return {
+      ok:true,json:async()=>({jsonrpc:'2.0',id:1,result:[20,21]}),
+    };
+    return clean.fetchFn(url,init);
+  };
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:invalidRange}),
+    /invalid\/incomplete ordered slot listing/);
+  assert.equal(JSON.parse(readFileSync(options.ledgerPath,'utf8')).checkpoint,20);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
 });
 
 test('getTransaction inclusion refuses unrelated forged signatures in containing block',async()=>{
