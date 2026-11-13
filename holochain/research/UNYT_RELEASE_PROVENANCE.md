@@ -48,8 +48,10 @@ The release repository `.gitmodules` declares:
   url = git@github.com:unytco/unyt-app.git
   branch = main
 ```
-The current release repository's `unyt` gitlink points to commit
-`29ed3af2fe054b8bc5f493b3c5c26fe665ff4bac`. GitHub repository
+The **tagged release `v0.117.0`** `unyt` gitlink points to source commit
+`d2fa9c58c51a6a5f4aac8e7c6986bc2cc1ea1fdf`. The later `main` branch
+points at a **different** gitlink, `29ed3af2fe054b8bc5f493b3c5c26fe665ff4bac`;
+using `main` as the release source would invalidate an equivalence claim. GitHub repository
 metadata retrieval for `unytco/unyt-app` returned **404** under the
 available connection. This could mean private/inaccessible rather than
 nonexistent. No exact source tree, build instructions, integrity/coordinator
