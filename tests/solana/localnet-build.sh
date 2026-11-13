@@ -70,5 +70,5 @@ printf '%s\n' "$program_id" > target/localnet-evidence/program-id.txt
 # not silently skip. The on-chain suite refuses the public placeholder ID.
 npm --prefix tests/solana install --no-audit --no-fund
 npm --prefix tests/solana test
-NO_DNA=1 anchor test --skip-build --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
+NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
 echo "LOCALNET BUILD AND TRANSACTION TESTS PASSED"
