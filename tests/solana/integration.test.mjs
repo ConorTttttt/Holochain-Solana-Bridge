@@ -9,7 +9,7 @@ import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, createAccount, createMint, getAccount, mintTo } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
@@ -21,6 +21,17 @@ const scope = Array(32).fill(7);
 const recipient = Array(32).fill(9);
 const nonce = new BN('42017');
 const amount = 250_000n;
+const U64_MAX = (1n << 64n) - 1n;
+const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
+assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
+const transactionEvidence = [];
+async function saveTransactionEvidence() {
+  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL('sprint1-' + mode + '-transactions.json', directory),
+    JSON.stringify({ mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(), transactions: transactionEvidence }, null, 2) + '\n',
+    { mode: 0o600 });
+}
 // Evidence files contain only public keys and publicly readable Solana account
 // bytes. Never serialize, log or upload payer/depositor private keypairs.
 async function capturePublicAccountFixture(label, keys, signatures) {
@@ -62,15 +73,34 @@ async function fund(keypair) {
   const signature = await connection.requestAirdrop(keypair.publicKey, 3 * LAMPORTS_PER_SOL);
   await connection.confirmTransaction(signature, 'confirmed');
 }
+async function submitOnChain(ix, signers) {
+  // Reject preflight-only false positives: verify actual confirmed meta.err.
+  const blockhash = await connection.getLatestBlockhash('confirmed');
+  const tx = new Transaction({ feePayer: signers[0].publicKey, recentBlockhash: blockhash.blockhash }).add(ix);
+  tx.sign(...signers);
+  const signature = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
+  const confirmation = await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
+  let included;
+  for (let i = 0; i < 20; i++) {
+    included = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
+    if (included?.meta) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.ok(included?.meta, 'transaction not included: ' + signature);
+  assert.deepEqual(included.meta.err, confirmation.value.err, 'confirmation and transaction mismatch');
+  assert.ok(included.meta.logMessages?.length, 'no validator execution logs');
+  return { signature, error: included.meta.err, logs: included.meta.logMessages };
+}
 async function rejectsInstruction(buildIx, signers, message) {
-  // The ix builder MUST succeed. Otherwise a client-side encoding error
-  // could masquerade as a program-level rejected transaction.
-  const ix = await buildIx();
-  await assert.rejects(async () => send(ix, signers), message);
+  const ix = await buildIx(); // must encode successfully
+  const result = await submitOnChain(ix, signers);
+  assert.notEqual(result.error, null, message + ': unexpectedly succeeded');
+  transactionEvidence.push({ label: message, ...result });
+  return result;
 }
 const same = (a, b) => assert.equal(a.toBase58(), b.toBase58());
 
-test('localnet-only: initialize, deposit, validation failures, pause and one refund', { timeout: 180_000 }, async (t) => {
+test('localnet-only: initialize, deposit, validation failures, pause and one refund', { timeout: 240_000, skip: mode !== 'lifecycle' }, async (t) => {
   assert.equal(new URL(RPC).hostname, '127.0.0.1');
   assert.notEqual(idl.address, 'Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS',
     'run anchor keys sync with a freshly generated LOCAL keypair');
@@ -176,10 +206,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
 
   let depositSignature; let refundSignature;
   const depositIx = ({ signer = owner.publicKey, mintKey = mint, from = source,
-    vaultKey = vault, receiptKey = receipt, n = nonce, amt = amount, core = recipient } = {}) =>
+    vaultKey = vault, receiptKey = receipt, n = nonce, amt = amount, core = recipient, tokenProg = TOKEN_PROGRAM_ID } = {}) =>
     program.methods.deposit(n, core, new BN(amt.toString())).accountsStrict({
       depositor: signer, config, mint: mintKey, source: from, vault: vaultKey, receipt: receiptKey,
-      tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+      tokenProgram: tokenProg, systemProgram: SystemProgram.programId,
     }).instruction();
   const refundIx = ({ signer = owner.publicKey, to = recipientAccount, receiptKey = receipt } = {}) =>
     program.methods.refund().accountsStrict({
