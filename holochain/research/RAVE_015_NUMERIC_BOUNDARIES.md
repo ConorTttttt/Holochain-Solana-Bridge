@@ -141,3 +141,18 @@ permission to issue credits is considered.
 **Unchanged invariants:** `creditEligible:false`,
 `spendableBaseUnits:"0"`, `withdrawalAuthorized:false`.
 No mainnet custody, spendable Unyt credits or production withdrawals.
+
+
+### Additional current-branch smoke execution
+
+After the branch changes, a V8 isolate evaluated the **fetched source text** of
+`holochain/shadow-review.mjs`, `holochain/transaction-shadow.mjs` and
+`holochain/test-only-adapter.mjs` with their original exports and no external
+dependencies. Seven targeted in-memory checks **passed 7/7**: base
+quarantine, same-adapter duplicate, scope/program/mint/agreement mismatch,
+refund and malformed input, partitioned independent journals, stale/conflicting
+receipts, and new exact-u64-large-amount test including rounded numeric-token
+rejection. This was **not** the Node `node --test` runner, a compiled Rust
+harness, an external RPC transaction verification or a Holochain conductor.
+Current-branch Node test file execution remains pending CI. The original
+integrated-snapshot Node test result is reported separately above.
