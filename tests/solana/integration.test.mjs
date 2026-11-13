@@ -616,7 +616,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     tracked.push({ who: attacker.publicKey, n: n2, amount: 17_000n, refunded: false });
     sourceBalance -= 13_000n; strangerBalance -= 17_000n;
     await reconcile('two independent wallets with active deposits');
-    await connection.confirmTransaction(concurrent[1].signature, 'finalized');
+    // Both concurrently included deposits must be finalized before this
+    // evidence snapshot; finalizing only one signature is insufficient.
+    await Promise.all(concurrent.map((entry) =>
+      connection.confirmTransaction(entry.signature, 'finalized')));
     await capturePublicAccountFixture('sprint1-two-wallets-live', [r1, r2, config, vault, mint],
       { ownerDeposit: concurrent[0].signature, strangerDeposit: concurrent[1].signature });
 
@@ -639,7 +642,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.MintTokens, attacker.publicKey),
       [attacker], [mint]);
     await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
-      createSetAuthorityInstruction(mint, owner.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
+      createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
       [attacker], [mint]);
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
