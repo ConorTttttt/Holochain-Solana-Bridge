@@ -42,7 +42,21 @@ cfg = tomllib.loads(original_toml)
 old = cfg.get('programs', {}).get('localnet', {}).get('deposit_prototype')
 if not isinstance(old, str) or not re.fullmatch(r'[1-9A-HJ-NP-Za-km-z]{32,44}', old):
     sys.exit('Invalid/missing initial localnet public ID')
-toml_pattern = r'(?m)^(\\s*deposit_prototype\\s*=\\s*")' + re.escape(old) + r'("\\s*(?:#.*)?)node --input-type=module - "$public_id" <<'NODE'
+toml_pattern = r'(?m)^(\s*deposit_prototype\s*=\s*")' + re.escape(old) + r'("\s*(?:#.*)?)$'
+src_pattern = r'(declare_id!\(")' + re.escape(old) + r'("\))'
+updated_toml, n_cfg = re.subn(toml_pattern, lambda m: m.group(1) + pub + m.group(2), original_toml)
+updated_src, n_src = re.subn(src_pattern, lambda m: m.group(1) + pub + m.group(2), original_src)
+if n_cfg != 1 or n_src != 1:
+    sys.exit(f'Ambiguous/mismatched public ID declaration: TOML={n_cfg}, Rust={n_src}')
+if old == pub:
+    sys.exit('Unexpected generated key already matches original public program ID')
+toml_path.write_text(updated_toml)
+src_path.write_text(updated_src)
+print('PASS: replaced only exact localnet and Rust PUBLIC program-ID declarations')
+PY
+# Assert Anchor agrees; no serialization should be necessary.
+anchor keys sync
+node --input-type=module - "$public_id" <<'NODE'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const publicId=process.argv[2];
