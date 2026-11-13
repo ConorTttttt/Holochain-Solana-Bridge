@@ -43,11 +43,54 @@ const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
 assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
 const transactionEvidence = [];
 async function saveTransactionEvidence() {
+  // Re-fetch every unique signed transaction at FINALIZED commitment so that
+  // confirmed status alone cannot be mistaken for the requested block evidence.
+  // These records are from a disposable local validator, NOT a consensus proof
+  // or a cross-chain credit authorization.
+  const finalized = [];
+  const signatures = new Map();
+  for (const entry of transactionEvidence) {
+    if (entry.signature && !signatures.has(entry.signature)) signatures.set(entry.signature, entry);
+  }
+  for (const [signature, expected] of signatures) {
+    const confirmation = await connection.confirmTransaction(signature, 'finalized');
+    assert.ok(confirmation.value, 'missing finalized status: ' + signature);
+    let tx;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      tx = await connection.getTransaction(signature, {
+        commitment: 'finalized', maxSupportedTransactionVersion: 0,
+      });
+      if (tx?.meta) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.ok(tx?.meta, 'finalized transaction has no execution meta: ' + signature);
+    assert.deepEqual(tx.meta.err, confirmation.value.err,
+      'finalized transaction/status disagreement: ' + signature);
+    if ('error' in expected) assert.deepEqual(tx.meta.err, expected.error,
+      'confirmed/finalized execution disagreement: ' + signature);
+    const block = await connection.getBlock(tx.slot, {
+      commitment: 'finalized', transactionDetails: 'none', rewards: false,
+      maxSupportedTransactionVersion: 0,
+    });
+    assert.ok(block?.blockhash, 'finalized local-validator block unavailable: ' + signature);
+    finalized.push({
+      signature, slot: tx.slot, blockhash: block.blockhash,
+      previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
+      blockTime: tx.blockTime, version: tx.version,
+      messageRecentBlockhash: tx.transaction.message.recentBlockhash,
+      meta: { err: tx.meta.err, logMessages: tx.meta.logMessages,
+        preTokenBalances: tx.meta.preTokenBalances,
+        postTokenBalances: tx.meta.postTokenBalances },
+    });
+  }
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   writeFileSync(new URL('sprint1-' + mode + '-transactions.json', directory),
-    JSON.stringify({ mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(), transactions: transactionEvidence }, null, 2) + '\n',
-    { mode: 0o600 });
+    JSON.stringify({
+      kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
+      mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
+      transactions: transactionEvidence, finalized,
+    }, null, 2) + '\n', { mode: 0o600 });
 }
 // Evidence files contain only public keys and publicly readable Solana account
 // bytes. Never serialize, log or upload payer/depositor private keypairs.
