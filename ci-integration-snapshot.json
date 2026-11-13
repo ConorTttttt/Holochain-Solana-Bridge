@@ -113,7 +113,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "Previous 19bf4878 real validator lifecycle failed Custom 6004 AlreadyRefunded concurrent-wallet suite; SEC synthetic signature test mistakenly mutated instruction count. Reported to SOL/SEC owner. Current exact-head CI is P0 RED until passing.",
+  "latestExecutionStatus": "Previous 19bf4878 real validator lifecycle failed Custom 6004 MintFreezable concurrent-wallet suite; SEC synthetic signature test mistakenly mutated instruction count. Reported to SOL/SEC owner. Current exact-head CI is P0 RED until passing.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -168,7 +168,7 @@
     "p0SolanaFailure": {
       "run": 43527503883,
       "subtest": "independent wallet accounting, concurrent deposits, rollback and authority attacks",
-      "error": "InstructionError Custom 6004 AlreadyRefunded",
+      "error": "InstructionError Custom 6004 MintFreezable",
       "status": "source owner investigation required"
     },
     "p0SecurityFailure": {
