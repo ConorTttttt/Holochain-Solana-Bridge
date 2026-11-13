@@ -1,10 +1,50 @@
-# Solana → Observer S0 account contract (PROVISIONAL)
+# Solana → Observer S0 account contract: verified Anchor IDL + real localnet account bytes
 
-**Status: source-derived only; NOT a verified generated IDL.** Source reviewed at
-`programs/deposit_prototype/src/lib.rs` on 2026-11-13. Neither Rust/Anchor/Solana
-compilation nor local validator execution was available. OBS must not accept this
-file as deployed-program/source equivalence evidence. Generated IDL handoff is
-**BLOCKED** until `anchor build` succeeds and its artifact is reviewed.
+**Status (2026-11-13): compiled and validated on an isolated Solana local validator.**
+The exact Rust source, program ID, generated Anchor IDL, public account bytes and
+deposit/refund signatures were checked in actual GitHub Actions run
+https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297 .
+This is **NOT** proof of mainnet source equivalence, independent finality or
+Holochain economic authorization. OBS PR #36 still needs a combined full-checkout
+test of its maintained Solana SDK and new `isNative` validation.
+
+## Verified run 43499386297: public handoff data
+
+- **Full evidence bundle:** https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297/artifacts/14073462857
+  (real ELF/SBPF, generated Anchor IDL, cargo/build logs, finalized localnet
+  account snapshots and transaction signatures; no keypairs).
+- **Program ID (one disposable localnet run only):**
+  `FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG`.
+- **Localnet genesis:** `FcVMLgegDkZKX8ec4ELY41RwNDJFZE9nVfZvd9oSmQM8`.
+- **IDL SHA-256:** `a81ccda8b91e90d1522cc922bac88aecae71e872d4b22ead9196ccceaf9d41f9`.
+- **SBPF ELF SHA-256:** `ddbc9a56d1d7d2d0edc55153f099ed016dc6a26b30057b7bd8703c8ac7dd9dd5`.
+- **Config PDA address:** `8cgyh99E7fmUyAFshwss8ZQZacpxWTyCm1ApFJFC7999`,
+  stored bump `255`. **Vault PDA address:**
+  `FsTLDdsAHYtbFCRXk1Px6mi47t1tYQadF42qQP5DWebT`.
+- **Receipt PDA address:** `BdR4H8M6pYafRkmEM57ydhH4yGKw2q1KokyvUkxLZ2VH`,
+  depositor+nonce seeds, stored bump `248`. **Mint address:**
+  `7t6r6MTjf6RBMoLtkPmEpK9RkG3fdw28JoimYP61hKy9`.
+- **Receipt nonce (u64):** `42017`. **Holochain recipient core:**
+  `09` repeated 32 bytes; **scope:** `07` repeated 32 bytes.
+- **Actual public deposit signature:**
+  `5n2zYM3uEhP4EGLHRJWT8f2wYaR55TC1z3gygcevZe47jkrN4Nd3kgACYL9abv1jN96qkMg9AFLSrCAsUWMkE5eQ`.
+- **Actual public refund signature:**
+  `67rG62EX4xiDnCb6uqfmZyZwuwsFNbfnoSbuRPs2FP4gSfhE6KNRRTuBxUkvkCHAyeaA9bTKVZ4uNNwWoJsRPdC9`.
+- **Account fixtures:** `target/localnet-evidence/active-receipt.json` at
+  local finalized slot **33**, `refunded-receipt.json` at slot **67**.
+  Each contains base64 bytes for receipt (218), config (114), vault (165),
+  mint (82). Observer should independently decode these fixtures with its
+  compiled IDL and validate every PDA bump and canonical address.
+- Active: `receipt.refunded=false`, `receipt.amount=250000`,
+  `config.total_active=250000`, `vault.amount=250000`.
+  Refunded: `receipt.refunded=true`, `config.total_active=0`,
+  `vault.amount=0`. Byte comparison found only receipt byte offset
+  **216** changed; the mint's 82 serialized bytes were identical.
+
+**Important:** All above addresses are scoped to this specific ephemeral
+local-validator ledger. Generate new IDs for fresh runs and always bind them
+to the exact current genesis and code binary. Never reuse these disposable IDs
+as mainnet trust anchors.
 
 ## Address derivation (classic SPL Token only)
 
@@ -23,7 +63,7 @@ For an ephemeral **localnet** program ID `P`, derive each PDA using
   a disposable LOCAL program keypair outside Git, then distribute the resulting
   exact program ID and IDL to OBS.
 
-## Serialized layout derived from Rust
+## Serialized layout confirmed against actual generated IDL and localnet bytes
 
 `BridgeConfig`: exactly **114 bytes** including 8-byte Anchor discriminator;
 `SHA256("account:BridgeConfig")[0..8]` = `28ce33e9f628b255`.
@@ -77,19 +117,24 @@ DepositReceipt|218|depositor:pubkey,mint:pubkey,vault:pubkey,config:pubkey,recip
 SHA-256 of that string:
 `b0ecd68cd1c39075a63ab7615b7c1eff98486be398bc4e55b3206397e40ece1f`.
 
-This is a **provisional source-based interface fingerprint**, not a hash of
-a generated IDL, compiled binary or deployed program. Recompute and replace
-after actual compilation and human review.
+This is a **source-based interface fingerprint**, distinct from the actual
+verified generated IDL and ELF hashes documented above. Do not substitute it
+for artifact/source equivalence or production trust.
 
-## Blocked verification/handoff gate
+## Remaining cross-lane acceptance gates
 
-After a genuine build, OBS and CI should receive `target/idl/deposit_prototype.json`,
-the localnet program ID (public only), exact command/tool versions and binary
-hash, and the generated IDL's account schema/discriminators. Check all the
-above against generated metadata and live account bytes. Do not fabricate an
-IDL or label the source-derived schema verified.
+SOL has now supplied the generated IDL, the **localnet-only** public program ID,
+actual source-binary/IDL hashes and two finalized RPC account fixtures. The
+standalone SOL build and validator integration suite **PASSED** as documented
+in `tests/solana/VERIFIED_LOCALNET.md`.
 
-Offline serialization compatibility exercises are in
-`tests/solana/layout.test.mjs`; validator tests are
-`tests/solana/integration.test.mjs`. Neither test can prove chain finality,
-and `creditEligible: false` stays mandatory.
+**Still required for OBS #8:** run its v2 `@solana/kit` PDA derivation and
+`isNative` tests against this exact IDL and the above *real* account bytes
+in a fully combined checkout; confirm noncanonical addresses and substituted
+mints/accounts are rejected. Verify an actual `getTransaction` inclusion
+record and scanner behavior separately in S1/S2. Localnet RPC `finalized`
+is not independent cryptographic proof of Solana consensus. Do not enable
+credits: `creditEligible: false` remains mandatory, and refunds remain possible.
+
+SOL offline serialization checks: `tests/solana/layout.test.mjs`.
+SOL actual validator tests: `tests/solana/integration.test.mjs`.
