@@ -97,6 +97,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: {persist-credentials: false}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
       - name: Install exact Rust
         run: |
           source scripts/ci/toolchain.env
@@ -113,6 +117,8 @@ jobs:
           bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
       - name: Toolchain evidence
         run: bash scripts/ci/record.sh tool-versions bash scripts/ci/tool-versions.sh
+      - name: Create disposable localnet program keypair and sync only temporary ID
+        run: bash scripts/ci/record.sh prepare-localnet bash scripts/ci/prepare-localnet-program.sh
       - name: Run both compilations and fail if either fails
         run: |
           set +e
@@ -132,6 +138,11 @@ jobs:
           else
             echo "IDL NOT GENERATED" | tee ci-artifacts/idl-status.log
           fi
+          if [ -s target/deploy/deposit_prototype.so ]; then
+            sha256sum target/deploy/deposit_prototype.so | tee ci-artifacts/sbpf-binary.sha256
+          else
+            echo "SBPF BINARY NOT GENERATED — compilation gate failed" | tee ci-artifacts/sbpf-binary.status
+          fi
           if [ -f Cargo.lock ]; then sha256sum Cargo.lock | tee ci-artifacts/cargo-lock.sha256; fi
           bash scripts/ci/tool-versions.sh > ci-artifacts/tool-versions-final.log 2>&1 || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -141,6 +152,7 @@ jobs:
           path: |
             ci-artifacts/
             target/idl/*.json
+            target/deploy/deposit_prototype.so
             Cargo.lock
           if-no-files-found: error
           retention-days: 14
