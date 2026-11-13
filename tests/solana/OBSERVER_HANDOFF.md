@@ -65,6 +65,22 @@ and decimals; `total_active` uses checked u64 arithmetic. Vault balance
 is required to stay >= total_active. This is *not* proof of backing for
 Holochain credit: depositors can always refund and no issuance is authorized.
 
+## Source-derived layout fingerprint (NOT an IDL checksum)
+
+Canonical UTF-8 text (two lines, separated by exactly one LF, no trailing LF):
+
+```text
+BridgeConfig|114|admin:pubkey,mint:pubkey,scope:bytes32,paused:bool,total_active:u64le,bump:u8
+DepositReceipt|218|depositor:pubkey,mint:pubkey,vault:pubkey,config:pubkey,recipient_core:bytes32,scope:bytes32,nonce:u64le,amount:u64le,refunded:bool,bump:u8
+```
+
+SHA-256 of that string:
+`b0ecd68cd1c39075a63ab7615b7c1eff98486be398bc4e55b3206397e40ece1f`.
+
+This is a **provisional source-based interface fingerprint**, not a hash of
+a generated IDL, compiled binary or deployed program. Recompute and replace
+after actual compilation and human review.
+
 ## Blocked verification/handoff gate
 
 After a genuine build, OBS and CI should receive `target/idl/deposit_prototype.json`,
