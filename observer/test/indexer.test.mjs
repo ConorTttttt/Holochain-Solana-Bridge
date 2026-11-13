@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
-import { indexFinalizedRange, rpcRequest } from '../src/indexer.mjs';
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto';
+import { fetchFinalizedTransaction, indexFinalizedRange, rpcRequest } from '../src/indexer.mjs';
 import { encode58 } from '../src/decode.mjs';
 
 const pub=n=>encode58(Buffer.alloc(32,n));
@@ -50,6 +50,23 @@ function fixture(t) {
   return join(directory,'ledger.json');
 }
 const baseBlock={blockhash:pub(25),previousBlockhash:pub(26),parentSlot:19,transactions:[]};
+function signedWire({forged=false,failed=true}={}) {
+  // Solana legacy envelope: compact signature count, signature, signed message.
+  // Use real Ed25519 signatures so a corrupted message tests CRYPTO, not parsing.
+  const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+  const signer=Buffer.from(publicKey.export({format:'der',type:'spki'})).subarray(-32);
+  const message=Buffer.concat([
+    Buffer.from([1,0,0,1]),signer,Buffer.alloc(32,15),Buffer.from([0]),
+  ]);
+  const signature=edSign(null,message,privateKey);
+  if (forged) message[36]^=1; // Change signed recent blockhash after signing.
+  const wire=Buffer.concat([Buffer.from([1]),signature,message]);
+  return {
+    version:'legacy',slot:20,transaction:[wire.toString('base64'),'base64'],
+    meta:{err:failed ? {InstructionError:[0,'InvalidInstructionData']} : null},
+    expectedSignature:encode58(signature),
+  };
+}
 function rpcMock(options={}) {
   const calls=[];
   return {
@@ -63,14 +80,15 @@ function rpcMock(options={}) {
         case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
         case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
         case 'getSlot':result=100;break;
-        case 'getBlocks':result=options.parentBroken ? [20,21] : options.listConflict && isB ? [20,21]:[20];break;
+        case 'getBlocks':result=(options.parentBroken || options.bothProduced) ? [20,21] : options.listConflict && isB ? [20,21]:[20];break;
         case 'getBlock':result=options.prunedBlock && isB ? null :
           {...baseBlock,
             ...(req.params[0]===21 ? {
               blockhash:pub(27),parentSlot:options.parentBroken ? 19:20,
               previousBlockhash:options.parentBroken ? pub(28):baseBlock.blockhash,
             } : {blockhash:options.blockConflict && isB ? pub(44):baseBlock.blockhash}),
-            transactions:options.unsupported ? [{version:2,meta:{err:null},transaction:[]}]:[]};break;
+            transactions:options.unsupported ? [{version:2,meta:{err:null},transaction:[]}] :
+              options.failedTx && req.params[0]===(options.failedAtSlot ?? 20) ? [options.failedTx] : []};break;
         default:throw Error('Unexpected '+req.method);
       }
       return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
@@ -121,4 +139,41 @@ test('RPC transport rejects missing result and explicit error',async()=>{
   });
   await assert.rejects(rpcRequest(urls[0],'getBlock',[20],stub),/missing RPC getBlock result/);
   await assert.rejects(rpcRequest(urls[0],'getBlock',['bad'],stub),/RPC getBlock error -32000/);
+});
+
+test('failed transactions require valid Ed25519 signatures before checkpoint advancement',async t=>{
+  const {options}=input(t);
+  const poisoned=rpcMock({bothProduced:true,failedTx:signedWire({forged:true}),failedAtSlot:21});
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:poisoned.fetchFn}),
+    /invalid Ed25519 transaction signature/);
+  // Slot 20 was checked; slot 21 was not, so neither cursor nor replay journal
+  // may claim slot 21. The lock must be released for safe resumption.
+  const persisted=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+  assert.equal(persisted.checkpoint,20);
+  assert.deepEqual(Object.keys(persisted.blocks),['20']);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+  const clean=rpcMock({bothProduced:true,failedTx:signedWire(),failedAtSlot:21});
+  const resumed=await indexFinalizedRange({...options,fetchFn:clean.fetchFn});
+  assert.equal(resumed.checkpoint,21);
+  assert.equal(resumed.processed,0,'failed transactions must never issue deposit evidence');
+  assert.equal(resumed.creditEligible,false);
+});
+
+test('getTransaction inclusion refuses unrelated forged signatures in containing block',async()=>{
+  const target=signedWire({failed:false});
+  const unrelated=signedWire({forged:true});
+  const containing={...baseBlock,transactions:[
+    {version:target.version,transaction:target.transaction,meta:target.meta},
+    {version:unrelated.version,transaction:unrelated.transaction,meta:unrelated.meta},
+  ]};
+  const fetchFn=async(_url,request)=>{
+    const {method}=JSON.parse(request.body);
+    const result=method==='getGenesisHash' ? genesisHash :
+      method==='getTransaction' ? target :
+      method==='getBlock' ? containing : undefined;
+    return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+  };
+  await assert.rejects(fetchFinalizedTransaction({
+    rpcUrl:urls[0],signature:target.expectedSignature,genesisHash,fetchFn,
+  }),/invalid Ed25519 transaction signature/);
 });

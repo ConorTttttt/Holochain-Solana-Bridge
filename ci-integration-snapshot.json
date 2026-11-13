@@ -1,23 +1,23 @@
 {
-  "status": "FROZEN INTEGRATION CANDIDATE — NO MAIN MERGE OR ECONOMIC AUTHORIZATION",
+  "status": "FROZEN TEST CANDIDATE — NO PASSED RUNS YET; NO MAIN MERGE OR ECONOMIC AUTHORIZATION",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "70161c6b5fda0fddb4efb44485385e9358886d19"
+    "sha": "9f620bc7a6bbc5b920ea1cba87ec46bc0e293dd2"
   },
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "3d48f9335a23344d3a24625d2c6b9a8ead116751",
+      "sha": "0b5901af9007213a6801dc8f3ddc6c6d21c70564",
       "pr": 35
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
-      "sha": "60137aedc878eaf5428362a9a83cb44467a19736",
+      "sha": "755137c500c9c369e07c540ecc4a51f6fff1857d",
       "pr": 36
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
-      "sha": "df8753b4e108b596c5b6cf40354e29e33d083139",
+      "sha": "b846c5cfb442ee735204e1e034eaf93bd5e88e28",
       "pr": 34
     },
     "SEC": {
@@ -26,72 +26,81 @@
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "ee37bd03a19df53401c7c941b35a544ff388b05a",
+  "parentIntegrationCommit": "24b60e72ac78afbab5562c605094c3146bddd653",
   "sourceUpdatePaths": {
     "CI": [
-      ".github/workflows/ci.yml",
+      "scripts/ci/SPRINT1_READINESS_2026-11-13.md",
+      "scripts/ci/check-lock-digest.sh",
       "scripts/ci/run-cross-lane-tests.mjs"
     ],
     "SOL": [
+      "tests/solana/INITIALIZATION_MITIGATION_PROPOSAL.md",
       "tests/solana/README.md",
       "tests/solana/SPRINT1_SECURITY_ASSESSMENT.md",
       "tests/solana/integration.test.mjs",
-      "tests/solana/restart-reconcile.test.mjs",
-      "tests/solana/restart-validator.sh"
+      "tests/solana/localnet-build.sh",
+      "tests/solana/package-lock.json",
+      "tests/solana/package.json",
+      "tests/solana/sdk-compat.mjs",
+      "tests/solana/sdk-compat.test.mjs"
     ],
     "OBS": [
-      "observer/docs/INDEXER_REQUIREMENTS.md",
-      "observer/docs/S0_TEST_RESULTS.md",
-      "observer/docs/TRANSACTION_EVIDENCE_V1.md",
-      "observer/fixtures/localnet-active-receipt.json",
-      "observer/fixtures/localnet-refunded-receipt.json",
-      "observer/package.json",
+      "observer/docs/P0_VALIDATION_2026-11-13.md",
       "observer/src/indexer.mjs",
-      "observer/src/ledger.mjs",
       "observer/src/transaction.mjs",
       "observer/test/indexer.test.mjs",
-      "observer/test/ledger.test.mjs",
-      "observer/test/real-localnet.test.mjs",
       "observer/test/transaction.test.mjs"
     ],
     "RAVE": [
+      "holochain/research/S1_ECONOMIC_STANDING_AND_SANDBOX.md",
       "holochain/research/S1_SANDBOX_GATE.md",
-      "holochain/shadow-cli.mjs",
-      "holochain/test-only-adapter-cli.mjs",
-      "holochain/test-only-adapter.mjs",
+      "holochain/research/UNYT_RELEASE_PROVENANCE.md",
       "holochain/transaction-shadow.mjs",
+      "tests/holochain/rave-engine/Cargo.lock",
+      "tests/holochain/rave-engine/Cargo.toml",
       "tests/holochain/rave-engine/src/lib.rs",
-      "tests/holochain/rave-engine/verify-crate.sh",
-      "tests/holochain/sandbox/check-toolchain.sh",
-      "tests/holochain/test-only-adapter.test.mjs",
-      "tests/holochain/transaction-shadow.test.mjs"
-    ],
-    "SEC": [
-      "security/SPRINT1_GATES.md",
-      "security/test/adversarial.test.mjs",
-      "security/test/sprint1-economic-attacks.test.mjs"
+      "tests/holochain/sandbox/verify-unyt-release.sh",
+      "tests/holochain/transaction-provenance-journal.test.mjs"
     ]
   },
-  "method": "Immutable source blobs composed into one atomic tree, parent integration commit, no specialist branch edits",
+  "method": "Immutable source blobs atomically overlaid onto previous integration tree; parent is prior frozen integration; no specialist branch edits",
   "exceptions": [
-    "SOL source localnet script patched in integration only to run npm ci",
-    "public validator restart JSON/logs retained, never keypairs",
-    "reviewed source lockfiles preserved from old integration tree"
+    "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
+    "No binary/IDL hashes reused across disposable program IDs"
   ],
   "reviewedLockSHA256": {
-    "Cargo.lock": "9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24f0a24f5",
+    "Cargo.lock": "9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24bf0a24f5",
     "observer/package-lock.json": "87578ffa1a3f0d1f0102f58ac649e25cd2a9d2902889bc946213fb2f136f0f62",
     "tests/solana/package-lock.json": "24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6",
-    "tests/holochain/rave-engine/Cargo.lock": "e4f82e37be720566dcea35a59e3681777444cbe6584ad1c7b8730c2367f0f001"
+    "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
-  "lockBranchCaveat": "Root CI, OBS npm, RAVE Cargo locks owned and tracked on those branches; SOL npm lock only tracked on integration branch and must be reviewed/committed by SOL owner",
-  "testPolicy": "Fifteen explicit offline suites plus full OBS npm test, real SBPF/IDL, SOL validator lifecycle and retained-ledger restart, genuine RAVE Rust crate tests; zero failures/skips",
-  "priorSuccessfulEvidence": {
-    "commit": "57ed7b34c0f902b90780b3216f24578609132f7b",
-    "run": 43505857690,
-    "warning": "OLDER snapshot: not latest proof"
+  "sourceLockReview": "RAVE new direct serde/zfuel references already existed as transitive pinned packages; generated graph compared linewise with old lock, digest computed from current source. Current-head locked execution still unverified.",
+  "testPolicy": "16 explicit offline suites including RAVE provenance journal; full OBS npm test; strict real SBPF/IDL; SOL localnet lifecycle/restart; RAVE published crate; SEC/shadow; zero failures, unjustified skips and missing artifacts",
+  "previousFailingExecution": {
+    "commit": "24b60e72ac78afbab5562c605094c3146bddd653",
+    "ciRun": 43510726021,
+    "validatorRaveRun": 43510726154,
+    "offline": {
+      "tests": 117,
+      "pass": 110,
+      "fail": 7,
+      "skip": 0
+    },
+    "observer": {
+      "tests": 45,
+      "pass": 38,
+      "fail": 7,
+      "skip": 0
+    },
+    "raveRust": {
+      "tests": 8,
+      "pass": 7,
+      "fail": 1,
+      "skip": 0
+    },
+    "solana": "blocked at CommonJS import before enhanced scenarios"
   },
-  "latestExecutionStatus": "UNVERIFIED UNTIL NEW IMMUTABLE SHA WORKFLOW FINISHES",
-  "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP",
+  "latestExecutionStatus": "NEW SNAPSHOT UNEXECUTED AT FREEZE — require immutable-head Actions logs; older green is not proof",
+  "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13"
 }

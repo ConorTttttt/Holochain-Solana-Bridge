@@ -87,20 +87,43 @@ export function decodeFinalizedWire(rpcTransaction, signature) {
   const tx = getTransactionDecoder().decode(getBase64Encoder().encode(encoded[0]));
   const compiledMessage = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
   need(compiledMessage.version === rpcTransaction.version, 'RPC transaction version contradicts signed wire');
-  need(tx.signatures instanceof Map && tx.signatures.size >= 1, 'missing signed transaction signatures');
-  const first = [...tx.signatures.values()][0];
-  need(first && encode58(first) === signature, 'transaction signature does not match signed bytes');
+  // Kit 8.6's SignaturesMap is an address-keyed object, NOT a JS Map.
+  // Bind the transaction id to the actual first static signer (the fee payer),
+  // rather than relying on JSON property enumeration order.
+  const signatures = tx.signatures;
+  need(signatures && typeof signatures === 'object' && !Array.isArray(signatures) &&
+    !(signatures instanceof Map), 'missing signed transaction signatures');
+  const signerAddresses = Object.keys(signatures);
   const header = compiledMessage.header;
-  need(Number.isInteger(header?.numSignerAccounts) && header.numSignerAccounts === tx.signatures.size,
-    'header/signature count mismatch');
+  need(Number.isInteger(header?.numSignerAccounts) && header.numSignerAccounts > 0 &&
+    header.numSignerAccounts <= compiledMessage.staticAccounts.length &&
+    signerAddresses.length === header.numSignerAccounts &&
+    compiledMessage.staticAccounts.slice(0, header.numSignerAccounts)
+      .every(address => Object.hasOwn(signatures, address)),
+    'header/signature signer mismatch');
+  const first = signatures[compiledMessage.staticAccounts[0]];
+  need(first instanceof Uint8Array && first.length === 64 && encode58(first) === signature,
+    'transaction signature does not match signed bytes');
   const loaded = rpcTransaction.meta.loadedAddresses;
-  if (rpcTransaction.version === 0 && compiledMessage.addressTableLookups?.length) {
-    need(loaded && Array.isArray(loaded.writable) && Array.isArray(loaded.readonly),
-      'v0 address lookup resolution unavailable');
-  }
-  if (rpcTransaction.version === 1) {
-    need(!compiledMessage.addressTableLookups?.length && !loaded?.writable?.length && !loaded?.readonly?.length,
-      'v1 transaction must not use address lookup tables');
+  if (rpcTransaction.version === 0) {
+    const tables = compiledMessage.addressTableLookups || [];
+    const counts = tables.reduce((sum, table) => {
+      need(Array.isArray(table.writableIndexes) && Array.isArray(table.readonlyIndexes),
+        'invalid signed v0 address lookup table shape');
+      sum.writable += table.writableIndexes.length;
+      sum.readonly += table.readonlyIndexes.length;
+      return sum;
+    }, {writable:0, readonly:0});
+    const writable = loaded?.writable || [];
+    const readonly = loaded?.readonly || [];
+    need(Array.isArray(writable) && Array.isArray(readonly) &&
+      writable.length === counts.writable && readonly.length === counts.readonly,
+      'v0 address lookup resolution unavailable/inconsistent with signed indexes');
+    for (const address of [...writable,...readonly]) addressBytes(address);
+  } else {
+    need(!compiledMessage.addressTableLookups?.length &&
+      !loaded?.writable?.length && !loaded?.readonly?.length,
+      'non-v0 transaction cannot contain address lookup table keys');
   }
   const instructions = [...walkInstructions({compiledMessage,loadedAddresses:loaded,meta:{...rpcTransaction.meta,innerInstructions:rpcTransaction.meta.innerInstructions || []}})];
   return {compiledMessage, instructions, bytes, transactionHash:hash(bytes), signedTransaction:tx};
@@ -112,10 +135,13 @@ export function decodeFinalizedWire(rpcTransaction, signature) {
 export async function verifyWireSignatures(decoded) {
   const {compiledMessage, signedTransaction} = decoded;
   const required=compiledMessage.staticAccounts.slice(0,compiledMessage.header.numSignerAccounts);
-  need(required.length>0 && signedTransaction.signatures.size===required.length,
+  const signatures = signedTransaction.signatures;
+  need(required.length > 0 && signatures && typeof signatures === 'object' &&
+    Object.keys(signatures).length === required.length &&
+    required.every(address => Object.hasOwn(signatures, address)),
     'required signer/signature count mismatch');
   for(const signer of required) {
-    const sig=signedTransaction.signatures.get(signer);
+    const sig=signatures[signer];
     need(sig && sig.length===64, 'missing required signer signature');
     const key=await getPublicKeyFromAddress(signer);
     need(await verifySignature(key,sig,signedTransaction.messageBytes),

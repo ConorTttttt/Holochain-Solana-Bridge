@@ -6,6 +6,7 @@ import { encode58 } from '../src/decode.mjs';
 import { deriveBridgeAddresses } from '../src/pda.mjs';
 import { attachReceiptObservation, decodeFinalizedWire, verifyDepositCandidates } from '../src/transaction.mjs';
 import { CLASSIC_TOKEN_PROGRAM } from '../src/verify.mjs';
+import { fetchFinalizedTransaction } from '../src/indexer.mjs';
 
 const program='FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG';
 const system='11111111111111111111111111111111';
@@ -118,6 +119,10 @@ test('Kit decodes signed legacy and v0 wire message formats',()=>{
     const decoded=decodeFinalizedWire(tx,tx.expectedSignature);
     assert.equal(decoded.compiledMessage.version,version);
     assert.equal(decoded.instructions.length,0);
+    // Regression: actual Kit 8.6 yields a SignaturesMap object, not a Map.
+    assert.equal(decoded.signedTransaction.signatures instanceof Map,false);
+    assert.deepEqual(Object.keys(decoded.signedTransaction.signatures),[depositor]);
+    assert.equal(decoded.signedTransaction.signatures[depositor].length,64);
   }
 });
 test('Kit decodes transaction-v1 message-first envelope with inline keys',()=>{
@@ -135,9 +140,9 @@ test('Kit decodes transaction-v1 message-first envelope with inline keys',()=>{
 });
 test('rejects unsupported version and mismatched signature/metadata',()=>{
   const tx=rpcFromMessage('legacy',message('legacy',[depositor],[],0),emptyMeta(1));
-  assert.throws(()=>decodeFinalizedWire({...tx,version:2},signature),/unsupported/);
+  assert.throws(()=>decodeFinalizedWire({...tx,version:2},tx.expectedSignature),/unsupported/);
   assert.throws(()=>decodeFinalizedWire(tx,'different'),/signature/);
-  assert.throws(()=>decodeFinalizedWire({...tx,meta:{...tx.meta,err:{InstructionError:[0,'bad']}}},signature),/failed/);
+  assert.throws(()=>decodeFinalizedWire({...tx,meta:{...tx.meta,err:{InstructionError:[0,'bad']}}},tx.expectedSignature),/failed/);
 });
 test('2 separate deposit instructions produce 2 immutable receipt identities and exact totals',async()=>{
   const {rpcTransaction,expected,receipts}=await twoDeposits();
@@ -209,4 +214,56 @@ test('v0 lookup-table address metadata must be fully resolved; refuses missing A
   assert.throws(()=>decodeFinalizedWire({
     ...tx,meta:{...tx.meta,loadedAddresses:undefined},
   },tx.expectedSignature),/lookup resolution unavailable/);
+  assert.throws(()=>decodeFinalizedWire({
+    ...tx,meta:{...tx.meta,loadedAddresses:{
+      writable:[pub(41),pub(43)],readonly:[pub(42)],
+    }},
+  },tx.expectedSignature),/lookup resolution unavailable\/inconsistent/);
+});
+
+
+test('RPC getTransaction and getBlock agree on signed wire, slot and numeric version negotiation',async()=>{
+  const tx=rpcFromMessage('legacy',message('legacy',[depositor],[],0),emptyMeta(1));
+  const block={blockhash,previousBlockhash:pub(17),parentSlot:499,transactions:[
+    {version:'legacy',transaction:tx.transaction,meta:tx.meta},
+  ]};
+  const calls=[];
+  const mock=async(_url,options)=>{
+    const request=JSON.parse(options.body);
+    calls.push(request);
+    const result=request.method==='getGenesisHash' ? genesisHash :
+      request.method==='getTransaction' ? tx :
+      request.method==='getBlock' ? block : undefined;
+    return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+  };
+  const params={rpcUrl:'https://validator.example',signature:tx.expectedSignature,genesisHash};
+  const proof=await fetchFinalizedTransaction({...params,fetchFn:mock});
+  assert.equal(proof.blockhash,blockhash);
+  assert.equal(proof.finalizedClaim,true);
+  assert.equal(proof.creditEligible,false);
+  assert.equal(calls.find(x=>x.method==='getTransaction').params[1].maxSupportedTransactionVersion,1);
+  assert.equal(calls.find(x=>x.method==='getBlock').params[1].maxSupportedTransactionVersion,1);
+  assert.equal(calls.find(x=>x.method==='getBlock').params[1].commitment,'finalized');
+
+  const altered={...block,transactions:[{...block.transactions[0],meta:{...tx.meta,fee:999}}]};
+  const contradict=async(_url,options)=>{
+    const req=JSON.parse(options.body);
+    const result=req.method==='getGenesisHash' ? genesisHash :
+      req.method==='getTransaction' ? tx : altered;
+    return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+  };
+  await assert.rejects(fetchFinalizedTransaction({...params,fetchFn:contradict}),
+    /contradicts containing finalized getBlock/);
+
+  // A malformed unrelated entry invalidates the whole reported block; it must
+  // never be ignored merely because the matching transaction is also present.
+  const incomplete={...block,transactions:[...block.transactions,{}]};
+  const malformed=async(_url,options)=>{
+    const req=JSON.parse(options.body);
+    const result=req.method==='getGenesisHash' ? genesisHash :
+      req.method==='getTransaction' ? tx : incomplete;
+    return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+  };
+  await assert.rejects(fetchFinalizedTransaction({...params,fetchFn:malformed}),
+    /raw transaction missing/);
 });

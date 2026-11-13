@@ -68,7 +68,7 @@ printf '%s\n' "$program_id" > target/localnet-evidence/program-id.txt
 
 # Both test commands are required. npm dependency resolution must succeed,
 # not silently skip. The on-chain suite refuses the public placeholder ID.
-npm --prefix tests/solana ci --ignore-scripts --no-audit --no-fund
+npm --prefix tests/solana ci --no-audit --no-fund
 npm --prefix tests/solana test
 # Each mode requires an EMPTY validator ledger, because config PDA is
 # singleton: the first-initializer attack and full-u64 mint cannot run after

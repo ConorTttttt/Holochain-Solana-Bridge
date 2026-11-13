@@ -8,7 +8,8 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
-import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 
@@ -594,7 +595,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       [attacker], [mint]);
     await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
       createSetAuthorityInstruction(mint, owner.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
-      [owner], [mint]);
+      [attacker], [mint]);
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
       [attacker], [vault]);

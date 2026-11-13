@@ -869,7 +869,9 @@ version = "0.0.0"
 dependencies = [
  "rave_engine",
  "rmp-serde",
+ "serde",
  "serde_json",
+ "zfuel",
 ]
 
 [[package]]

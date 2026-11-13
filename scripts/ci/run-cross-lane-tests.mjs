@@ -20,6 +20,7 @@ const cases = [
   ['rave-attack-model', 'tests/holochain/economic-attack-model.test.mjs'],
   ['rave-test-only-adapter', 'tests/holochain/test-only-adapter.test.mjs'],
   ['rave-transaction-shadow', 'tests/holochain/transaction-shadow.test.mjs'],
+  ['rave-provenance-journal', 'tests/holochain/transaction-provenance-journal.test.mjs'],
 ];
 const integrated = existsSync('ci-integration-snapshot.json');
 mkdirSync('ci-artifacts', { recursive: true });

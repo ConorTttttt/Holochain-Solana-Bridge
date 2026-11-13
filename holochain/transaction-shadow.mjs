@@ -9,6 +9,7 @@ import { reviewShadow } from './shadow-review.mjs';
 const isText = x => typeof x === 'string' && x.length > 0;
 const isDigest = x => typeof x === 'string' && /^[a-f0-9]{64}$/.test(x);
 const isSlot = x => Number.isSafeInteger(x) && x > 0;
+const isSafePathIndex = x => Number.isSafeInteger(Number(x));
 const fields = [
   'id', 'program', 'receiptAddress', 'configAddress', 'vaultAddress',
   'mint', 'depositor', 'recipientCore', 'holochainScope',
@@ -21,6 +22,7 @@ function deny(evidence, findings) {
     evidenceId: isText(evidence?.id) ? evidence.id : null,
     creditEligible: false, spendableBaseUnits: '0',
     withdrawalAuthorized: false, proofStatus: 'untrusted-rpc-transaction-envelope',
+    independentConsensusVerified: false, conductorExecuted: false,
   });
 }
 
@@ -69,6 +71,26 @@ export function reviewShadowEvidence(evidence, binding, journal) {
        evidence.cpiPath.split(':')[1] !== evidence.instructionPath.split(':')[1])) {
     flag('TX_INVALID_CPI_PATH');
   }
+  const outer = /^outer:(0|[1-9][0-9]*)$/.exec(evidence.instructionPath || '');
+  const inner = /^inner:(0|[1-9][0-9]*):(0|[1-9][0-9]*)$/.exec(evidence.cpiPath || '');
+  if ((outer && !isSafePathIndex(outer[1])) ||
+      (inner && (!isSafePathIndex(inner[1]) || !isSafePathIndex(inner[2])))) {
+    flag('TX_UNSAFE_INSTRUCTION_INDEX');
+  }
+  if (journal instanceof Map) {
+    const prior = journal.get(evidence.id);
+    if (prior?.occurrenceId && prior.occurrenceId !== evidence.occurrenceId) {
+      flag('TX_CONFLICTING_OCCURRENCE');
+    }
+    if (prior?.transactionHash && prior.transactionHash !== evidence.transactionHash) {
+      flag('TX_CONFLICTING_TRANSACTION_HASH');
+    }
+    for (const [id, recorded] of journal) {
+      if (id !== evidence.id && recorded?.occurrenceId === evidence.occurrenceId) {
+        flag('TX_DUPLICATE_INSTRUCTION_OCCURRENCE');
+      }
+    }
+  }
   if (evidence.transactionVerified !== true ||
       evidence.verifiedByRpcClaim !== true ||
       evidence.independentConsensusVerified !== false ||
@@ -83,10 +105,18 @@ export function reviewShadowEvidence(evidence, binding, journal) {
   // Review the nested receipt before writing an inert, local-only journal entry.
   // Even when its parent envelope claims locally verified signatures, RAVE has
   // NOT rerun that verification or observed independent Solana consensus.
-  const reviewed = reviewShadow(snapshot, binding, journal);
+  const staged = journal instanceof Map ? new Map(journal) : journal;
+  const reviewed = reviewShadow(snapshot, binding, staged);
+  if (reviewed.verdict === 'quarantined' && journal instanceof Map) {
+    journal.set(evidence.id, {
+      ...staged.get(evidence.id), occurrenceId: evidence.occurrenceId,
+      transactionHash: evidence.transactionHash,
+    });
+  }
   return Object.freeze({
     ...reviewed,
     findings: Object.freeze([...reviewed.findings, 'RPC_TX_EVIDENCE_NOT_CONSENSUS_PROOF']),
     proofStatus: 'untrusted-rpc-transaction-envelope',
+    independentConsensusVerified: false, conductorExecuted: false,
   });
 }
