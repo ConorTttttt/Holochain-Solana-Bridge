@@ -106,6 +106,14 @@ async function saveTransactionEvidence() {
     const transactionResponse = await rawPublicRpc('getTransaction', [signature, {
       commitment: 'finalized', encoding: 'json', maxSupportedTransactionVersion: 0,
     }]);
+    // CI-only witness capture: raw signed wire from genuine finalized Solana RPC.
+    // Keep this additive instrumentation source-owned after SOL review/backport.
+    const wireTransactionResponse = await rawPublicRpc('getTransaction', [signature, {
+      commitment: 'finalized', encoding: 'base64', maxSupportedTransactionVersion: 0,
+    }]);
+    assert.ok(Array.isArray(wireTransactionResponse.parsed.result?.transaction) &&
+      wireTransactionResponse.parsed.result.transaction[1] === 'base64',
+      'missing genuine signed transaction wire bytes');
     const rawTx = transactionResponse.parsed.result;
     assert.equal(rawTx.slot, tx.slot, 'SDK/raw getTransaction slot disagreement');
     assert.ok(rawTx.transaction?.signatures?.includes(signature), 'RPC transaction signature missing');
@@ -114,6 +122,15 @@ async function saveTransactionEvidence() {
       commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
       rewards: false, maxSupportedTransactionVersion: 0,
     }]);
+    const wireBlockResponse = await rawPublicRpc('getBlock', [tx.slot, {
+      commitment: 'finalized', encoding: 'base64', transactionDetails: 'full',
+      rewards: false, maxSupportedTransactionVersion: 0,
+    }]);
+    assert.ok(Array.isArray(wireBlockResponse.parsed.result?.transactions) &&
+      wireBlockResponse.parsed.result.transactions.length > 0 &&
+      wireBlockResponse.parsed.result.transactions.every(item =>
+        Array.isArray(item.transaction) && item.transaction[1] === 'base64'),
+      'missing complete finalized block signed-wire transaction list');
     const block = blockResponse.parsed.result;
     assert.ok(block.blockhash, 'finalized local-validator block unavailable: ' + signature);
     const included = block.transactions.find((item) =>
@@ -123,6 +140,8 @@ async function saveTransactionEvidence() {
       'getBlock and getTransaction execution disagreement: ' + signature);
     const txFile = savePublicRpc('getTransaction-' + signature + '.rpc.json', transactionResponse);
     const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
+    const wireTxFile = savePublicRpc('getTransactionWire-' + signature + '.rpc.json', wireTransactionResponse);
+    const wireBlockFile = savePublicRpc('getBlockWire-' + tx.slot + '.rpc.json', wireBlockResponse);
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
       previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
@@ -132,6 +151,7 @@ async function saveTransactionEvidence() {
         preTokenBalances: rawTx.meta.preTokenBalances,
         postTokenBalances: rawTx.meta.postTokenBalances },
       getTransactionRawFile: txFile, getBlockRawFile: blockFile,
+      getTransactionWireFile: wireTxFile, getBlockWireFile: wireBlockFile,
     });
   }
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);

@@ -135,6 +135,16 @@ jobs:
           package-manager-cache: false
       - name: Install observer Solana SDK (if declared by OBS)
         run: bash scripts/ci/record.sh cross-lane-deps bash scripts/ci/install-node-deps.sh observer
+      - name: Install pinned Solana SDK for required signer regression suite
+        run: |
+          if [ -f tests/solana/package-lock.json ]; then
+            bash scripts/ci/record.sh cross-lane-solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+          elif [ -f ci-integration-snapshot.json ]; then
+            echo 'REQUIRED Solana SDK lock missing from integrated checkout' >&2
+            exit 1
+          else
+            echo 'NOT_PRESENT: specialist Solana tests are required on the integration PR, not the CI-only PR'
+          fi
       # Anchor's real SBPF/IDL job produces the only accepted IDL. This also
       # makes the same required IDL check actionable on the integrated PR.
       # Missing artifacts remain a red required test in integration mode.
