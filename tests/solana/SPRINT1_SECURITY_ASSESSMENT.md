@@ -18,8 +18,13 @@ observe an actual confirmed transaction with `getTransaction().meta.err` is
 a **test failure**; a JavaScript instruction construction error, simulation
 failure or rejected preflight is not valid on-chain attack evidence.
 
-The normal lifecycle mode asserts the exact account data and canonical
-depositor+nonce receipt PDA for every tracked receipt after both-wallet
+The normal lifecycle mode independently enumerates all existing
+218-byte receipt accounts with `getProgramAccounts`, decodes them from RPC
+bytes, rederives each canonical PDA and reconstructs the aggregate of all
+non-refunded receipt amounts. That scanned sum must equal `config.total_active`
+and the classic SPL vault amount after every major state transition. It
+also asserts the exact account data and canonical depositor+nonce receipt
+PDA for every tracked receipt after both-wallet
 deposits, negative transactions, partial aggregate refunds, concurrent
 same-wallet nonce competition and final refunds. Negative tests compare raw
 config, vault, token account and target receipt data and lamports before and
