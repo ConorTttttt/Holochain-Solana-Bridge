@@ -49,6 +49,8 @@ test('rejects inconsistent duplicate and leaves durable bytes and cursor unchang
   const before=readFileSync(filename,'utf8');
   assert.throws(()=>ledger.commit({checkpoint:22,evidence:[{...fixture(1),amountBaseUnits:'1'}]}),
     /conflicting duplicate receipt identity/);
+  assert.throws(()=>ledger.commit({checkpoint:22,evidence:[{...fixture(1),recipientCore:'unexpected'}]}),
+    /conflicting duplicate receipt identity or evidence bytes/);
   assert.throws(()=>ledger.commit({checkpoint:22,block:{slot:21,blockhash:'fork'}}),
     /conflicting finalized blockhash/);
   assert.equal(ledger.checkpoint,21);
