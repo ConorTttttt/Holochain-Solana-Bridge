@@ -9,7 +9,7 @@ import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, mintTo } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
@@ -33,6 +33,17 @@ async function recordUpgradeAuthority() {
   const upgradeAuthority = data[12] === 1 ? new PublicKey(data.subarray(13, 45)).toBase58() : null;
   transactionEvidence.push({ label: 'observed-deployment-upgrade-authority-not-governed',
     programDataAddress: programDataAddress.toBase58(), upgradeAuthority });
+}
+async function recordMintAuthorities(label, mintAddress) {
+  const mint = await getMint(connection, mintAddress, 'confirmed', TOKEN_PROGRAM_ID);
+  assert.equal(mint.freezeAuthority, null, label + ': freeze-enabled mint is outside scope');
+  transactionEvidence.push({
+    label: 'observed-localnet-mint-authorities-' + label,
+    mint: mintAddress.toBase58(),
+    mintAuthority: mint.mintAuthority?.toBase58() ?? null,
+    freezeAuthority: mint.freezeAuthority?.toBase58() ?? null,
+    decimals: mint.decimals, supply: mint.supply.toString(),
+  });
 }
 const scope = Array(32).fill(7);
 const recipient = Array(32).fill(9);
@@ -251,6 +262,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   await fund(attacker);
   const mint = await createMint(connection, owner, owner.publicKey, null, 6, undefined,
     { commitment: 'confirmed' }, TOKEN_PROGRAM_ID);
+  await recordMintAuthorities('lifecycle', mint);
   const [vault] = vaultFor(mint);
   const source = await createAccount(connection, owner, mint, owner.publicKey);
   const strangerSource = await createAccount(connection, attacker, mint, attacker.publicKey);
@@ -631,11 +643,14 @@ test('isolated first-initializer capture attack (not safe for public deployment)
   timeout: 150_000, skip: mode !== 'init-capture'
 }, async () => {
   assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
+  await recordUpgradeAuthority();
   assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
   const operator = Keypair.generate(), attacker = Keypair.generate();
   await fund(operator); await fund(attacker);
   const maliciousMint = await createMint(connection, attacker, attacker.publicKey, null, 6);
   const operatorMint = await createMint(connection, operator, operator.publicKey, null, 6);
+  await recordMintAuthorities('attacker-chosen', maliciousMint);
+  await recordMintAuthorities('intended-operator', operatorMint);
   const maliciousScope = Array(32).fill(42);
   const firstIx = await program.methods.initialize(maliciousScope).accountsStrict({
     admin: attacker.publicKey, config, mint: maliciousMint, vault: vaultFor(maliciousMint)[0],
@@ -675,10 +690,12 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   timeout: 150_000, skip: mode !== 'u64-max'
 }, async () => {
   assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
+  await recordUpgradeAuthority();
   assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
   const admin = Keypair.generate();
   await fund(admin);
   const mint = await createMint(connection, admin, admin.publicKey, null, 6);
+  await recordMintAuthorities('u64-boundary', mint);
   const source = await createAccount(connection, admin, mint, admin.publicKey);
   const destination = await createAccount(connection, admin, mint, admin.publicKey, Keypair.generate());
   const [vault] = vaultFor(mint);
