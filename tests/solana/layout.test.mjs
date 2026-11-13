@@ -137,4 +137,42 @@ test('when generated, IDL discriminators and account fields match observer schem
       assert.ok(type, 'missing Anchor IDL type ' + name);
       assert.deepEqual(type.type.fields.map((f) => f.name), fields);
     }
+
+    // The executable's generated IDL must carry the exact Borsh types, not
+    // merely identical field names. Bytes32 here means [u8;32], not a String.
+    const expectedTypes = new Map([
+      ['BridgeConfig', ['pubkey', 'pubkey', { array: ['u8', 32] }, 'bool', 'u64', 'u8']],
+      ['DepositReceipt', [
+        'pubkey', 'pubkey', 'pubkey', 'pubkey', { array: ['u8', 32] },
+        { array: ['u8', 32] }, 'u64', 'u64', 'bool', 'u8',
+      ]],
+    ]);
+    for (const [name, types] of expectedTypes) {
+      const type = idl.types.find((a) => a.name === name);
+      assert.deepEqual(type.type.fields.map((f) => f.type), types, name + ' Borsh types changed');
+    }
+
+    // Assert the actual generated instruction metadata, including the
+    // little-endian nonce argument seed, rather than deriving from comments.
+    const c = (v) => ({ kind: 'const', value: [...Buffer.from(v)] });
+    const a = (v) => ({ kind: 'account', path: v });
+    const arg = (v) => ({ kind: 'arg', path: v });
+    function actualPda(instruction, account) {
+      const ix = idl.instructions.find((i) => i.name === instruction);
+      assert.ok(ix, 'missing instruction ' + instruction);
+      const acct = ix.accounts.find((entry) => entry.name === account);
+      assert.ok(acct?.pda, instruction + '.' + account + ' lacks generated PDA metadata');
+      return acct.pda.seeds.map((seed) => ({
+        kind: seed.kind, ...(seed.value === undefined ? {} : { value: seed.value }),
+        ...(seed.path === undefined ? {} : { path: seed.path }),
+      }));
+    }
+    for (const ix of ['initialize', 'deposit', 'refund']) {
+      assert.deepEqual(actualPda(ix, 'config'), [c('config')]);
+      assert.deepEqual(actualPda(ix, 'vault'), [c('vault'), a('mint')]);
+    }
+    assert.deepEqual(actualPda('deposit', 'receipt'),
+      [c('deposit'), a('depositor'), arg('nonce')]);
+    assert.deepEqual(actualPda('refund', 'receipt'),
+      [c('deposit'), a('depositor'), a('receipt.nonce')]);
   });
