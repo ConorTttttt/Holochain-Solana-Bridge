@@ -438,6 +438,12 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       [attacker], [r1, r2]);
     await rejectedWithoutChanges('unauthorized mintTo rejected',
       createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint]);
+    await rejectedWithoutChanges('mint authority reassignment by non-authority rejected',
+      createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.MintTokens, attacker.publicKey),
+      [attacker], [mint]);
+    await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
+      createSetAuthorityInstruction(mint, owner.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
+      [owner], [mint]);
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
       [attacker], [vault]);
