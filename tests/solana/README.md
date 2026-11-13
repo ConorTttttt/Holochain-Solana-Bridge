@@ -5,8 +5,8 @@ use real tokens, enable Holochain credit, or commit wallet/program keypairs.
 
 ## Proposed pinned toolchain (NOT independently build-verified)
 
-- Host Rust `1.89.0` from `rust-toolchain.toml` (IDL builds may use a
-  separate nightly selected by Anchor/AVM).
+- Host Rust `1.95.0` from `rust-toolchain.toml` (IDL builds may use a
+  separate nightly selected by Anchor/AVM). Rust 1.91 fails installing Anchor CLI 1.2.2\n  because `solana-sbpf 0.23.0` invokes `Layout::dangling_ptr`, stable in 1.95.
 - Anchor CLI, `anchor-lang`, `anchor-spl` = `1.2.2`.
 - Solana CLI `=4.1.2` from `Anchor.toml`.
 - Recommended Solana platform-tools `v1.57`, SBPF architecture `v3`.
