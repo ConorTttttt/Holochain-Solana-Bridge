@@ -63,7 +63,10 @@ async function fund(keypair) {
   await connection.confirmTransaction(signature, 'confirmed');
 }
 async function rejectsInstruction(buildIx, signers, message) {
-  await assert.rejects(async () => send(await buildIx(), signers), message);
+  // The ix builder MUST succeed. Otherwise a client-side encoding error
+  // could masquerade as a program-level rejected transaction.
+  const ix = await buildIx();
+  await assert.rejects(async () => send(ix, signers), message);
 }
 const same = (a, b) => assert.equal(a.toBase58(), b.toBase58());
 
