@@ -4,7 +4,7 @@
  * No public RPC or real-value tokens.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
@@ -20,6 +20,32 @@ const scope = Array(32).fill(7);
 const recipient = Array(32).fill(9);
 const nonce = new BN('42017');
 const amount = 250_000n;
+// Evidence files contain only public keys and publicly readable Solana account
+// bytes. Never serialize, log or upload payer/depositor private keypairs.
+async function capturePublicAccountFixture(label, keys, signatures) {
+  const result = await connection.getMultipleAccountsInfoAndContext(keys, 'finalized');
+  assert.ok(result.value.every(Boolean), 'finalized evidence snapshot is missing an account');
+  const fixture = {
+    kind: 'localnet-finalized-rpc-account-snapshot-not-consensus-proof',
+    label,
+    genesisHash: await connection.getGenesisHash(),
+    programId: programId.toBase58(),
+    slot: result.context.slot,
+    signatures,
+    accounts: result.value.map((account, index) => ({
+      address: keys[index].toBase58(),
+      owner: account.owner.toBase58(),
+      lamports: account.lamports,
+      executable: account.executable,
+      dataBase64: Buffer.from(account.data).toString('base64'),
+    })),
+  };
+  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL(label + '.json', directory), JSON.stringify(fixture, null, 2) + '\n', { mode: 0o600 });
+  return fixture;
+}
+
 const [config, configBump] = PublicKey.findProgramAddressSync([Buffer.from('config')], programId);
 const vaultFor = (mint) => PublicKey.findProgramAddressSync([Buffer.from('vault'), mint.toBuffer()], programId);
 const receiptFor = (owner, n) => {
@@ -88,6 +114,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   });
 
   const [receipt, receiptBump] = receiptFor(owner.publicKey, nonce);
+  let depositSignature; let refundSignature;
   const depositIx = ({ signer = owner.publicKey, mintKey = mint, from = source,
     vaultKey = vault, receiptKey = receipt, n = nonce, amt = amount, core = recipient } = {}) =>
     program.methods.deposit(n, core, new BN(amt.toString())).accountsStrict({
@@ -101,7 +128,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     }).instruction();
 
   await t.test('deposit creates nonce-keyed receipt and conserves base units', async () => {
-    await send(await depositIx(), [owner]);
+    depositSignature = await send(await depositIx(), [owner]);
+    await connection.confirmTransaction(depositSignature, 'finalized');
     const c = await program.account.bridgeConfig.fetch(config);
     const r = await program.account.depositReceipt.fetch(receipt);
     same(r.depositor, owner.publicKey);
@@ -116,6 +144,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     assert.equal(c.totalActive.toString(), amount.toString());
     assert.equal((await getAccount(connection, vault)).amount, amount);
     assert.equal((await getAccount(connection, source)).amount, 1_000_000n - amount);
+    await capturePublicAccountFixture('active-receipt', [receipt, config, vault, mint], { deposit: depositSignature });
   });
 
   await t.test('duplicate nonce, wrong signer, wrong mint and wrong source fail atomically', async () => {
@@ -153,13 +182,28 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await rejectsInstruction(
       () => depositIx({ n: newNonce, receiptKey: receiptFor(owner.publicKey, newNonce)[0] }),
       [owner], 'paused deposit must fail');
-    await send(await refundIx(), [owner]);
+    refundSignature = await send(await refundIx(), [owner]);
+    await connection.confirmTransaction(refundSignature, 'finalized');
     assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
     assert.equal((await getAccount(connection, vault)).amount, 0n);
     assert.equal((await getAccount(connection, recipientAccount)).amount, amount);
+    await capturePublicAccountFixture('refunded-receipt', [receipt, config, vault, mint],
+      { deposit: depositSignature, refund: refundSignature });
     await rejectsInstruction(() => refundIx(), [owner], 'second refund must fail');
     await send(await pauseIx(owner.publicKey, false), [owner]);
     await rejectsInstruction(() => depositIx(), [owner], 'nonce remains consumed after refund');
+    const maxNonce = new BN('18446744073709551615');
+    const [maxReceipt, maxBump] = receiptFor(owner.publicKey, maxNonce);
+    await send(await depositIx({ n: maxNonce, receiptKey: maxReceipt, amt: 1n }), [owner]);
+    const maxRecord = await program.account.depositReceipt.fetch(maxReceipt);
+    assert.equal(maxRecord.nonce.toString(), maxNonce.toString(), 'u64 max nonce did not roundtrip');
+    assert.equal(maxRecord.bump, maxBump);
+    assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '1');
+    assert.equal((await getAccount(connection, vault)).amount, 1n);
+    await send(await refundIx({ receiptKey: maxReceipt }), [owner]);
+    assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
+    assert.equal((await getAccount(connection, vault)).amount, 0n);
+
   });
 });
