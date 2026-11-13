@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   cross-lane-js:
+    needs: [solana-lifecycle]
+    if: always()
     name: Required SOL layout / SEC adversarial / RAVE shadow fixtures (real SDK)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -34,6 +36,15 @@ jobs:
         run: |
           bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
           bash scripts/ci/record.sh solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+      # IDL checks are REQUIRED: use genuine build output from the validator job,
+      # never a synthetic/fabricated IDL. On missing artifacts, continue to the
+      # strict cross-lane runner which reports the IDL skip as FAILURE.
+      - name: Retrieve generated Anchor IDL from real localnet build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: .
       - name: Execute all offline cross-lane suites; never accept hidden skips
         run: bash scripts/ci/record.sh cross-lane-suites node scripts/ci/run-cross-lane-tests.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
