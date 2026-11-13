@@ -79,4 +79,8 @@ for scenario in lifecycle init-capture u64-max; do
   BRIDGE_TEST_MODE="$scenario" NO_DNA=1 anchor test --skip-build --validator legacy \
     --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
 done
-echo "LOCALNET BUILD AND ALL THREE TRANSACTION SCENARIOS PASSED"
+# Separate two-process retained-ledger restart: it deploys the same compiled
+# ELF into a brand new disposable ledger, leaves a positive liability, kills
+# the validator, restarts WITHOUT --reset and reconstructs live receipts.
+bash tests/solana/restart-validator.sh
+echo "LOCALNET BUILD, THREE TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"
