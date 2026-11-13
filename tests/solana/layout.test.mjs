@@ -127,8 +127,8 @@ test('when generated, IDL discriminators and account fields match observer schem
   { skip: !existsSync(generatedIdl) && 'anchor build has not generated an IDL here' }, () => {
     const idl = JSON.parse(readFileSync(generatedIdl, 'utf8'));
     for (const [name, fields] of [
-      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'totalActive', 'bump']],
-      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipientCore', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
+      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'total_active', 'bump']],
+      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipient_core', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
     ]) {
       const account = idl.accounts.find((a) => a.name === name);
       assert.ok(account, 'missing Anchor IDL account ' + name);
