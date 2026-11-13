@@ -195,6 +195,54 @@ test('SEC-TX independent signed-wire and RPC trust-boundary probes', async t => 
       /contradicts containing finalized getBlock/);
   });
 
+  await t.test('real signed deposit-shaped wire rejects fabricated vault/source/CPI deltas',async()=>{
+    const depositor=signers[0].address, nonce=42n, amount=100n;
+    const pdas=await pda.deriveBridgeAddresses({program,mint,depositor,nonce});
+    const tokenProgram='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+    const keys=[depositor,pdas.config,pub(50),pdas.vault,pdas.receipt,mint,
+      tokenProgram,pub(0),program];
+    const u64=n=>{const b=Buffer.alloc(8);b.writeBigUInt64LE(n);return b;};
+    const instruction=Buffer.concat([
+      Buffer.from(createHash('sha256').update('global:deposit').digest().subarray(0,8)),
+      u64(nonce),Buffer.alloc(32,9),u64(amount)]);
+    const accounts=[0,1,5,2,3,4,6,7];
+    const compiled=Buffer.from([8,accounts.length,...accounts,instruction.length,
+      ...instruction]);
+    const message=Buffer.concat([
+      Buffer.from([1,0,4,keys.length]),...keys.map(addressBytes),
+      addressBytes(blockhash),Buffer.from([1]),compiled]);
+    const sig=edSign(null,message,signers[0].privateKey);
+    const wire=Buffer.concat([Buffer.from([1]),sig,message]);
+    const txMeta=meta(keys.length);
+    txMeta.preBalances[4]=0;txMeta.postBalances[4]=2039280;
+    const balance=(index,owner,value)=>({accountIndex:index,mint,owner,
+      programId:tokenProgram,uiTokenAmount:{amount:String(value),decimals:6}});
+    txMeta.preTokenBalances=[balance(2,depositor,1000),balance(3,pdas.config,0)];
+    txMeta.postTokenBalances=[balance(2,depositor,900),balance(3,pdas.config,100)];
+    const transfer=Buffer.concat([Buffer.from([12]),u64(amount),Buffer.from([6])]);
+    txMeta.innerInstructions=[{index:0,instructions:[{
+      programIdIndex:6,accounts:[2,5,3,0],data:encode58(transfer),stackHeight:2}]}];
+    const tx={version:'legacy',slot:500,transaction:[wire.toString('base64'),'base64'],
+      meta:txMeta,signature:encode58(sig)};
+    const verified=await verifyDepositCandidates(verifyArgs(tx));
+    assert.equal(verified.length,1);
+    assert.equal(verified[0].amountBaseUnits,'100');
+    assert.equal(verified[0].creditEligible,false);
+    assert.equal(verified[0].independentConsensusVerified,false);
+    const alterBalances=(which,index,value)=>({...tx,meta:{...txMeta,
+      [which]:txMeta[which].map(b=>b.accountIndex===index?{
+        ...b,uiTokenAmount:{...b.uiTokenAmount,amount:value}}:b)}});
+    await assert.rejects(verifyDepositCandidates(verifyArgs(
+      alterBalances('postTokenBalances',3,'99'))),/delta mismatch/);
+    await assert.rejects(verifyDepositCandidates(verifyArgs(
+      alterBalances('postTokenBalances',2,'901'))),/delta mismatch/);
+    const changedTransfer=Buffer.concat([Buffer.from([12]),u64(99n),Buffer.from([6])]);
+    const cpiChanged={...tx,meta:{...txMeta,innerInstructions:[{index:0,instructions:[{
+      ...txMeta.innerInstructions[0].instructions[0],data:encode58(changedTransfer)}]}]}};
+    await assert.rejects(verifyDepositCandidates(verifyArgs(cpiChanged)),
+      /SPL transfer amount mismatch/);
+  });
+
   await t.test('vault metadata is not signed; signature validation cannot authenticate RPC token deltas',async()=>{
     const tx=signed();
     const fraudulent={...tx,meta:{...tx.meta,
