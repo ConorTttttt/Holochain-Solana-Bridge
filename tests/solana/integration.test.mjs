@@ -386,6 +386,27 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
         assert.equal(decoded.mint, mint.toBase58());
         if (!record.refunded) expectedLiabilities += record.amount;
       }
+      // Independently reconstruct liabilities by enumerating the PROGRAM'S
+      // on-chain receipt bytes, not from the JS test's expected records.
+      // This provides recovery/indexer evidence but is NOT a validator restart.
+      const discovered = await connection.getProgramAccounts(programId, {
+        commitment: 'confirmed', filters: [{ dataSize: 218 }],
+      });
+      assert.equal(discovered.length, tracked.length, label + ': unexpected/missing chain receipts');
+      let recoveredLiabilities = 0n;
+      const expectedKeys = new Set(tracked.map((x) => receiptFor(x.who, x.n)[0].toBase58()));
+      for (const entry of discovered) {
+        const recovered = decodeReceipt(Buffer.from(entry.account.data));
+        const derived = receiptFor(new PublicKey(recovered.depositor), new BN(recovered.nonce))[0];
+        same(entry.pubkey, derived);
+        assert.ok(expectedKeys.has(entry.pubkey.toBase58()), label + ': unknown receipt');
+        assert.equal(recovered.config, config.toBase58());
+        assert.equal(recovered.vault, vault.toBase58());
+        assert.equal(recovered.mint, mint.toBase58());
+        if (!recovered.refunded) recoveredLiabilities += BigInt(recovered.amount);
+      }
+      assert.equal(recoveredLiabilities, expectedLiabilities, label + ': independent receipt scan');
+      assert.equal(BigInt(decodedConfig.totalActive), recoveredLiabilities, label + ': raw on-chain reconstruction');
       assert.equal(BigInt(decodedConfig.totalActive), expectedLiabilities, label + ': active receipt total');
       assert.equal(BigInt(decodedVault.amount), expectedLiabilities, label + ': vault balance');
       assert.ok(BigInt(decodedVault.amount) >= BigInt(decodedConfig.totalActive), label + ': insolvency');
