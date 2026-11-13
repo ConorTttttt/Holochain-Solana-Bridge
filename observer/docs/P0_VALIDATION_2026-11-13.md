@@ -1,5 +1,21 @@
 # Observer #13/#17 — P0 dependency-backed validation record (2026-11-13)
 
+## Latest P0 continuation — failing Ed25519 checkpoint regression (13 November 2026)
+
+**CI failure verified:** integrated workflow [43520698081](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43520698081), Observer job **132213906857**, ran **48 tests: 47 pass, 1 fail, 0 skipped** with the real pinned Kit dependency. Test `failed transactions require valid Ed25519 signatures before checkpoint advancement` raised `invalid/incomplete ordered slot listing` at the **restart** call (test line 156), *after* the expected forged-signature rejection and persisted slot-20 assertions. It is inaccurate to say this CI trace bypassed cryptography.
+
+**Root cause: fixture, not indexer.** The `rpcMock({bothProduced:true})` implementation returned `[20,21]` for **every** `getBlocks` invocation. A resumed scan requests the inclusive range `[21,21]`; slot 20 is out of range and correctly causes the indexer to fail closed. Commit `5411c3d` makes the fixture return only produced slots inside its requested inclusive bounds and leaves the strict indexer check unchanged.
+
+**Additional observer-only tests:** `8038360` exercises a genuine Node-crypto Ed25519 two-signer signed legacy wire for a failed transaction, forged second signer, zero-filled unsigned second signer, changed message with two signers, and an explicitly malicious out-of-range listing on restart. Each negative requires no checkpoint advancement past slot 20 and lock cleanup. `9441e89` asserts that the immutable receipt-attached downstream `solana-deposit-evidence-v1` record retains `transactionVerified:true`, `independentConsensusVerified:false`, `creditEligible:false`, receipt/occurrence identity and snapshot linkage; malformed or credit-eligible observations are refused. Existing tests still cover v0 ALT completeness, v1 wire decoding, contradictory getTransaction/getBlock metadata, unrelated forged transactions, skipped slots, provider disagreement, restart/replay, corrupt persisted ledger and crash recovery.
+
+**Retest evidence:** V8 parse of `observer/test/indexer.test.mjs` after removing ESM imports passed. This is syntax-only; **no real-SDK `npm ci && npm run check && npm test` execution has yet run on `9441e89`**. The previous CI 47/48 is a frozen predecessor, NOT a passing result for these changes. CI must run the exact latest Observer head (and snapshot it to integration without OBS editing CI files).
+
+**SOL provenance gate still open:** the newer integration [43520697998](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43520697998) published `integration-localnet-evidence-NO-KEYS` artifact `14083231222`. Inspection finds real account-snapshot JSON, IDL and SBPF build outputs, including `two-active-receipts.json` and `two-refunded-receipts.json`; the archive **does not contain full signed base64 `getTransaction` plus containing `getBlock` JSON files**. Its recorded snapshot `signatures` field is empty, so it cannot establish transaction provenance or be used as a forged wire fixture. SOL branch #35 now contains raw-RPC capture code, but its exact latest head must execute successfully in local-validator CI and publish the captured public-only `*.rpc.json` files. Also pin the generated program ID, compiled IDL SHA-256 and artifact source SHA to the exact run; the newer ephemeral validator program ID differs from earlier evidence. Until then no on-chain deposit attribution, historical validator-block replay or end-to-end evidence issuance may be claimed.
+
+**Status: DRAFT / NOT RELEASE-READY.** No wallet keys or secrets captured. The ledger is locally crash-consistent but its self-checksums are not authenticated consensus. No Solana withdrawal signing, Holochain value issuance, or credit-eligibility escalation. Agent 4 consumes this schema for shadow-mode review only.
+
+---
+
 **Status: PARTIAL / NOT ACCEPTED.** Existing PR #36 remains draft; the new transaction-aware, finalized-indexer and durable-ledger suites have **not** had a complete real-`@solana/kit@8.6.0` execution at the current OBS source SHA. No issuance, no withdrawal authorization and no mainnet assets.
 
 ## 21:53 UTC continuation — genuine integrated CI failure triage and OBS-only fix
