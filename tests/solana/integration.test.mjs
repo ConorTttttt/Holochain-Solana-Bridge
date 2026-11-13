@@ -10,6 +10,7 @@ import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, createAccount, createMint, getAccount, mintTo } from '@solana/spl-token';
+import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
 const connection = new Connection(RPC, 'confirmed');
@@ -62,7 +63,10 @@ async function fund(keypair) {
   await connection.confirmTransaction(signature, 'confirmed');
 }
 async function rejectsInstruction(buildIx, signers, message) {
-  await assert.rejects(async () => send(await buildIx(), signers), message);
+  // The ix builder MUST succeed. Otherwise a client-side encoding error
+  // could masquerade as a program-level rejected transaction.
+  const ix = await buildIx();
+  await assert.rejects(async () => send(ix, signers), message);
 }
 const same = (a, b) => assert.equal(a.toBase58(), b.toBase58());
 
@@ -116,6 +120,60 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   });
 
   const [receipt, receiptBump] = receiptFor(owner.publicKey, nonce);
+  // Compare real validator account bytes with the independent OBS decoder.
+  async function assertRawState(expectedTotal, expectedVault, records = []) {
+    const [configInfo, vaultInfo] = await connection.getMultipleAccountsInfo([config, vault], 'confirmed');
+    assert.ok(configInfo && vaultInfo, 'on-chain config/vault missing');
+    same(configInfo.owner, programId);
+    same(vaultInfo.owner, TOKEN_PROGRAM_ID);
+    assert.equal(configInfo.data.length, 114);
+    assert.equal(vaultInfo.data.length, 165);
+    assert.deepEqual(Buffer.from(configInfo.data.subarray(0, 8)), discriminator('BridgeConfig'));
+    const cfg = decodeConfig(Buffer.from(configInfo.data));
+    const token = decodeTokenAccount(Buffer.from(vaultInfo.data));
+    assert.equal(cfg.totalActive, expectedTotal.toString());
+    assert.equal(cfg.bump, configBump);
+    assert.equal(cfg.mint, mint.toBase58());
+    assert.equal(token.amount, expectedVault.toString());
+    assert.equal(token.mint, mint.toBase58());
+    assert.equal(token.authority, config.toBase58());
+    assert.equal(token.hasDelegate, false);
+    assert.equal(token.hasCloseAuthority, false);
+    assert.equal(Buffer.from(vaultInfo.data).readUInt32LE(109), 0, 'vault must not be native SOL');
+    if ('isNative' in token) assert.equal(token.isNative, false);
+    assert.ok(BigInt(token.amount) >= BigInt(cfg.totalActive));
+    for (const { key, n, value, refunded, bump } of records) {
+      same(key, receiptFor(owner.publicKey, n)[0]);
+      const info = await connection.getAccountInfo(key, 'confirmed');
+      assert.ok(info, 'expected receipt absent');
+      same(info.owner, programId);
+      assert.equal(info.data.length, 218);
+      assert.deepEqual(Buffer.from(info.data.subarray(0, 8)), discriminator('DepositReceipt'));
+      const decoded = decodeReceipt(Buffer.from(info.data));
+      assert.equal(decoded.depositor, owner.publicKey.toBase58());
+      assert.equal(decoded.mint, mint.toBase58());
+      assert.equal(decoded.vault, vault.toBase58());
+      assert.equal(decoded.config, config.toBase58());
+      assert.equal(decoded.scope, Buffer.from(scope).toString('hex'));
+      assert.equal(decoded.nonce, n.toString());
+      assert.equal(decoded.amount, value.toString());
+      assert.equal(decoded.refunded, refunded);
+      assert.equal(decoded.bump, bump);
+    }
+  }
+
+  // Rejected transactions must leave all tracked state byte-for-byte intact.
+  async function rejectsUnchanged(buildIx, signers, label) {
+    const tracked = [config, vault, receipt];
+    const before = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
+    await rejectsInstruction(buildIx, signers, label);
+    const after = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
+    for (let i = 0; i < tracked.length; i++) {
+      assert.deepEqual(after[i]?.data, before[i]?.data, label + ': account data changed');
+      assert.equal(after[i]?.lamports, before[i]?.lamports, label + ': account lamports changed');
+    }
+  }
+
   let depositSignature; let refundSignature;
   const depositIx = ({ signer = owner.publicKey, mintKey = mint, from = source,
     vaultKey = vault, receiptKey = receipt, n = nonce, amt = amount, core = recipient } = {}) =>
@@ -146,25 +204,27 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     assert.equal(c.totalActive.toString(), amount.toString());
     assert.equal((await getAccount(connection, vault)).amount, amount);
     assert.equal((await getAccount(connection, source)).amount, 1_000_000n - amount);
+    await assertRawState(amount, amount, [{ key: receipt, n: nonce, value: amount, refunded: false, bump: receiptBump }]);
     await capturePublicAccountFixture('active-receipt', [receipt, config, vault, mint], { deposit: depositSignature });
   });
 
   await t.test('duplicate nonce, wrong signer, wrong mint and wrong source fail atomically', async () => {
-    await rejectsInstruction(() => depositIx(), [owner], 'duplicate receipt nonce must fail');
-    await rejectsInstruction(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail');
-    await rejectsInstruction(() => depositIx({ from: strangerSource }), [owner], 'wrong source owner must fail');
+    await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail');
+    await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail');
+    await rejectsUnchanged(() => depositIx({ from: strangerSource }), [owner], 'wrong source owner must fail');
     const otherMint = await createMint(connection, owner, owner.publicKey, null, 6);
-    await rejectsInstruction(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
-    await rejectsInstruction(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
-    await rejectsInstruction(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail');
+    await rejectsUnchanged(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
+    await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
+    await rejectsUnchanged(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail');
+    await rejectsUnchanged(() => depositIx({ vaultKey: source }), [owner], 'substituted vault must fail');
     const boundNonce = new BN('42019');
-    await rejectsInstruction(
+    await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: 0n }),
       [owner], 'zero amount must fail');
-    await rejectsInstruction(
+    await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], core: Array(32).fill(0) }),
       [owner], 'zero recipient core must fail');
-    await rejectsInstruction(
+    await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: (1n << 64n) - 1n }),
       [owner], 'u64 maximum beyond funded balance must fail');
     assert.equal(await connection.getAccountInfo(receiptFor(owner.publicKey, boundNonce)[0]), null,
@@ -173,15 +233,16 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), amount.toString());
     assert.equal((await getAccount(connection, vault)).amount, amount);
     assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, false);
+    await assertRawState(amount, amount, [{ key: receipt, n: nonce, value: amount, refunded: false, bump: receiptBump }]);
   });
 
   await t.test('only admin pauses; deposits halt; refund works and is once-only', async () => {
     const pauseIx = (adminKey, paused) => program.methods.setPaused(paused)
       .accountsStrict({ admin: adminKey, config }).instruction();
-    await rejectsInstruction(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail');
+    await rejectsUnchanged(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail');
     await send(await pauseIx(owner.publicKey, true), [owner]);
     const newNonce = new BN('42018');
-    await rejectsInstruction(
+    await rejectsUnchanged(
       () => depositIx({ n: newNonce, receiptKey: receiptFor(owner.publicKey, newNonce)[0] }),
       [owner], 'paused deposit must fail');
     refundSignature = await send(await refundIx(), [owner]);
@@ -190,11 +251,12 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
     assert.equal((await getAccount(connection, vault)).amount, 0n);
     assert.equal((await getAccount(connection, recipientAccount)).amount, amount);
+    await assertRawState(0n, 0n, [{ key: receipt, n: nonce, value: amount, refunded: true, bump: receiptBump }]);
     await capturePublicAccountFixture('refunded-receipt', [receipt, config, vault, mint],
       { deposit: depositSignature, refund: refundSignature });
-    await rejectsInstruction(() => refundIx(), [owner], 'second refund must fail');
+    await rejectsUnchanged(() => refundIx(), [owner], 'second refund must fail');
     await send(await pauseIx(owner.publicKey, false), [owner]);
-    await rejectsInstruction(() => depositIx(), [owner], 'nonce remains consumed after refund');
+    await rejectsUnchanged(() => depositIx(), [owner], 'nonce remains consumed after refund');
     const maxNonce = new BN('18446744073709551615');
     const [maxReceipt, maxBump] = receiptFor(owner.publicKey, maxNonce);
     await send(await depositIx({ n: maxNonce, receiptKey: maxReceipt, amt: 1n }), [owner]);
@@ -203,9 +265,37 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     assert.equal(maxRecord.bump, maxBump);
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '1');
     assert.equal((await getAccount(connection, vault)).amount, 1n);
+    await assertRawState(1n, 1n, [{ key: maxReceipt, n: maxNonce, value: 1n, refunded: false, bump: maxBump }]);
     await send(await refundIx({ receiptKey: maxReceipt }), [owner]);
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
     assert.equal((await getAccount(connection, vault)).amount, 0n);
+    await assertRawState(0n, 0n, [{ key: maxReceipt, n: maxNonce, value: 1n, refunded: true, bump: maxBump }]);
 
+    // Verify additive accounting for two simultaneously live receipts, and
+    // partial refunds, not only the single-receipt happy path.
+    const nA = new BN('42020'); const nB = new BN('42021');
+    const [receiptA, bumpA] = receiptFor(owner.publicKey, nA);
+    const [receiptB, bumpB] = receiptFor(owner.publicKey, nB);
+    await send(await depositIx({ n: nA, receiptKey: receiptA, amt: 15_000n }), [owner]);
+    const secondDepositSig = await send(await depositIx({ n: nB, receiptKey: receiptB, amt: 9_000n }), [owner]);
+    await connection.confirmTransaction(secondDepositSig, 'finalized');
+    await assertRawState(24_000n, 24_000n, [
+      { key: receiptA, n: nA, value: 15_000n, refunded: false, bump: bumpA },
+      { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
+    ]);
+    await capturePublicAccountFixture('two-active-receipts', [receiptA, receiptB, config, vault, mint], {});
+    await send(await refundIx({ receiptKey: receiptA }), [owner]);
+    await assertRawState(9_000n, 9_000n, [
+      { key: receiptA, n: nA, value: 15_000n, refunded: true, bump: bumpA },
+      { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
+    ]);
+    await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail');
+    const finalRefundSig = await send(await refundIx({ receiptKey: receiptB }), [owner]);
+    await connection.confirmTransaction(finalRefundSig, 'finalized');
+    await assertRawState(0n, 0n, [
+      { key: receiptA, n: nA, value: 15_000n, refunded: true, bump: bumpA },
+      { key: receiptB, n: nB, value: 9_000n, refunded: true, bump: bumpB },
+    ]);
+    await capturePublicAccountFixture('two-refunded-receipts', [receiptA, receiptB, config, vault, mint], {});
   });
 });
