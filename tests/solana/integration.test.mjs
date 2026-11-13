@@ -126,6 +126,19 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await rejectsInstruction(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
     await rejectsInstruction(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
     await rejectsInstruction(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail');
+    const boundNonce = new BN('42019');
+    await rejectsInstruction(
+      () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: 0n }),
+      [owner], 'zero amount must fail');
+    await rejectsInstruction(
+      () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], core: Array(32).fill(0) }),
+      [owner], 'zero recipient core must fail');
+    await rejectsInstruction(
+      () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: (1n << 64n) - 1n }),
+      [owner], 'u64 maximum beyond funded balance must fail');
+    assert.equal(await connection.getAccountInfo(receiptFor(owner.publicKey, boundNonce)[0]), null,
+      'failed boundary transfers must not create a receipt');
+
     assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), amount.toString());
     assert.equal((await getAccount(connection, vault)).amount, amount);
     assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, false);
