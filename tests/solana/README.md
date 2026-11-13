@@ -3,10 +3,17 @@
 This folder is intentionally localnet-only. Never direct it at devnet/mainnet,
 use real tokens, enable Holochain credit, or commit wallet/program keypairs.
 
-## Proposed pinned toolchain (NOT independently build-verified)
+**Verified:** real Rust/SBPF compilation, generated localnet IDL, legacy
+`solana-test-validator` deployment and deposit/refund/negative tests **PASSED**
+in CI run [43499386297](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43499386297).
+Exact binary/IDL hashes, account bytes, public signatures and outstanding risks:
+[`VERIFIED_LOCALNET.md`](VERIFIED_LOCALNET.md).
+
+## Verified localnet toolchain (transitive lockfiles still pending)
 
 - Host Rust `1.95.0` from `rust-toolchain.toml` (IDL builds may use a
-  separate nightly selected by Anchor/AVM). Rust 1.91 fails installing Anchor CLI 1.2.2\n  because `solana-sbpf 0.23.0` invokes `Layout::dangling_ptr`, stable in 1.95.
+  separate nightly selected by Anchor/AVM). Rust 1.91 fails installing Anchor CLI 1.2.2
+  because `solana-sbpf 0.23.0` invokes `Layout::dangling_ptr`, stable in 1.95.
 - Anchor CLI, `anchor-lang`, `anchor-spl` = `1.2.2`.
 - Solana CLI `4.1.2` from `Anchor.toml`.
 - Recommended Solana platform-tools `v1.57`, SBPF architecture `v3`.
@@ -31,7 +38,21 @@ avm solana resolve
 avm platform-tools resolve
 ```
 
-From the repository root, work on the feature branch. The commands below
+**Preferred fully exercised command**, from a fresh isolated checkout with the
+pinned tools installed:
+
+```sh
+bash tests/solana/localnet-build.sh
+```
+
+The script refuses pre-existing program/payer keypairs, generates disposable
+local signing material in ignored `target/`, syncs public program IDs,
+compiles the SBPF ELF/IDL, hashes both, installs Node dependencies and runs
+both the offline layout check and **real** `anchor test --validator legacy`
+on a fresh local validator. It fails if any required command or test fails.
+
+Manual commands below are a reference only and must retain localnet
+restrictions. Work on the feature branch. The commands below
 generate disposable *local* private material outside version control and must
 not print key material to build logs:
 
@@ -76,7 +97,7 @@ a previously initialized ledger. Test keypairs are generated in RAM and funded
 with local-validator airdrops; the mint has **no freeze authority** and is
 a disposable classic SPL token.
 
-## Expected assertions (all validator cases currently NOT RUN)
+## Actual executed validator assertions (run 43499386297: PASS)
 
 Positive: initialize, PDA bumps/authority, deposit exact base units,
 receipt/balance/total_active reconciliation, pause, refund while paused.
@@ -86,10 +107,11 @@ duplicate nonce, wrong depositor, wrong source token owner, wrong mint,
 wrong refund destination, non-admin pause, deposit while paused, double
 refund and reusing a nonce after refund. Failed transfers must roll back.
 
-**Remaining work:** run `anchor build` and actual validator tests; capture
-the exact logs/version stdout; pin generated `Cargo.lock` and
-`tests/solana/package-lock.json` after dependency resolution; compare
-generated IDL with `OBSERVER_HANDOFF.md`; independently review first-init
+**Remaining work:** pin reviewed generated `Cargo.lock` and
+`tests/solana/package-lock.json` after dependency resolution; run OBS
+PR #36's v2 actual SDK/`isNative` decoder against the real binary/IDL and
+recorded account bytes in combined CI; independently review first-init
 front-running, unrestricted mint authority for disposable test tokens, and
-upgrade authority. The tests do not yet cover concurrent receipt creation,
-restarts, fork/rollback, or full validator failure recovery.
+upgrade authority. Existing passing tests do not yet cover simultaneous
+receipt creation, restarts, forks, rollback, full validator failure recovery,
+or production collateral/credit issuance (intentionally disabled).
