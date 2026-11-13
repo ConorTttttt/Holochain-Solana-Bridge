@@ -94,3 +94,9 @@ holochain/evidence-gate.mjs              Deliberate safety interlock
 - [Unyt system credit adjustment](https://github.com/unytco/smart_agreement_library/blob/main/library/__system_credit_limit_adjustment/execution_code.rhai)
 
 Do not copy HOT Raindex/EVM authorization code directly into Solana. This package intentionally does not claim that Raindex can run on Solana.
+
+## Development sprints and coding agents
+
+This is an actively planned but **not production-ready** proof of concept. See the [six-sprint roadmap](docs/SPRINTS.md), [Sprint 0 tracker](https://github.com/ConorTttttt/Holochain-Solana-Bridge/issues/1), [agent profiles](.github/agents/), [launch instructions](docs/START_AGENTS.md) and [parallel-work rules](AGENTS.md).
+
+**Start with #7 (SOL compile), #8 (OBS account audit), #9 (RAVE source mapping), #10 (SEC threat model) and #11 (CI workflows).** They can be worked concurrently by different agents on separate PR branches. The configured custom agents do not run automatically: assign tasks from GitHub's Issues / Agents interface when enabled. Do not enable Holochain credits or mainnet withdrawals to shortcut the security gates.
