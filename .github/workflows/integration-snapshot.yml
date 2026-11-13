@@ -1,0 +1,145 @@
+name: S0 cross-agent integration snapshot (NOT production)
+
+on:
+  pull_request:
+    branches: [agent/ci/11-build-pipeline]
+  push:
+    branches: [integration/s0/11-all-agent-snapshot]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s0-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-lane-js:
+    name: Required SOL layout / SEC adversarial / RAVE shadow fixtures (real SDK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Assert integration snapshot provenance exists
+        run: |
+          test -s ci-integration-snapshot.json
+          node -e 'const m=require("./ci-integration-snapshot.json"); if(!m.sources?.SOL || !m.sources?.OBS || !m.sources?.SEC || !m.sources?.RAVE)process.exit(1); console.log(JSON.stringify(m.sources))'
+      - name: Install actual Observer and Solana Node dependencies and record lock graph
+        run: |
+          bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
+          bash scripts/ci/record.sh solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+      - name: Execute all offline cross-lane suites; never accept hidden skips
+        run: bash scripts/ci/record.sh cross-lane-suites node scripts/ci/run-cross-lane-tests.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-cross-lane-js
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  rave-rust:
+    name: RAVE 0.15.0 real crate tests (NOT deployed DNA)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTUP_TOOLCHAIN: '1.95.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - name: Install pinned Rust
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh rave-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustc --version
+      - name: Run actual published-crate API harness outside root workspace
+        run: |
+          set -euo pipefail
+          test -s tests/holochain/rave-engine/Cargo.toml
+          mkdir -p ci-artifacts
+          tmp="$(mktemp -d -t rave-engine-s0.XXXXXXXX)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          cp -R tests/holochain/rave-engine/. "$tmp/"
+          bash scripts/ci/record.sh rave-rust-tests cargo test --manifest-path "$tmp/Cargo.toml" --all-targets
+          test -s "$tmp/Cargo.lock"
+          cp "$tmp/Cargo.lock" ci-artifacts/rave-engine-Cargo.lock
+          sha256sum ci-artifacts/rave-engine-Cargo.lock | tee ci-artifacts/rave-engine-lock.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-rave-rust
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  solana-lifecycle:
+    name: Real local-validator Anchor lifecycle (SOL runner; disposable only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      RUSTUP_TOOLCHAIN: '1.95.0'
+      NO_DNA: '1'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install host Rust 1.95.0
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh sol-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
+      - name: Install pinned Solana CLI 4.1.2
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install pinned Anchor CLI from tagged lockfile
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
+      - name: Capture pinned runtime versions
+        run: bash scripts/ci/record.sh integration-versions bash scripts/ci/tool-versions.sh
+      - name: Run real localnet build, deploy and transaction assertions (SOL-owned script)
+        run: bash scripts/ci/record.sh localnet-build bash tests/solana/localnet-build.sh
+      - name: Record public artifact SHA and build status (never keys)
+        if: always()
+        run: |
+          mkdir -p ci-artifacts
+          if [ -s target/idl/deposit_prototype.json ]; then
+            sha256sum target/idl/deposit_prototype.json | tee ci-artifacts/localnet-idl.sha256
+          else
+            echo "NOT GENERATED: localnet IDL" | tee ci-artifacts/localnet-idl.status
+          fi
+          if [ -s target/deploy/deposit_prototype.so ]; then
+            sha256sum target/deploy/deposit_prototype.so | tee ci-artifacts/localnet-program.sha256
+          else
+            echo "NOT GENERATED: SBPF program binary" | tee ci-artifacts/localnet-program.status
+          fi
+          if [ -s Cargo.lock ]; then
+            sha256sum Cargo.lock | tee ci-artifacts/localnet-Cargo-lock.sha256
+            cp Cargo.lock ci-artifacts/localnet-Cargo.lock
+          fi
+          if [ -s tests/solana/package-lock.json ]; then
+            sha256sum tests/solana/package-lock.json | tee ci-artifacts/solana-package-lock.sha256
+            cp tests/solana/package-lock.json ci-artifacts/solana-package-lock.json
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: |
+            ci-artifacts/
+            target/idl/deposit_prototype.json
+            target/deploy/deposit_prototype.so
+            target/localnet-evidence/*.txt
+          if-no-files-found: error
+          retention-days: 14
