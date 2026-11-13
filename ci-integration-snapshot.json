@@ -1,31 +1,29 @@
 {
-  "status": "integration-only",
+  "status": "integration-only / DO NOT MERGE",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "0a636fbda3e6a48f836626530466723a8239be79"
+    "sha": "10b903afa31eed3f9600943b43c5409d1b257498"
   },
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "fef5bdb005bd4e4858a723ef771733cfa1fc2959"
+      "sha": "2c80d53db492002a7a5b74e3e2bca8a8ca307828"
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
-      "sha": "681304c30d062bccd2ebde721c0352bbcab3b813"
+      "sha": "56e379187fa29b3a662203e99b06ae01069cabb3"
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
-      "sha": "60e450d026e52349e1fbff10937a44c504f6a0e9"
+      "sha": "c82d7a257c99a7f9dd35c3c392ba2633b502e59f"
     },
     "SEC": {
       "branch": "agent/sec/10-threat-model",
-      "sha": "56bfbf782ff97db3a4da50bc5d565c9d015af6ef"
+      "sha": "b0af4adbb444e0affb33961c4944f8f38df9cb56"
     }
   },
-  "method": "Overlay changed file blobs onto CI branch; not merged into main or any source branch",
-  "riskNotes": [
-    "SOL rust-toolchain.toml may pin an incompatible host Rust version; CI RUSTUP_TOOLCHAIN=1.95.0 overrides it pending SOL update.",
-    "Observer/Solana Node lockfiles absent at creation; install scripts capture resolved graph as artifacts.",
-    "No Holochain issuance, mainnet deployment, production withdrawals or real funds."
-  ]
+  "method": "Overlay source branch diff vs main at immutable Git SHAs onto integration tree and re-sync CI scripts; all source branches unchanged",
+  "excludedSourceFile": ".github/workflows/sol-verify-temporary.yml (temporary duplicate verification job)",
+  "gatePolicy": "No skipped required suite, no unbuilt SBF, no production authorization",
+  "created": "2026-11-13"
 }

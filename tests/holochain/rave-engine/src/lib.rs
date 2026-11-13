@@ -29,7 +29,7 @@ mod tests {
             json!({ "1": "-5", "0": "5", "2": "0" }),
             json!({ "1": "0", "0": "0" }),
         ] {
-            assert!(!permitted(amount), "must reject {amount}");
+            assert!(!permitted(amount.clone()), "must reject {amount}");
         }
     }
 }

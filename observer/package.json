@@ -6,7 +6,8 @@
   "description": "Read-only finalized Solana deposit snapshots. NEVER authorizes Holochain credit.",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli.mjs && node --check src/verify.mjs && node --check src/decode.mjs && node --check src/pda.mjs"
+    "check": "node --check src/cli.mjs && node --check src/verify.mjs && node --check src/decode.mjs && node --check src/pda.mjs && node --check scripts/verify-idl.mjs",
+    "verify:idl": "node scripts/verify-idl.mjs"
   },
   "engines": {
     "node": ">=20"

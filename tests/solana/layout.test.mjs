@@ -66,25 +66,41 @@ test('Observer consumes exact DepositReceipt Borsh positions and full u64', () =
   assert.throws(() => decodeReceipt(invalidBool), /boolean/);
 });
 
-test('Vault classic SPL token layout and unapproved authorities', () => {
+const observerV2Present = existsSync(new URL('../../observer/src/pda.mjs', import.meta.url));
+
+test('Vault classic SPL token layout and unapproved authorities (both observer branches)', () => {
   const tokenAccount = Buffer.alloc(165);
   mint.copy(tokenAccount, 0); configKey.copy(tokenAccount, 32);
   tokenAccount.writeBigUInt64LE(250_000n, 64); tokenAccount[108] = 1;
-  assert.deepEqual(decodeTokenAccount(tokenAccount), {
+  const baseExpected = {
     mint: encode58(mint), authority: encode58(configKey), amount: '250000',
-    hasDelegate: false, state: 1, isNative: false, hasCloseAuthority: false,
-  });
+    hasDelegate: false, state: 1, hasCloseAuthority: false,
+  };
+  // The OBS lane owns the decoder. PR #35 is based on main; the native field
+  // only exists on OBS PR #36. A decoder that claims v2 (via pda.mjs) MUST
+  // expose and correctly parse isNative. No silent downgrade in the v2 case.
+  const actual = decodeTokenAccount(tokenAccount);
+  if (observerV2Present) assert.deepEqual(actual, { ...baseExpected, isNative: false });
+  else assert.deepEqual(actual, baseExpected);
   const delegated = Buffer.from(tokenAccount); delegated.writeUInt32LE(1, 72);
   assert.equal(decodeTokenAccount(delegated).hasDelegate, true);
-  const wrappedSol = Buffer.from(tokenAccount); wrappedSol.writeUInt32LE(1, 109);
-  assert.equal(decodeTokenAccount(wrappedSol).isNative, true);
-  const invalidNative = Buffer.from(tokenAccount); invalidNative.writeUInt32LE(2, 109);
-  assert.throws(() => decodeTokenAccount(invalidNative), /native|option/i);
   const invalidDelegate = Buffer.from(tokenAccount); invalidDelegate.writeUInt32LE(2, 72);
-  assert.throws(() => decodeTokenAccount(invalidDelegate), /delegate|option/i);
+  assert.throws(() => decodeTokenAccount(invalidDelegate), /delegate|option|optional authorities/i);
   const invalidCloseAuthority = Buffer.from(tokenAccount); invalidCloseAuthority.writeUInt32LE(2, 129);
-  assert.throws(() => decodeTokenAccount(invalidCloseAuthority), /close authority|option/i);
+  assert.throws(() => decodeTokenAccount(invalidCloseAuthority), /close authority|option|optional authorities/i);
 });
+
+test('OBS PR #36 native COption is parsed and rejects wrapped SOL / noncanonical values',
+  { skip: !observerV2Present && 'OBS PR #36 pda.mjs not present in this branch (not merged)' }, () => {
+    const tokenAccount = Buffer.alloc(165);
+    mint.copy(tokenAccount, 0); configKey.copy(tokenAccount, 32);
+    tokenAccount.writeBigUInt64LE(250_000n, 64); tokenAccount[108] = 1;
+    assert.equal(decodeTokenAccount(tokenAccount).isNative, false);
+    const wrappedSol = Buffer.from(tokenAccount); wrappedSol.writeUInt32LE(1, 109);
+    assert.equal(decodeTokenAccount(wrappedSol).isNative, true);
+    const invalidNative = Buffer.from(tokenAccount); invalidNative.writeUInt32LE(2, 109);
+    assert.throws(() => decodeTokenAccount(invalidNative), /native|option/i);
+  });
 
 const rustSource = new URL('../../programs/deposit_prototype/src/lib.rs', import.meta.url);
 test('Rust source size constants and PDA seeds remain synchronized',
@@ -111,8 +127,8 @@ test('when generated, IDL discriminators and account fields match observer schem
   { skip: !existsSync(generatedIdl) && 'anchor build has not generated an IDL here' }, () => {
     const idl = JSON.parse(readFileSync(generatedIdl, 'utf8'));
     for (const [name, fields] of [
-      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'totalActive', 'bump']],
-      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipientCore', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
+      ['BridgeConfig', ['admin', 'mint', 'scope', 'paused', 'total_active', 'bump']],
+      ['DepositReceipt', ['depositor', 'mint', 'vault', 'config', 'recipient_core', 'scope', 'nonce', 'amount', 'refunded', 'bump']],
     ]) {
       const account = idl.accounts.find((a) => a.name === name);
       assert.ok(account, 'missing Anchor IDL account ' + name);
