@@ -22,7 +22,7 @@ interpreting test results. **These new tests have not yet been shown to pass
 in GitHub Actions; the historic pass below applies only to its exact
 older SHA.**
 
-## Verified localnet toolchain (transitive lockfiles still pending)
+## Verified historic localnet toolchain (current expanded tests still unverified)
 
 - Host Rust `1.95.0` from `rust-toolchain.toml` (IDL builds may use a
   separate nightly selected by Anchor/AVM). Rust 1.91 fails installing Anchor CLI 1.2.2
@@ -30,9 +30,9 @@ older SHA.**
 - Anchor CLI, `anchor-lang`, `anchor-spl` = `1.2.2`.
 - Solana CLI `4.1.2` from `Anchor.toml`.
 - Recommended Solana platform-tools `v1.57`, SBPF architecture `v3`.
-- Node.js >=20.18, dependencies at exact versions in this directory's
-  `package.json` (a lockfile is not yet available; do not claim a fully
-  reproducible dependency tree).
+- Node.js >=20.18; dependencies at exact versions in `package.json` and
+  `package-lock.json` (the lockfile matches the CI integration snapshot;
+  source-branch `npm ci` and the expanded suite still require a green CI run).
 
 Official upstream compatibility reference:
 https://www.anchor-lang.com/docs/updates/release-notes/1-2-2
@@ -90,7 +90,7 @@ cluster. For a local validator, `Anchor.toml` already sets Localnet:
 
 ```sh
 cd tests/solana
-npm install
+npm ci
 npm test                    # offline observer/layout checks
 cd ../..
 anchor test                 # starts fresh local validator, builds, deploys,
@@ -120,8 +120,8 @@ duplicate nonce, wrong depositor, wrong source token owner, wrong mint,
 wrong refund destination, non-admin pause, deposit while paused, double
 refund and reusing a nonce after refund. Failed transfers must roll back.
 
-**Remaining work:** pin reviewed generated `Cargo.lock` and
-`tests/solana/package-lock.json` after dependency resolution; run OBS
+**Remaining work:** pin and review generated `Cargo.lock`; validate the
+now-source-owned `tests/solana/package-lock.json` with `npm ci` in CI; run OBS
 PR #36's v2 actual SDK/`isNative` decoder against the real binary/IDL and
 recorded account bytes in combined CI; independently review first-init
 front-running, unrestricted mint authority for disposable test tokens, and

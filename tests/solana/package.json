@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test layout.test.mjs",
+    "test": "node --test sdk-compat.test.mjs layout.test.mjs",
     "test:integration": "node --test integration.test.mjs"
   },
   "dependencies": {
@@ -12,5 +12,7 @@
     "@solana/spl-token": "0.4.14",
     "bn.js": "5.2.2"
   },
-  "engines": { "node": ">=20.18.0" }
+  "engines": {
+    "node": ">=20.18.0"
+  }
 }
