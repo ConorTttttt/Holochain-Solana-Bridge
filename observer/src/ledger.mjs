@@ -5,6 +5,39 @@ import { dirname, resolve } from 'node:path';
 
 function need(ok, message) { if (!ok) throw new Error('Indexer ledger failed: ' + message); }
 const hash = x => createHash('sha256').update(JSON.stringify(x)).digest('hex');
+function record(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
+/**
+ * A checksum stored alongside the evidence is corruption detection, NOT an
+ * authenticated journal. An attacker who can rewrite both JSON and checksums
+ * can forge a local ledger; operators must protect and independently back it up.
+ */
+function validateRecoveredEntries(state) {
+  need(record(state.processed) && record(state.blocks), 'incompatible/corrupt durable ledger objects');
+  const occurrences = new Set();
+  for (const [id, row] of Object.entries(state.processed)) {
+    need(record(row) && record(row.evidence) &&
+      row.evidence.kind === 'solana-deposit-evidence-v1' &&
+      row.evidence.creditEligible === false &&
+      row.evidence.transactionVerified === true &&
+      row.evidence.independentConsensusVerified === false &&
+      row.evidence.id === id &&
+      typeof row.occurrenceId === 'string' && row.occurrenceId.length > 0 &&
+      row.evidence.occurrenceId === row.occurrenceId &&
+      row.evidence.transactionHash === row.transactionHash &&
+      row.evidence.amountBaseUnits === row.amountBaseUnits &&
+      row.fingerprint === hash(row.evidence) &&
+      !occurrences.has(row.occurrenceId),
+      'corrupt stored receipt evidence/occurrence/fingerprint');
+    occurrences.add(row.occurrenceId);
+  }
+  for (const [key, blockhash] of Object.entries(state.blocks)) {
+    const n = Number(key);
+    need(/^(0|[1-9][0-9]*)$/.test(key) && Number.isSafeInteger(n) &&
+      n >= state.trustedDeploymentSlot && n <= state.checkpoint &&
+      typeof blockhash === 'string' && blockhash.length > 0,
+      'corrupt stored finalized block identity');
+  }
+}
 function slot(n) { need(Number.isSafeInteger(n) && n >= 0, 'invalid slot'); return n; }
 
 /** One process may hold the ledger lock. Stale locks must be investigated, not auto-stolen. */
@@ -28,8 +61,9 @@ export class DepositLedger {
         this.state.trustedDeploymentSlot === trustedDeploymentSlot &&
         Number.isSafeInteger(this.state.checkpoint) &&
         this.state.checkpoint >= trustedDeploymentSlot - 1 &&
-        this.state.processed && !Array.isArray(this.state.processed) &&
-        this.state.blocks && !Array.isArray(this.state.blocks), 'incompatible/corrupt durable ledger');
+        record(this.state.processed) && record(this.state.blocks),
+        'incompatible/corrupt durable ledger');
+      validateRecoveredEntries(this.state);
       // Fresh ledger is only written at first finalized checkpoint, after successful RPC checks.
     } catch(e) {
       closeSync(this.lockFd); unlinkSync(this.lockFile); this.lockFd=null;
