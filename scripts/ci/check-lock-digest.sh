@@ -11,7 +11,7 @@ case "$kind" in
   workspace) expected=9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24bf0a24f5 ;;
   observer) expected=87578ffa1a3f0d1f0102f58ac649e25cd2a9d2902889bc946213fb2f136f0f62 ;;
   solana) expected=24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6 ;;
-  rave) expected=d05b99530bcfbad6ff6e3f67f503622bb6f7b15f5a7350f8a5f6ebe3ffaa5e18 ;;
+  rave) expected=e4f82e37be720566dcea35a59e3681777444cbe6584ad1c7b8730c2367f0f001 ;;
   *) echo "UNRECOGNIZED_DEPENDENCY_LOCK: $kind" >&2; exit 1 ;;
 esac
 test -s "$path" || { echo "REQUIRED_LOCK_MISSING: $path" >&2; exit 1; }
