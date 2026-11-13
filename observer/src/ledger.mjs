@@ -63,7 +63,8 @@ export class DepositLedger {
       const previous=next.processed[item.id];
       if (previous) {
         need(previous.occurrenceId === item.occurrenceId && previous.transactionHash === item.transactionHash &&
-          previous.amountBaseUnits === item.amountBaseUnits, 'conflicting duplicate receipt identity');
+          previous.amountBaseUnits === item.amountBaseUnits && previous.fingerprint === fingerprint,
+          'conflicting duplicate receipt identity or evidence bytes');
         // Exact replay is idempotent; later observations must not overwrite original evidence.
         continue;
       }
