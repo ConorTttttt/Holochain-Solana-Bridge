@@ -66,9 +66,10 @@ sha256sum target/idl/deposit_prototype.json target/deploy/deposit_prototype.so \
   | tee target/localnet-evidence/artifact-sha256.txt
 printf '%s\n' "$program_id" > target/localnet-evidence/program-id.txt
 
-# Both test commands are required. npm dependency resolution must succeed,
-# not silently skip. The on-chain suite refuses the public placeholder ID.
-npm --prefix tests/solana install --no-audit --no-fund
+# Both test commands are required. npm ci MUST install exactly the reviewed,
+# Git-tracked tests/solana/package-lock.json graph. The on-chain suite refuses
+# the public placeholder program ID. Never run npm install on the localnet lane.
+npm --prefix tests/solana ci --no-audit --no-fund
 npm --prefix tests/solana test
 NO_DNA=1 anchor test --skip-build --validator legacy --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
 echo "LOCALNET BUILD AND TRANSACTION TESTS PASSED"
