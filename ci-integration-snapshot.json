@@ -35,7 +35,7 @@
       "scripts/ci/SPRINT1_READINESS_2026-11-13.md",
       "scripts/ci/SHADOW_MODE_CONDUCTOR_HANDOFF.md",
       "ci-integration-snapshot.json",
-      "observer/test/s0-signed-wire-evidence.test.mjs",
+      "observer/ci/s0-signed-wire-evidence.mjs",
       "tests/solana/integration.test.mjs (CI-only wire evidence instrumentation)",
       "tests/solana/verify-witness-bundle.mjs (integration-only regex correction)"
     ],
@@ -113,7 +113,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "Exact-head CI still required. 338f3b6 OBS unit+RAVE Rust passed; validator and Anchor running. Relocated OBS signed-wire replay test into observer package to resolve @solana/kit without unreviewed dependency graph.",
+  "latestExecutionStatus": "EXACT-HEAD CI REQUIRED; explicit E2E signed-wire test lives outside OBS default test discovery to avoid requiring live validator artifacts in standalone OBS.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -130,8 +130,8 @@
       "reason": "CI 43527503901 OBS 54/55: source test regex too narrow for missing second signature; verifier already correctly rejects; reported to OBS PR #36."
     },
     {
-      "path": "observer/test/s0-signed-wire-evidence.test.mjs",
-      "reason": "CI-owned E2E replay test resides in observer/test for correct pinned @solana/kit module resolution; does not change OBS production code."
+      "path": "observer/ci/s0-signed-wire-evidence.mjs",
+      "reason": "Explicit CI-only signed-wire replay test inside OBS Node package (but outside default node --test discovery), so standalone OBS tests do not require validator artifacts; uses already pinned @solana/kit."
     }
   ],
   "conductorStatus": "BLOCKED: no authenticated deployed Unyt DNA/WASM, matching conductor, live zome calls, multi-peer verification. This is a release blocker, not a test skip.",

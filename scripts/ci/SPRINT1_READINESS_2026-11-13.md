@@ -32,3 +32,5 @@ On integrated SHA `19bf4878`, [Actions shared run 43527503901](https://github.co
 ### Required signed-wire replay packaging correction
 
 The new CI-only Observer signed-wire replay test was relocated from `tests/integration/` to `observer/test/` so Node resolves the **already pinned** `observer/node_modules/@solana/kit` in the real CI job. No new dependency, SDK upgrade or production implementation change. The workflow still runs the dedicated explicit test against original SOL validator artifacts, and missing artifacts remain fatal. SEC's latest independent evidence-only commitment `b5b8c4b9` is included in the frozen input manifest; no independent economic authorization implied.
+
+**Test discovery safeguard:** The dedicated signed-wire replay was moved further into `observer/ci/s0-signed-wire-evidence.mjs` (not `observer/test/*.test.mjs`). This preserves access to Observer's pinned `@solana/kit` while preventing the standalone OBS `npm test` from accidentally discovering an E2E test requiring real validator artifacts. The integrated workflow explicitly runs `node --test observer/ci/s0-signed-wire-evidence.mjs`, so it remains a mandatory stage, not a skip.
