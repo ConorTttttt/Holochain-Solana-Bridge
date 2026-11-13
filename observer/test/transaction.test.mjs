@@ -190,3 +190,23 @@ test('rejects a matching RPC signature string if Ed25519 signature bytes are for
     finalizedClaim:true,blockhash,
   }),/invalid Ed25519 transaction signature/);
 });
+
+test('v0 lookup-table address metadata must be fully resolved; refuses missing ALT data',()=>{
+  const base=message(0,[depositor],[],0);
+  // Replace trailing v0 zero-ALT count with one lookup table:
+  // table pubkey, one writable index 3, one readonly index 4.
+  const withALT=Buffer.concat([
+    base.subarray(0,-1),Buffer.from([1]),keyBytes(pub(40)),
+    Buffer.from([1,3,1,4]),
+  ]);
+  const tx=rpcFromMessage(0,withALT,{
+    ...emptyMeta(3),
+    loadedAddresses:{writable:[pub(41)],readonly:[pub(42)]},
+  });
+  const decoded=decodeFinalizedWire(tx,tx.expectedSignature);
+  assert.equal(decoded.compiledMessage.version,0);
+  assert.equal(decoded.compiledMessage.addressTableLookups.length,1);
+  assert.throws(()=>decodeFinalizedWire({
+    ...tx,meta:{...tx.meta,loadedAddresses:undefined},
+  },tx.expectedSignature),/lookup resolution unavailable/);
+});
