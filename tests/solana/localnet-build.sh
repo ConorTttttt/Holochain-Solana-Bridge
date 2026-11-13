@@ -78,6 +78,8 @@ for scenario in lifecycle init-capture u64-max; do
   echo "Executing isolated validator scenario: $scenario"
   BRIDGE_TEST_MODE="$scenario" NO_DNA=1 anchor test --skip-build --validator legacy \
     --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
+  # An all-skipped suite or missing RPC witness is NOT an on-chain PASS.
+  node tests/solana/verify-witness-bundle.mjs "$scenario"
 done
 # Separate two-process retained-ledger restart: it deploys the same compiled
 # ELF into a brand new disposable ledger, leaves a positive liability, kills
