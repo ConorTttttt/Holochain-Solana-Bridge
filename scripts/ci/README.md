@@ -6,9 +6,9 @@ docs/SECURITY_GATES.md.
 
 ## Pinned versions
 
-`scripts/ci/toolchain.env` declares Node 22.16.0, Rust 1.89.0,
+`scripts/ci/toolchain.env` declares Node 22.16.0, Rust 1.91.0,
 Solana/Agave CLI 4.1.2, Anchor 1.2.2, platform-tools v1.57, SBPF v3.
-The workflow pins GitHub Actions to exact commit SHAs. Prerequisites: Ubuntu
+The workflow pins GitHub Actions to exact commit SHAs. Rust 1.91.0 is required to install Anchor CLI 1.2.2 from its tagged locked dependency graph (cargo-platform 0.3.3 requires rustc 1.91; observed in the first PR Actions run). Prerequisites: Ubuntu
 24.04 or compatible Linux/WSL, Git, curl, rustup and build dependencies.
 
 ## Exact local smoke checks
