@@ -124,6 +124,10 @@ export async function indexFinalizedRange({
       const tip=safeSlot(await rpcRequest(url,'getSlot',[{commitment:'finalized'}],fetchFn));
       need(tip>=toSlot,'provider not finalized through requested range');
     }
+    const persistedSlots=Object.keys(ledger.state.blocks).map(Number).sort((a,b)=>a-b);
+    let lastSeen=persistedSlots.length ? {
+      slot:persistedSlots.at(-1),blockhash:ledger.state.blocks[String(persistedSlots.at(-1))],
+    } : null;
     for(let base=start;base<=toSlot;base+=MAX_RANGE) {
       const last=Math.min(toSlot,base+MAX_RANGE-1);
       const lists=await Promise.all(rpcUrls.map(url=>
@@ -139,6 +143,10 @@ export async function indexFinalizedRange({
         for(const b of blocks) validateBlock(b,slot);
         need(sameJSON(blocks[0],blocks[1]), 'RPC providers disagree about block '+slot);
         const block=blocks[0], evidences=[];
+        if(lastSeen) {
+          need(block.parentSlot===lastSeen.slot && block.previousBlockhash===lastSeen.blockhash,
+            'parent-chain discontinuity: missing/contradictory produced block');
+        }
         for(const entry of block.transactions) {
           need(['legacy',0,1].includes(entry.version), 'unsupported transaction version in block '+slot);
           need(entry.meta && Object.hasOwn(entry.meta,'err'),'missing transaction result in block '+slot);
@@ -159,6 +167,7 @@ export async function indexFinalizedRange({
           }
         }
         ledger.commit({checkpoint:slot,block:{slot,blockhash:block.blockhash},evidence:evidences});
+        lastSeen={slot,blockhash:block.blockhash};
       }
       // getBlocks reports produced slots; gaps are skipped slots only under this
       // RPC-consistency assumption. Never advance if any enumerated block is missing.
