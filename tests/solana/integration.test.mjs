@@ -8,7 +8,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 
@@ -17,6 +17,23 @@ const connection = new Connection(RPC, 'confirmed');
 const idl = JSON.parse(readFileSync(new URL('../../target/idl/deposit_prototype.json', import.meta.url), 'utf8'));
 const programId = new PublicKey(idl.address);
 const program = new Program(idl, { connection });
+async function recordUpgradeAuthority() {
+  const deployed = await connection.getAccountInfo(programId, 'confirmed');
+  assert.ok(deployed?.executable, 'deployed program missing');
+  same(deployed.owner, BPF_LOADER_UPGRADEABLE_PROGRAM_ID);
+  const programBytes = Buffer.from(deployed.data);
+  assert.equal(programBytes.readUInt32LE(0), 2, 'unexpected upgradeable loader Program state');
+  const programDataAddress = new PublicKey(programBytes.subarray(4, 36));
+  const dataAccount = await connection.getAccountInfo(programDataAddress, 'confirmed');
+  assert.ok(dataAccount, 'missing upgradeable ProgramData');
+  same(dataAccount.owner, BPF_LOADER_UPGRADEABLE_PROGRAM_ID);
+  const data = Buffer.from(dataAccount.data);
+  assert.equal(data.readUInt32LE(0), 3, 'unexpected ProgramData state');
+  assert.ok(data[12] === 0 || data[12] === 1, 'noncanonical upgrade authority option');
+  const upgradeAuthority = data[12] === 1 ? new PublicKey(data.subarray(13, 45)).toBase58() : null;
+  transactionEvidence.push({ label: 'observed-deployment-upgrade-authority-not-governed',
+    programDataAddress: programDataAddress.toBase58(), upgradeAuthority });
+}
 const scope = Array(32).fill(7);
 const recipient = Array(32).fill(9);
 const nonce = new BN('42017');
@@ -107,6 +124,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   await connection.getVersion();
   const deployed = await connection.getAccountInfo(programId, 'confirmed');
   assert.ok(deployed?.executable, 'deploy the built program to the local validator first');
+  await recordUpgradeAuthority();
   assert.equal(await connection.getAccountInfo(config), null, 'fresh local-validator ledger required');
 
   const owner = Keypair.generate();
@@ -345,6 +363,12 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       assert.equal(rawVault.data.length, 165);
       const decodedConfig = decodeConfig(Buffer.from(rawConfig.data));
       const decodedVault = decodeTokenAccount(Buffer.from(rawVault.data));
+      same(rawVault.owner, TOKEN_PROGRAM_ID);
+      assert.equal(decodedVault.mint, mint.toBase58());
+      assert.equal(decodedVault.authority, config.toBase58());
+      assert.equal(decodedVault.hasDelegate, false);
+      assert.equal(decodedVault.hasCloseAuthority, false);
+      assert.equal(Buffer.from(rawVault.data).readUInt32LE(109), 0, 'wrapped/native vault rejected');
       let expectedLiabilities = 0n;
       for (const record of tracked) {
         const [address, bump] = receiptFor(record.who, record.n);
