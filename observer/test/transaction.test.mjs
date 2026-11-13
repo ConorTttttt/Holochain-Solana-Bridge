@@ -1,7 +1,7 @@
 /** Synthetic wire-level fixtures only; NEVER substitute for real finalized RPC fixture. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto';
 import { encode58 } from '../src/decode.mjs';
 import { deriveBridgeAddresses } from '../src/pda.mjs';
 import { attachReceiptObservation, decodeFinalizedWire, verifyDepositCandidates } from '../src/transaction.mjs';
@@ -10,12 +10,14 @@ import { CLASSIC_TOKEN_PROGRAM } from '../src/verify.mjs';
 const program='FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG';
 const system='11111111111111111111111111111111';
 const pub=n=>encode58(Buffer.alloc(32,n));
-const depositor=pub(6),mint=pub(5),source=pub(4),genesisHash=pub(10),blockhash=pub(11);
+const keysForTests=generateKeyPairSync('ed25519');
+const depositor=encode58(keysForTests.publicKey.export({format:'der',type:'spki'}).subarray(-32));
+const mint=pub(5),source=pub(4),genesisHash=pub(10),blockhash=pub(11);
 const scope='07'.repeat(32),recipientCore='09'.repeat(32);
 const b58=x=>encode58(x);
 const d=name=>createHash('sha256').update('global:'+name).digest().subarray(0,8);
 const accountDiscriminator=name=>[...createHash('sha256').update('account:'+name).digest().subarray(0,8)];
-const signatureBytes=Buffer.alloc(64,31),signature=b58(signatureBytes);
+
 const u64=n=>{const b=Buffer.alloc(8);b.writeBigUInt64LE(BigInt(n));return b;};
 const keyBytes=key=>{
   const alphabet='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -66,10 +68,12 @@ function message(version,keys,instructions,readonly=0) {
   throw Error('separate v1 builder');
 }
 function rpcFromMessage(version,messageBytes,meta) {
+  const signatureBytes=edSign(null,messageBytes,keysForTests.privateKey);
   const wire=version===1 ?
     Buffer.concat([messageBytes,signatureBytes]) :
     Buffer.concat([Buffer.from([1]),signatureBytes,messageBytes]);
-  return {version,slot:500,transaction:[wire.toString('base64'),'base64'],meta};
+  return {version,slot:500,transaction:[wire.toString('base64'),'base64'],meta,
+    expectedSignature:b58(signatureBytes)};
 }
 const emptyMeta=n=>({
   err:null,preBalances:Array(n).fill(1),postBalances:Array(n).fill(1),
@@ -111,7 +115,7 @@ test('Kit decodes signed legacy and v0 wire message formats',()=>{
   const keys=[depositor];
   for(const version of ['legacy',0]){
     const tx=rpcFromMessage(version,message(version,keys,[],0),emptyMeta(1));
-    const decoded=decodeFinalizedWire(tx,signature);
+    const decoded=decodeFinalizedWire(tx,tx.expectedSignature);
     assert.equal(decoded.compiledMessage.version,version);
     assert.equal(decoded.instructions.length,0);
   }
@@ -138,7 +142,7 @@ test('rejects unsupported version and mismatched signature/metadata',()=>{
 test('2 separate deposit instructions produce 2 immutable receipt identities and exact totals',async()=>{
   const {rpcTransaction,expected,receipts}=await twoDeposits();
   const found=await verifyDepositCandidates({
-    rpcTransaction,signature,expected,genesisHash,idl:syntheticIdl(),
+    rpcTransaction,signature:rpcTransaction.expectedSignature,expected,genesisHash,idl:syntheticIdl(),
     finalizedClaim:true,blockhash,
   });
   assert.equal(found.length,2);
@@ -162,7 +166,7 @@ test('2 separate deposit instructions produce 2 immutable receipt identities and
 });
 test('rejects fabricated vault delta, source delta, missing CPI, and substituted transaction source',async()=>{
   const {rpcTransaction,expected}=await twoDeposits();
-  const args={signature,expected,genesisHash,idl:syntheticIdl(),finalizedClaim:true,blockhash};
+  const args={signature:rpcTransaction.expectedSignature,expected,genesisHash,idl:syntheticIdl(),finalizedClaim:true,blockhash};
   await assert.rejects(verifyDepositCandidates({...args,
     rpcTransaction:{...rpcTransaction,meta:{...rpcTransaction.meta,
       postTokenBalances:rpcTransaction.meta.postTokenBalances.map(x=>
