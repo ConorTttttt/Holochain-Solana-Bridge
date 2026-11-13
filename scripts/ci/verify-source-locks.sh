@@ -10,6 +10,20 @@ while IFS='|' read -r manifest lock kind; do
     echo "NOT_APPLICABLE: $manifest absent on this specialist branch"
     continue
   fi
+  # A Node package with no dependencies does not require a registry lock:
+  # fail closed on malformed manifests, but do not invent source locks.
+  if [ "$kind" = observer ] || [ "$kind" = solana ]; then
+    if python3 - "$manifest" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as file:
+    pkg = json.load(file)
+sys.exit(0 if not pkg.get('dependencies') and not pkg.get('devDependencies') else 1)
+PY
+    then
+      echo "NOT_APPLICABLE: $manifest has no external npm dependencies" | tee -a ci-artifacts/reviewed-locks.log
+      continue
+    fi
+  fi
   if [ ! -s "$lock" ]; then
     echo "REQUIRED_COMMITTED_LOCK_MISSING: $lock for $manifest" | tee -a ci-artifacts/reviewed-locks.log
     status=1
