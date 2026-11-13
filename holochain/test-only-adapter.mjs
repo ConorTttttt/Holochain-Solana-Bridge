@@ -4,7 +4,7 @@
  * This gives CI an executable OBS -> shadow classifier -> inert record boundary.
  * A single-process Map/array cannot enforce cross-process or cross-DNA uniqueness.
  */
-import { reviewShadow } from './shadow-review.mjs';
+import { reviewShadowEvidence } from './transaction-shadow.mjs';
 
 export function createTestOnlyAdapter(binding) {
   const journal = new Map();
@@ -12,7 +12,7 @@ export function createTestOnlyAdapter(binding) {
   const records = [];
   return Object.freeze({
     ingest(observation) {
-      const review = reviewShadow(observation, binding, journal);
+      const review = reviewShadowEvidence(observation, binding, journal);
       const duplicate = typeof observation?.id === 'string' && seen.has(observation.id);
       const verdict = duplicate ? 'rejected' : review.verdict;
       const findings = Object.freeze(duplicate
