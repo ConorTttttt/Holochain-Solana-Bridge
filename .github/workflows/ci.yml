@@ -29,6 +29,8 @@ jobs:
         run: |
           mkdir -p ci-artifacts
           { node --version; npm --version; } 2>&1 | tee ci-artifacts/node-versions.log
+      - name: Install actual observer SDK dependencies when declared
+        run: bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
       - name: Observer tests
         run: bash scripts/ci/record.sh observer-tests npm --prefix observer test
       - name: Observer syntax checks
@@ -60,6 +62,29 @@ jobs:
         if: always()
         with:
           name: guard-logs
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  cross-lane-offline:
+    name: Available SOL layout, SEC and RAVE fixture tests (no on-chain claims)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install observer Solana SDK (if declared by OBS)
+        run: bash scripts/ci/record.sh cross-lane-deps bash scripts/ci/install-node-deps.sh observer
+      - name: Run all applicable cross-lane tests; fail on skips when present
+        run: node scripts/ci/run-cross-lane-tests.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: cross-lane-offline-evidence
           path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14
