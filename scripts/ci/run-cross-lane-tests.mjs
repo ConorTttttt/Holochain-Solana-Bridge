@@ -10,6 +10,7 @@ const cases = [
   ['observer-transaction', 'observer/test/transaction.test.mjs'],
   ['observer-finalized-indexer', 'observer/test/indexer.test.mjs'],
   ['observer-durable-ledger', 'observer/test/ledger.test.mjs'],
+  ['observer-real-localnet-fixtures', 'observer/test/real-localnet.test.mjs'],
   ['sol-layout', 'tests/solana/layout.test.mjs'],
   ['security-adversarial', 'security/test/adversarial.test.mjs'],
   ['security-solvency', 'security/test/solvency-model.test.mjs'],
@@ -18,6 +19,7 @@ const cases = [
   ['rave-shadow-cli', 'tests/holochain/shadow-cli.test.mjs'],
   ['rave-attack-model', 'tests/holochain/economic-attack-model.test.mjs'],
   ['rave-test-only-adapter', 'tests/holochain/test-only-adapter.test.mjs'],
+  ['rave-transaction-shadow', 'tests/holochain/transaction-shadow.test.mjs'],
 ];
 const integrated = existsSync('ci-integration-snapshot.json');
 mkdirSync('ci-artifacts', { recursive: true });
