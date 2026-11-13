@@ -80,7 +80,15 @@ function rpcMock(options={}) {
         case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
         case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
         case 'getSlot':result=100;break;
-        case 'getBlocks':result=(options.parentBroken || options.bothProduced) ? [20,21] : options.listConflict && isB ? [20,21]:[20];break;
+        case 'getBlocks': {
+          // getBlocks(start, end) lists produced slots ONLY within the inclusive
+          // requested window. A restarted indexer begins at checkpoint + 1.
+          const [start,end]=req.params;
+          const produced=(options.parentBroken || options.bothProduced ||
+            (options.listConflict && isB)) ? [20,21] : [20];
+          result=produced.filter(slot=>slot>=start && slot<=end);
+          break;
+        }
         case 'getBlock':result=options.prunedBlock && isB ? null :
           {...baseBlock,
             ...(req.params[0]===21 ? {
