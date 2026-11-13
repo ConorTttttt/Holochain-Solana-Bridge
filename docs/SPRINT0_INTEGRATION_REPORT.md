@@ -53,13 +53,13 @@ At follow-up review, SOL advanced to `e16c7245f8c309fefa03916bc3a9449e1ab2e565` 
 
 | Lane | Existing PR | Source branch | Checked specialist commit |
 | --- | --- | --- | --- |
-| CI | #32 | `agent/ci/11-build-pipeline` | `ab0d9a9205b3c669894bbc78a02e9af289f95b10` |
+| CI | #32 | `agent/ci/11-build-pipeline` | `f54146671a6f204e8d7ab860244e4089f43f3dd1` (latest overlaid code; original passing 6e431e8 used earlier `ab0d9a9...` code) |
 | SOL | #35 | `agent/sol/7-anchor-build` | `37b35301bf3f6a3773b3c0b27e01370715f67b74` |
 | OBS | #36 | `agent/obs/8-observer-validation` | `56e379187fa29b3a662203e99b06ae01069cabb3` |
 | RAVE | #34 | `agent/rave/9-rave-validation` | `cacd7932e7700b157a5e2f8077a034970b8de2f3` |
 | SEC | #33 | `agent/sec/10-threat-model` | `29d64efd3ae3f8b92dc03d76c2e8af602f22904f` |
 
-The integration candidate is PR #37, branch `integration/s0/11-all-agent-snapshot`. The checkout of each new run is pinned by `github.event.pull_request.head.sha`; retrieve the exact source SHA from its `ci-artifacts/source-commit.sha` artifact. These specialist SHA values are overlay source versions, **not** signatures, merge approvals, or a claim that the branches were merged. Base CI source was previously `ecc0b4b...`; this checkpoint overlays later CI commits as described in `ci-integration-snapshot.json`.
+The integration candidate is PR #37, branch `integration/s0/11-all-agent-snapshot`. The checkout of each new run is pinned by `github.event.pull_request.head.sha`; retrieve the exact source SHA from its `ci-artifacts/source-commit.sha` artifact. These specialist SHA values are overlay source versions, **not** signatures, merge approvals, or a claim that the branches were merged. Base CI source was first `ecc0b4b...`, then `ab0d9a9...` in the earlier green S0 build; this checkpoint overlays current CI `f54146671a6f204e8d7ab860244e4089f43f3dd1` as described in `ci-integration-snapshot.json`. `af8e09319f88f013fc9a30892173b4a7d7514349` is the most recent integration implementation candidate before this report-only correction; its `--locked` compilation workflows were in progress at this checkpoint.
 
 ## Verified toolchain, builds and local-validator evidence
 
