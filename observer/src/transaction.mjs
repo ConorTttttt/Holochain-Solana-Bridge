@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import {
   getBase64Encoder, getTransactionDecoder, getCompiledTransactionMessageDecoder,
   walkInstructions, isSignerRole, isWritableRole,
+  getPublicKeyFromAddress, verifySignature,
 } from '@solana/kit';
 import { addressBytes, encode58, strictHex32 } from './decode.mjs';
 import { deriveBridgeAddresses } from './pda.mjs';
@@ -102,7 +103,25 @@ export function decodeFinalizedWire(rpcTransaction, signature) {
       'v1 transaction must not use address lookup tables');
   }
   const instructions = [...walkInstructions({compiledMessage,loadedAddresses:loaded,meta:{...rpcTransaction.meta,innerInstructions:rpcTransaction.meta.innerInstructions || []}})];
-  return {compiledMessage, instructions, bytes, transactionHash:hash(bytes)};
+  return {compiledMessage, instructions, bytes, transactionHash:hash(bytes), signedTransaction:tx};
+}
+/**
+ * Verify every required Ed25519 signature over the exact signed wire-message bytes.
+ * This is local cryptographic validation, NOT block inclusion or source consensus.
+ */
+export async function verifyWireSignatures(decoded) {
+  const {compiledMessage, signedTransaction} = decoded;
+  const required=compiledMessage.staticAccounts.slice(0,compiledMessage.header.numSignerAccounts);
+  need(required.length>0 && signedTransaction.signatures.size===required.length,
+    'required signer/signature count mismatch');
+  for(const signer of required) {
+    const sig=signedTransaction.signatures.get(signer);
+    need(sig && sig.length===64, 'missing required signer signature');
+    const key=await getPublicKeyFromAddress(signer);
+    need(await verifySignature(key,sig,signedTransaction.messageBytes),
+      'invalid Ed25519 transaction signature');
+  }
+  return true;
 }
 /**
  * Obtain deposit candidates from a SUCCESSFUL transaction fetched with commitment finalized.
@@ -123,7 +142,9 @@ export async function verifyDepositCandidates({
   need(typeof blockhash === 'string', 'missing finalized blockhash');
   addressBytes(blockhash);
   checkIdl(idl, expected.program);
-  const {compiledMessage, instructions, bytes, transactionHash} = decodeFinalizedWire(rpcTransaction,signature);
+  const decoded=decodeFinalizedWire(rpcTransaction,signature);
+  await verifyWireSignatures(decoded);
+  const {compiledMessage, instructions, bytes, transactionHash} = decoded;
   const cfg = await deriveBridgeAddresses({
     program:expected.program,mint:expected.mint,depositor:SYSTEM_PROGRAM,nonce:0n,
   });
