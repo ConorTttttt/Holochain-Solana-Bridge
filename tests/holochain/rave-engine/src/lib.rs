@@ -94,11 +94,145 @@ mod sprint1_published_crate_adversarial {
 
     #[test]
     fn exact_reserve_over_javascript_safe_integer_limit() {
-        // Real published ReserveUnits amount-shape check, not bridge solvency.
-        assert!(accepts_shape(json!({
-            "1": "-9007199254740993",
-            "0": "9007199254740993"
+        // ZFuel is signed i64 *micro-units* (six decimal places), not
+        // unrestricted integer-valued whole units. This is 2^53 + 1
+        // micro-units, carried as a decimal STRING at the JSON boundary.
+        // Never round-trip through a JavaScript Number.
+        let conserved = json!({
+            "1": "-9007199254.740993",
+            "0": "9007199254.740993"
+        });
+        assert!(accepts_shape(conserved.clone()));
+        let bytes = rmp_serde::to_vec(&conserved).expect("MessagePack encode exact strings");
+        let decoded: Value =
+            rmp_serde::from_slice(&bytes).expect("MessagePack decode exact strings");
+        assert_eq!(decoded, conserved, "decimal string must survive MessagePack");
+        assert!(accepts_shape(decoded));
+    }
+
+    #[test]
+    fn javascript_safe_integer_boundary_in_micro_units_is_exact() {
+        for micro_amount in [
+            "9007199254.740990", // 2^53 - 2
+            "9007199254.740991", // Number.MAX_SAFE_INTEGER micro-units
+            "9007199254.740992", // 2^53
+            "9007199254.740993", // 2^53 + 1
+        ] {
+            let negative = format!("-{micro_amount}");
+            assert!(accepts_shape(json!({"1": negative, "0": micro_amount})),
+                    "must conserve the exact decimal string {micro_amount}");
+        }
+    }
+
+    #[test]
+    fn published_zfuel_domain_rejects_out_of_range_whole_units() {
+        use std::str::FromStr;
+        use zfuel::fuel::ZFuel;
+
+        // The original failing fixture was ~9 quadrillion WHOLE units,
+        // which is > ~9.223 trillion whole units of ZFuel signed-i64 capacity.
+        assert!(ZFuel::from_str("9007199254740993").is_err());
+        assert!(!accepts_shape(json!({
+            "1": "-9007199254740993", "0": "9007199254740993"
         })));
+        let max = ZFuel::from_str("9223372036854.775807").unwrap();
+        let min = ZFuel::from_str("-9223372036854.775808").unwrap();
+        assert_eq!(max.units, i64::MAX);
+        assert_eq!(min.units, i64::MIN);
+        assert!(ZFuel::from_str("9223372036854.775808").is_err());
+        assert!(ZFuel::from_str("-9223372036854.775809").is_err());
+
+        // Conservation cannot pair i64::MIN with its unrepresentable
+        // positive counterpart, even though the debit alone is legal.
+        assert!(!accepts_shape(json!({
+            "1": "-9223372036854.775808",
+            "0": "9223372036854.775808"
+        })));
+        assert!(accepts_shape(json!({
+            "1": "-9223372036854.775807",
+            "0": "9223372036854.775807"
+        })));
+    }
+
+    #[test]
+    fn no_zero_negative_credit_overflow_or_float_native_numbers() {
+        for invalid in [
+            json!({"1": "0", "0": "0"}),
+            json!({"1": "1", "0": "-1"}),
+            json!({"1": "-1", "0": "-1"}),
+            json!({"1": "-1", "0": "0"}),
+            json!({"1": "-9223372036854.775809", "0": "1"}),
+            json!({"1": "-1", "0": "9223372036854.775808"}),
+            json!({"1": "-5", "0": "5.000001"}),
+            json!({"1": -5, "0": 5}),
+            json!({"1": -5.0, "0": 5.0}),
+            json!({"1": "-5", "0": "5", "2": "0"}),
+            json!({"1": "-5"}),
+            json!({"1": "-5", "0": "5", "unexpected": "1"}),
+            json!({"1": [], "0": "5"}),
+        ] {
+            assert!(!accepts_shape(invalid.clone()), "must refuse {invalid}");
+        }
+    }
+
+    // A serde_json::Value has *already lost* duplicate-key provenance.
+    // This deliberately narrow, top-level duplicate-key detector tests the
+    // security invariant required of a future bridge wire decoder, NOT a
+    // production Holochain parser and NOT a feature of ReserveUnits itself.
+    struct UniqueUnitMap(Value);
+    impl<'de> serde::Deserialize<'de> for UniqueUnitMap {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            use serde::de::{Error, MapAccess, Visitor};
+            use std::fmt;
+
+            struct UniqueVisitor;
+            impl<'de> Visitor<'de> for UniqueVisitor {
+                type Value = UniqueUnitMap;
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    write!(f, "an object with unique unit keys")
+                }
+                fn visit_map<A: MapAccess<'de>>(self, mut access: A)
+                    -> Result<Self::Value, A::Error>
+                {
+                    let mut entries = serde_json::Map::new();
+                    while let Some((key, value)) = access.next_entry::<String, Value>()? {
+                        if entries.contains_key(&key) {
+                            return Err(A::Error::custom("duplicate unit key"));
+                        }
+                        entries.insert(key, value);
+                    }
+                    Ok(UniqueUnitMap(Value::Object(entries)))
+                }
+            }
+            deserializer.deserialize_map(UniqueVisitor)
+        }
+    }
+
+    #[test]
+    fn duplicate_serialized_unit_keys_are_not_a_safe_input() {
+        let raw = r#"{"1":"not-a-number","1":"-5","0":"5"}"#;
+        // Dangerous normalization: serde_json silently overwrites one key,
+        // so RAVE cannot know the original raw document was ambiguous.
+        let normalized: Value = serde_json::from_str(raw).unwrap();
+        assert!(accepts_shape(normalized), "regression: normalized ambiguity is lost");
+        assert!(serde_json::from_str::<UniqueUnitMap>(raw).is_err(),
+                "bridge wire boundary must refuse duplicate unit keys");
+
+        let unambiguous = r#"{"1":"-5","0":"5"}"#;
+        let parsed = serde_json::from_str::<UniqueUnitMap>(unambiguous).unwrap().0;
+        assert!(accepts_shape(parsed));
+        for malformed in [
+            r#"{"1":"-5","0":"5",}"#,
+            r#"{"1":"-5","0":"5""#,
+            r#"["1","0"]"#,
+            r#"{"1":"-5","0":"5","0":"1"}"#,
+        ] {
+            assert!(serde_json::from_str::<UniqueUnitMap>(malformed).is_err(),
+                    "strict wire decoder must refuse {malformed}");
+        }
     }
 
     #[test]
