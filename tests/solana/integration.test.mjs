@@ -436,6 +436,18 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail');
     await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail');
     await rejectsUnchanged(() => depositIx({ from: strangerSource }), [owner], 'wrong source owner must fail');
+    // The attacker correctly signs as both transaction payer and the named
+    // depositor, but cannot authorize a transfer from the OWNER's SPL source.
+    // This must be an included, on-chain Token Program rejection (meta.err),
+    // not a missing-signature or serialization failure in web3.js.
+    const attackerNonce = new BN('42022');
+    const [attackerReceipt] = receiptFor(attacker.publicKey, attackerNonce);
+    await rejectsUnchanged(() => depositIx({
+      signer: attacker.publicKey, from: source, n: attackerNonce,
+      receiptKey: attackerReceipt, amt: 1n,
+    }), [attacker], 'fully signed wrong-owner SPL source must fail on-chain');
+    assert.equal(await connection.getAccountInfo(attackerReceipt), null,
+      'wrong-owner token transfer must not initialize an attacker receipt');
     const otherMint = await createMint(connection, owner, owner.publicKey, null, 6);
     await rejectsUnchanged(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
     await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
