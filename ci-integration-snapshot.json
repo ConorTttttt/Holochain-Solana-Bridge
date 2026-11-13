@@ -7,7 +7,7 @@
   "sources": {
     "SOL": {
       "branch": "agent/sol/7-anchor-build",
-      "sha": "bc4c907a4fc8e0ef5af073c06285ad248225f017"
+      "sha": "37b35301bf3f6a3773b3c0b27e01370715f67b74"
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
@@ -27,6 +27,6 @@
   "gatePolicy": "No skipped required suite, no unbuilt SBF, no production authorization",
   "created": "2026-11-13",
   "sourceUpdates": {
-    "SOL": "Refreshed tests/solana/integration.test.mjs from current SOL PR #35 after actual validator run 43499276656 exposed duplicate ATA creation."
+    "SOL": "Refreshed all current SOL PR #35 changes through 37b3530, including raw account-decoder / multi-receipt validator regression coverage, stronger generated-IDL PDA-seed tests and evidence docs. Source branch unchanged."
   }
 }
