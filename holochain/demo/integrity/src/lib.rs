@@ -46,6 +46,7 @@ pub struct ProofLabel {
 }
 
 #[hdk_entry_helper]
+#[derive(Clone, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AuditObservation {
     pub kind: String,
@@ -58,6 +59,7 @@ pub struct AuditObservation {
     pub withdrawal_authorized: bool,
 }
 
+#[derive(Serialize, Deserialize)]
 #[hdk_entry_types]
 #[unit_enum(UnitEntryTypes)]
 pub enum EntryTypes {
