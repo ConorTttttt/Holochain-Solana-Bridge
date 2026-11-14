@@ -7,7 +7,7 @@
  * node observer/scripts/replay-validator-witness.mjs \
  *   <target/localnet-evidence> <lifecycle|init-capture|u64-max> \
  *   <trusted-deployment.json> <target/idl/deposit_prototype.json> \
- *   <target/deploy/deposit_prototype.so> <successful-deposit-signature>
+ *   <target/deploy/deposit_prototype.so> <successful-deposit-signature|->
  *
  * stdout: JSON array of solana-deposit-evidence-v1 for SHADOW handoff only.
  * The separate trusted manifest must be pinned by CI/operator, not copied from RPC.
@@ -27,8 +27,11 @@ function witnessFile(dir,name,pattern) {
   need(typeof name === 'string' && pattern.test(name), 'unsafe/missing archived filename');
   return jsonFile(join(dir,name));
 }
-function rpcResult(dir,name) {
-  const response = witnessFile(dir,name,/^(getTransaction|getBlock|getMultipleAccounts)-[A-Za-z0-9-]+\.rpc\.json$/);
+function rpcResult(dir,name,mode) {
+  need(typeof name === 'string' && name.startsWith(mode + '-'),
+    'cross-scenario RPC filename rejected');
+  const response = witnessFile(dir,name,
+    /^(lifecycle|init-capture|u64-max)-(getTransaction|getBlock|getMultipleAccounts)-[A-Za-z0-9-]+\.rpc\.json$/);
   need(response?.jsonrpc === '2.0' && response.error === undefined &&
     response.result !== null && response.result !== undefined,
     'incomplete RPC response in ' + name);
@@ -77,7 +80,7 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
       snapshot.slot >= trusted.trustedDeploymentSlot &&
       Array.isArray(snapshot.accounts) && snapshot.accounts.length >= 3,
       label + ': invalid finalized account manifest');
-    const raw = rpcResult(dir,snapshot.getMultipleAccountsRawFile);
+    const raw = rpcResult(dir,snapshot.getMultipleAccountsRawFile,mode);
     need(raw.context?.slot === snapshot.slot &&
       Array.isArray(raw.value) && raw.value.length === snapshot.accounts.length,
       label + ': inconsistent finalized account RPC');
@@ -103,12 +106,12 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     signatures.add(witness.signature);
     need(Number.isSafeInteger(witness.slot) &&
       witness.slot >= trusted.trustedDeploymentSlot, 'untrusted witness slot');
-    const parsed = rpcResult(dir,witness.getTransactionRawFile);
-    const signed = rpcResult(dir,witness.getTransactionBase64RawFile);
-    const blockJson = rpcResult(dir,witness.getBlockRawFile);
+    const parsed = rpcResult(dir,witness.getTransactionRawFile,mode);
+    const signed = rpcResult(dir,witness.getTransactionBase64RawFile,mode);
+    const blockJson = rpcResult(dir,witness.getBlockRawFile,mode);
     // SOL must capture a SECOND getBlock response with encoding=base64.
     // JSON-only blocks cannot pass OBS's every-entry Ed25519 policy.
-    const blockBase64 = rpcResult(dir,witness.getBlockBase64RawFile);
+    const blockBase64 = rpcResult(dir,witness.getBlockBase64RawFile,mode);
     need(parsed.slot === witness.slot && signed.slot === witness.slot &&
       parsed.version === signed.version &&
       ['legacy',0,1].includes(signed.version) &&
@@ -118,6 +121,15 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     need(typeof wire === 'string' && wire.length > 0 &&
       Buffer.from(wire,'base64').toString('base64') === wire,
       'truncated/noncanonical signed transaction');
+    // Independent of SOL's bundle verifier: compare the original transaction
+    // bytes recorded at submission against finalized RPC bytes for this signature.
+    // Duplicate operation-log entries are allowed only if their wire bytes agree.
+    const submitted = Array.isArray(bundle.transactions) ?
+      bundle.transactions.filter(op => op?.signature === witness.signature &&
+        typeof op.signedWireBase64 === 'string') : [];
+    need(submitted.length > 0 &&
+      submitted.every(op => op.signedWireBase64 === wire),
+      'original submitted signed transaction differs from finalized wire');
     need(signed.meta && parsed.meta && witness.meta &&
       Object.hasOwn(signed.meta,'err') && Object.hasOwn(parsed.meta,'err') &&
       Object.hasOwn(witness.meta,'err') &&
@@ -155,9 +167,10 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
 export async function replayValidatorWitness(options) {
   const archive = preflightValidatorWitness(options);
   const {signature, trusted} = options;
-  need(typeof signature === 'string', 'explicit deposit signature required');
+  need(typeof signature === 'string' && signature.length>0,
+    'deposit signature or explicit archive-only sentinel (-) required');
   // Reuse the same actual @solana/kit Ed25519 block-entry verifier as the indexer.
-  const {signatureOf} = await import('../src/indexer.mjs');
+  const {signatureOf,sameSolanaExecutionMeta} = await import('../src/indexer.mjs');
   const {verifyDepositCandidates,attachReceiptObservation} =
     await import('../src/transaction.mjs');
   const {verifySnapshot} = await import('../src/verify.mjs');
@@ -179,10 +192,18 @@ export async function replayValidatorWitness(options) {
     const entry = item.blockBase64.transactions[offsets[0]];
     need(same(entry.version,item.signed.version) &&
       same(entry.transaction,item.signed.transaction) &&
-      same(entry.meta,item.signed.meta),
+      sameSolanaExecutionMeta(entry.meta,item.signed.meta),
       'getTransaction contradicts containing base64 getBlock');
     if (item.witness.signature === signature) selected = item;
   }
+  // init-capture has NO successful deposit. Its honest result is fully signed
+  // historical-WITNESS-only verification, never fabricated deposit evidence.
+  if (signature==='-') return {
+    evidence:[],accepted:archive.accepted,rejected:archive.rejected,
+    signedWitnessesVerified:archive.transactions.length,archiveOnly:true,
+    historyIndexed:false,independentConsensusVerified:false,creditEligible:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false,
+  };
   need(selected && selected.signed.meta.err === null,
     'requested signature must be a finalized successful deposit');
   const deposits = await verifyDepositCandidates({
@@ -211,16 +232,18 @@ export async function replayValidatorWitness(options) {
   }
   need(evidence.every(x=>x.creditEligible === false &&
     x.independentConsensusVerified === false &&
+    x.spendableBaseUnits === '0' && x.withdrawalAuthorized === false &&
     x.transactionVerified === true),
     'shadow boundary escalation');
   return {evidence,accepted:archive.accepted,rejected:archive.rejected,
-    historyIndexed:false,independentConsensusVerified:false,creditEligible:false};
+    historyIndexed:false,independentConsensusVerified:false,creditEligible:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false};
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const [dir,mode,manifest,idlPath,elfPath,signature] = process.argv.slice(2);
     need([dir,mode,manifest,idlPath,elfPath,signature].every(Boolean),
-      'usage: <evidence-dir> <mode> <trusted-manifest> <IDL> <ELF> <deposit-signature>');
+      'usage: <evidence-dir> <mode> <trusted-manifest> <IDL> <ELF> <deposit-signature|archive-only->');
     const result = await replayValidatorWitness({
       dir,mode,trusted:jsonFile(manifest),idlPath,elfPath,signature,
     });

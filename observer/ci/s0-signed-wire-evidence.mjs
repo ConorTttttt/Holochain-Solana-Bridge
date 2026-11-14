@@ -206,6 +206,87 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                   block:{slot:item.slot,blockhash:'contradictory-blockhash'}}),
                   /conflicting finalized blockhash/);
                 assert.equal(restart.checkpoint,item.slot);
+
+                // ORIGINAL Kit-backed outbox admission, not an invented signed
+                // transaction and NOT a Holochain ACK. Both endpoint names
+                // replay the same retained validator RPC bytes; they are not
+                // independent historical consensus providers.
+                const {DemoOutbox}=await import('../src/demo-outbox.mjs');
+                const {verifyReviewedWitnessV2}=await import('../src/demo-witness-v2.mjs');
+                const ciIdlText=readFileSync('target/idl/deposit_prototype.json','utf8');
+                const sourcePins={
+                  genesisHash:index.genesisHash,program:index.programId,
+                  mint:expected.mint,holochainScope:expected.scope,
+                  idlSha256:(await import('node:crypto')).createHash('sha256')
+                    .update(ciIdlText).digest('hex'),
+                };
+                const target={dnaHash:'NOT_DEPLOYED_DEMO_DNA',
+                  agentKey:'NOT_DEPLOYED_DEMO_AGENT',
+                  appId:'observer-owned-localnet-audit-proposal',
+                  role:'audit',zome:'solana_audit'};
+                const candidateV2Outbox=new DemoOutbox(join(dir,'reviewed-outbox.json'),
+                  {expected:sourcePins,destination:target});
+                const archivedRpc=async (_rpcUrl,options)=>{
+                  const req=JSON.parse(options.body);
+                  let value;
+                  if(req.method==='getGenesisHash')value=index.genesisHash;
+                  else if(req.method==='getTransaction'){
+                    assert.equal(req.params[0],item.signature);
+                    value=tx;
+                  }else if(req.method==='getBlock'){
+                    assert.equal(req.params[0],item.slot);
+                    value=block;
+                  }else if(req.method==='getMultipleAccounts'){
+                    assert.deepEqual(req.params[0],[
+                      receipt.address,expected.config,expected.vault,expected.mint]);
+                    value={context:{slot:active.raw.slot},value:active.raw.accounts.map(a=>({
+                      owner:a.owner,executable:false,lamports:a.lamports,
+                      space:Buffer.from(a.dataBase64,'base64').length,
+                      data:[a.dataBase64,'base64'],
+                    }))};
+                  }else throw Error('UNEXPECTED_ORIGINAL_RPC_METHOD:'+req.method);
+                  return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result:value})};
+                };
+                const queueArgs={ledger:restart,rpcUrls:[
+                  'http://127.0.0.1:8899','http://127.0.0.1:9900'],
+                  signature:item.signature,receiptAddress:receipt.address,
+                  expected,idlText:ciIdlText,codeVersion:'original-observer-ci',
+                  fetchFn:archivedRpc};
+                const savedOptIn=process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+                process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY='1';
+                try{
+                  assert.equal(await candidateV2Outbox.queueVerified(queueArgs),'pending');
+                  assert.equal(await candidateV2Outbox.queueVerified(queueArgs),'pending');
+                  const row=candidateV2Outbox.state.rows[evidence.id];
+                  assert.equal(row.observation.proof.evidenceOrigin,
+                    'observer_reviewed_outbox');
+                  assert.equal(row.reviewedWitnessV2.source.depositNonce,'42017');
+                  assert.equal(row.reviewedWitnessV2.source.recipientCore,evidence.recipientCore);
+                  assert.equal(row.reviewedWitnessV2.source.blockhash,item.blockhash);
+                  assert.equal(row.reviewedWitnessV2.proof.historyComplete,false);
+                  assert.ok(verifyReviewedWitnessV2(row.reviewedWitnessV2));
+                  for(const shortcut of ['transactionVerified','historyComplete',
+                    'historyCoveredByTwoRpcClaims','witnessDigest']){
+                    await assert.rejects(
+                      candidateV2Outbox.queueVerified({...queueArgs,[shortcut]:true}),
+                      /UNTRUSTED_AUTH_SHORTCUT/);
+                  }
+                  await assert.rejects(candidateV2Outbox.deliver(evidence.id,{
+                    preflight:async()=>target,read:async()=>null,
+                    write:async()=>{throw Error('MUST_NEVER_WRITE_UNAPPROVED_V1')},
+                  }),/REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED/);
+                  assert.equal(candidateV2Outbox.status.rows[evidence.id].state,'pending');
+                }finally{
+                  if(savedOptIn===undefined)delete process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+                  else process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY=savedOptIn;
+                  candidateV2Outbox.close();
+                }
+                const reopenedOutbox=new DemoOutbox(join(dir,'reviewed-outbox.json'),
+                  {expected:sourcePins,destination:target});
+                assert.equal(reopenedOutbox.status.rows[evidence.id].state,'pending');
+                reopenedOutbox.close();
+                console.log('REAL_SIGNED_KIT_OUTBOX_QUEUED_V2_NOT_DELIVERED',
+                  evidence.id,item.signature);
               } finally { restart.close(); }
               const shadowActive=reviewShadow(live,binding,shadowJournal);
               assert.equal(shadowActive.verdict,'quarantined');

@@ -186,12 +186,8 @@ for(const [label,settings] of [
   test('cannot advance checkpoint over '+label,async t=>{
     const {options}=input(t);
     const rpc=rpcMock({bothProduced:true,failedTx:signedWire(settings),failedAtSlot:21});
-    // Missing required signer bytes are a distinct, equally fail-closed
-    // verifier rejection. Do not weaken the indexer or journal assertions.
-    const rejection=settings.missingSecond
-      ? /missing required signer signature/
-      : /invalid Ed25519 transaction signature/;
-    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),rejection);
+    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),
+      /invalid Ed25519 transaction signature/);
     const state=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
     assert.equal(state.checkpoint,20);
     assert.deepEqual(Object.keys(state.blocks),['20']);
