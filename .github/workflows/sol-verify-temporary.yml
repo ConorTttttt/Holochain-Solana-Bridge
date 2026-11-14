@@ -9,6 +9,7 @@ on:
       - 'claude/solana-independent-fix'
       - 'agent/sol/sec38-hardening-20261114'
       - 'agent/sol/sec38-attribution-review-20261114'
+      - 'agent/sol/sec38-3-4-remediation-20261114'
     paths:
       - '.github/workflows/sol-verify-temporary.yml'
       - 'rust-toolchain.toml'
@@ -41,21 +42,44 @@ jobs:
           node --check tests/solana/verify-witness-bundle.mjs
           node --check tests/solana/verify-witness-tamper.mjs
           node --test tests/solana/signed-message-fixtures.test.mjs
+          node --test tests/solana/confirmation-recovery.test.mjs
       - name: Install exact Rust 1.95.0
         run: |
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
           rustc -V
-      - name: Install Solana CLI 4.1.2 and archive downloaded installer SHA-256
+      - name: Verify publisher-pinned Agave v4.1.2 Linux archive BEFORE using binaries
+        shell: bash
         run: |
-          mkdir -p target/localnet-evidence
+          set -euo pipefail
+          mkdir -p target/localnet-evidence "$HOME/.local/share/solana"
+          # Independently RECORD and REVIEW this expected digest against the
+          # upstream release metadata before accepting new code. The GitHub
+          # publisher's release checksum is NOT an independent code audit.
+          # https://api.github.com/repos/anza-xyz/agave/releases/tags/v4.1.2
+          expected=5991d027a686eb419a709a479178b33eb83501e8a2bfbf599a81a286bfcbf770
+          archive=/tmp/solana-release-4.1.2-x86_64-unknown-linux-gnu.tar.bz2
           curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
-            https://release.anza.xyz/v4.1.2/install -o /tmp/solana-4.1.2-install.sh
-          sha256sum /tmp/solana-4.1.2-install.sh \
-            > target/localnet-evidence/solana-installer-sha256.txt
-          sh /tmp/solana-4.1.2-install.sh
-          rm /tmp/solana-4.1.2-install.sh
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+            --retry 3 \
+            https://github.com/anza-xyz/agave/releases/download/v4.1.2/solana-release-x86_64-unknown-linux-gnu.tar.bz2 \
+            -o "$archive"
+          printf '%s  %s\n' "$expected" "$archive" | sha256sum --check --status
+          printf '%s  %s\n' "$expected" 'solana-release-v4.1.2-linux.tar.bz2' \
+            > target/localnet-evidence/agave-release-expected-sha256.txt
+          sha256sum "$archive" > target/localnet-evidence/agave-release-actual-sha256.txt
+          # Verify archive's root paths before unpacking. No downloaded shell
+          # installer is executed, and no downloaded binary runs before hashing.
+          while IFS= read -r entry; do
+            case "$entry" in
+              solana-release/*) ;;
+              *) printf 'Unsafe archive path: %s\n' "$entry" >&2; exit 1 ;;
+            esac
+          done < <(tar -tjf "$archive")
+          tar -xjf "$archive" -C "$HOME/.local/share/solana"
+          test -x "$HOME/.local/share/solana/solana-release/bin/solana"
+          test -x "$HOME/.local/share/solana/solana-release/bin/solana-test-validator"
+          echo "$HOME/.local/share/solana/solana-release/bin" >> "$GITHUB_PATH"
+          rm -f "$archive"
       - name: Install Anchor CLI from reviewed signed v1.2.2 commit
         run: |
           # Signed annotated v1.2.2 tag object: 7f9c7c83b5652e92ec6d509e02c0ad4554b6624c

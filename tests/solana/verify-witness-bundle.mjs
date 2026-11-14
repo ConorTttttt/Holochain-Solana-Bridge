@@ -2,7 +2,7 @@
 // Run after each actual local-validator scenario. This is NOT a transaction test.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { decodeSignedWire, assertRpcMessage, assertArchiveAttribution } from './signed-message.mjs';
+import { decodeSignedWire, assertRpcMessage, assertArchiveAttribution, fail } from './signed-message.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,9 +32,23 @@ const checkBinding = (object, label) => {
   assert.match(object.genesisHash, /^[1-9A-HJ-NP-Za-km-z]+$/,
     label + ': missing/invalid genesis identity');
 };
-const openRpc = (name) => {
+const openRpc = (name, containingBlock = false) => {
+  if (containingBlock && (typeof name !== 'string' || !name)) {
+    fail('WITNESS_BLOCK_MISSING', 'no containing-block RPC filename');
+  }
   assert.match(name, /^[A-Za-z0-9-]+\.rpc\.json$/, 'unsafe witness path');
-  const response = readJson(join(dir, name));
+  let response;
+  try {
+    response = readJson(join(dir, name));
+  } catch (error) {
+    if (containingBlock && error?.code === 'ENOENT') {
+      fail('WITNESS_BLOCK_MISSING', name + ': original containing-block RPC file absent');
+    }
+    throw error; // Corrupt JSON and non-block IO errors are not missing-block claims.
+  }
+  if (containingBlock && (response?.result === null || response?.result === undefined)) {
+    fail('WITNESS_BLOCK_MISSING', name + ': original containing-block result absent');
+  }
   assert.equal(response.jsonrpc, '2.0', name + ': missing JSON-RPC version');
   assert.equal(response.error, undefined, name + ': RPC error');
   assert.ok(response.result, name + ': empty RPC result');
@@ -86,13 +100,15 @@ for (const witness of bundle.finalized) {
   signatures.add(witness.signature);
   const parsed = openRpc(witness.getTransactionRawFile);
   const signed = openRpc(witness.getTransactionBase64RawFile);
-  const block = openRpc(witness.getBlockRawFile);
-  const signedBlock = openRpc(witness.getBlockBase64RawFile);
+  const block = openRpc(witness.getBlockRawFile, true);
+  const signedBlock = openRpc(witness.getBlockBase64RawFile, true);
   assert.equal(parsed.slot, witness.slot, 'parsed transaction slot mismatch');
   assert.equal(signed.slot, witness.slot, 'signed transaction slot mismatch');
   assert.equal(block.blockhash, witness.blockhash, 'containing blockhash mismatch');
   assert.equal(signedBlock.blockhash, witness.blockhash, 'signed blockhash mismatch');
-  assert.ok(Array.isArray(signedBlock.transactions), 'signed block must include all transactions');
+  if (!Array.isArray(signedBlock.transactions) || !Array.isArray(block.transactions)) {
+    fail('WITNESS_BLOCK_MISSING', 'containing-block transaction evidence absent');
+  }
   assert.equal(signedBlock.transactions.length, block.transactions.length,
     'signed and decoded blocks have different transaction counts');
   assert.deepEqual(parsed.meta?.err, witness.meta.err, 'parsed transaction error mismatch');
@@ -125,10 +141,11 @@ for (const witness of bundle.finalized) {
         'recorded failing program disagrees with finalized logs: ' + record.label);
     }
   }
-  assert.ok(Array.isArray(block.transactions), 'full containing block is missing');
+  // Both containing-block formats were already checked for transaction arrays.
   const included = block.transactions.find((entry) =>
     entry.transaction?.signatures?.includes(witness.signature));
-  assert.ok(included, 'signed transaction absent from containing block');
+  if (!included) fail('WITNESS_BLOCK_MISSING',
+    witness.signature + ': signed transaction absent from containing block');
   assertRpcMessage(decoded, parsed, included, witness.signature);
   assert.deepEqual(included.meta?.err, witness.meta.err,
     'containing block execution disagrees with transaction');
@@ -203,4 +220,6 @@ console.log('PASS: ' + mode + ' genesis/source/IDL/ELF-bound witnesses: ' +
   accepted + ' accepted, ' + rejected + ' included rejected, ' +
   fixtures[mode].length + ' finalized account snapshots; all signatures ed25519-verified; ' +
   'deployed ELF byte-identical (' + expected.elfSha256 + '); ' +
+  'ProgramData=' + deploymentRecord.programDataAddress + '; ' +
+  'observed upgradeAuthority=' + deploymentRecord.upgradeAuthority + '; ' +
   'local RPC evidence only, NOT independently authenticated consensus');

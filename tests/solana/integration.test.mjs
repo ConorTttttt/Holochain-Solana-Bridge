@@ -14,6 +14,7 @@ import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transa
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
+import { recoverIncludedRejection, assertRecoveredIncludedRejection } from './confirmation-recovery.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
 const connection = new Connection(RPC, 'confirmed');
@@ -546,8 +547,29 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
       persistOperations();
       throw error;
     }
-    const confirmation = await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
-    record.confirmationError = confirmation.value.err;
+    // web3.js confirmTransaction may REJECT its Promise for an INCLUDED
+    // expected-negative transaction, returning only a bare InstructionError.
+    // Do not reclassify that SDK exception as a successful test or drop the
+    // original signed wire: require the validator's own finalized/confirmed
+    // signature status and then its original getTransaction meta below.
+    let confirmationError;
+    let recoveredConfirmedSlot = null;
+    try {
+      const confirmation = await connection.confirmTransaction(
+        { signature, ...blockhash }, 'confirmed');
+      confirmationError = confirmation.value.err;
+    } catch (error) {
+      // The SDK sometimes rejects an included failed instruction as a raw
+      // InstructionError. Never recover transport or expiration exceptions.
+      const recovered = await recoverIncludedRejection({ error, signature, connection });
+      record.confirmationSdkException = JSON.stringify(error);
+      record.recoveredOriginalSignatureStatus = { signature, ...recovered.status };
+      confirmationError = recovered.err;
+      recoveredConfirmedSlot = recovered.slot;
+      record.confirmationRecoveredFromOriginalRpc = true;
+      persistOperations();
+    }
+    record.confirmationError = confirmationError;
     record.status = 'confirmed'; persistOperations();
     let included;
     for (let i = 0; i < 20; i++) {
@@ -563,8 +585,12 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     record.logs = included.meta.logMessages;
     record.emittingProgramId = errorEmitter(record.logs);
     persistOperations();
-    assert.deepEqual(included.meta.err, confirmation.value.err,
-      'confirmation and included execution mismatch: ' + signature);
+    assert.deepEqual(included.meta.err, confirmationError,
+      'confirmation/status and included execution mismatch: ' + signature);
+    if (recoveredConfirmedSlot !== null) {
+      assertRecoveredIncludedRejection({ signature, included,
+        recovered: { slot: recoveredConfirmedSlot, err: confirmationError } });
+    }
     assert.ok(included.meta.logMessages?.length, 'missing included execution logs: ' + signature);
     const outcome = {
       signature, slot: included.slot, blockTime: included.blockTime,
