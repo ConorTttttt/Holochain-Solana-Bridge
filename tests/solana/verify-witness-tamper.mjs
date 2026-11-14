@@ -38,6 +38,48 @@ function flipMessageByte(base64) {
   return bytes.toString('base64');
 }
 
+
+// This changes the ORIGINAL signed wire consistently across every archive copy,
+// getTransaction and getBlock. Without the real private signer key, any changed
+// signed message must fail Ed25519. Structural index classes are instead tested
+// with deliberately re-signed synthetic wires in signed-message-fixtures.test.mjs.
+function mutateArchivedSignedMessage(dir, mutate) {
+  const bundle = readJson(join(dir, bundleName));
+  const witness = bundle.finalized[0];
+  const txPath = join(dir, witness.getTransactionBase64RawFile);
+  const tx = readJson(txPath);
+  const oldBase64 = tx.result.transaction[0];
+  const wire = Buffer.from(oldBase64, 'base64');
+  assert.equal(wire[0], 1, 'tamper setup: expected single-signer legacy localnet witness');
+  const messageStart = 65; // one compact signature count + one 64-byte signature
+  assert.equal(wire[messageStart] & 0x80, 0,
+    'tamper setup: actual archive fixture must be legacy');
+  const staticCount = wire[messageStart + 3];
+  assert.ok(staticCount > 0 && staticCount < 128);
+  const instructionOffset = messageStart + 3 + 1 + staticCount * 32 + 32 + 1;
+  mutate(wire, { messageStart, instructionOffset });
+  const changed = wire.toString('base64');
+  assert.notEqual(changed, oldBase64);
+  tx.result.transaction[0] = changed;
+  writeJson(txPath, tx);
+  const blockPath = join(dir, witness.getBlockBase64RawFile);
+  const block = readJson(blockPath);
+  const matching = block.result.transactions.find(t => t.transaction?.[0] === oldBase64);
+  assert.ok(matching, 'tamper setup: containing-block original wire is missing');
+  matching.transaction[0] = changed;
+  writeJson(blockPath, block);
+  let copies = 0;
+  for (const record of bundle.transactions) {
+    if (record.signature === witness.signature && typeof record.signedWireBase64 === 'string') {
+      assert.equal(record.signedWireBase64, oldBase64);
+      record.signedWireBase64 = changed;
+      copies++;
+    }
+  }
+  assert.ok(copies, 'tamper setup: no submitted original wires');
+  writeJson(join(dir, bundleName), bundle);
+}
+
 const control = withCopy(() => {});
 assert.equal(control.status, 0, 'untampered copy must verify:\n' + control.stderr);
 
@@ -57,6 +99,39 @@ const cases = {
     const bundle = readJson(join(dir, bundleName));
     unlinkSync(join(dir, bundle.finalized[0].getBlockBase64RawFile));
   },
+  'containing parsed block file missing': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    unlinkSync(join(dir, bundle.finalized[0].getBlockRawFile));
+  },
+  'containing base64 block field absent': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    delete bundle.finalized[0].getBlockBase64RawFile;
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'containing block RPC result null': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const path = join(dir, bundle.finalized[0].getBlockBase64RawFile);
+    const rpc = readJson(path);
+    rpc.result = null;
+    writeJson(path, rpc);
+  },
+  'signed wire fee payer key mutated without re-signing': (dir) =>
+    mutateArchivedSignedMessage(dir, (wire, { messageStart }) => {
+      wire[messageStart + 4] ^= 1; // first static key (actual fee payer)
+    }),
+  'signed wire required-signature header mutated': (dir) =>
+    mutateArchivedSignedMessage(dir, (wire, { messageStart }) => {
+      wire[messageStart]++; // signature-count vs required-count invariant fires first
+    }),
+  'signed wire compiled program index mutated without re-signing': (dir) =>
+    mutateArchivedSignedMessage(dir, (wire, { instructionOffset }) => {
+      wire[instructionOffset] = 255;
+    }),
+  'signed wire compiled account index mutated without re-signing': (dir) =>
+    mutateArchivedSignedMessage(dir, (wire, { instructionOffset }) => {
+      assert.ok(wire[instructionOffset + 1] > 0);
+      wire[instructionOffset + 2] = 255; // first compiled account index
+    }),
   'signed message altered consistently in tx and block': (dir) => {
     const bundle = readJson(join(dir, bundleName));
     const witness = bundle.finalized[0];
@@ -172,6 +247,41 @@ const cases = {
       !record.requestedInstructionAccounts[0].writable;
     writeJson(join(dir, bundleName), bundle);
   },
+  'duplicate signed-effective instruction metadata': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.instructions?.length);
+    assert.ok(record);
+    record.instructions.push(structuredClone(record.instructions[0]));
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'duplicate requested instruction evidence': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructions?.length);
+    assert.ok(record);
+    record.requestedInstructions.push(structuredClone(record.requestedInstructions[0]));
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'contradictory duplicated builder metadata': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructionAccounts?.length);
+    assert.ok(record);
+    const copy = structuredClone(record);
+    copy.requestedInstructionAccounts[0].writable =
+      !copy.requestedInstructionAccounts[0].writable;
+    bundle.transactions.push(copy);
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'containing block execution metadata contradicts tx': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const witness = bundle.finalized[0];
+    const path = join(dir, witness.getBlockRawFile);
+    const block = readJson(path);
+    const entry = block.result.transactions.find(t =>
+      t.transaction?.signatures?.includes(witness.signature));
+    assert.ok(entry);
+    entry.meta.err = entry.meta.err === null ? { InstructionError: [0, 'tampered'] } : null;
+    writeJson(path, block);
+  },
   'message blockhash relabelled with intact signed bytes': (dir) => {
     const bundle = readJson(join(dir, bundleName));
     const record = bundle.transactions.find(r => r.recentBlockhash);
@@ -202,7 +312,14 @@ const cases = {
 const expectedFailure = {
   'archive marked incomplete': /partial\/failed witness archive is never a PASS/,
   'finalized witness dropped while claiming complete': /finalized manifest does not cover EVERY recorded signed transaction/,
-  'containing base64 block file missing': /ENOENT/,
+  'containing base64 block file missing': /WITNESS_BLOCK_MISSING:/,
+  'containing parsed block file missing': /WITNESS_BLOCK_MISSING:/,
+  'containing base64 block field absent': /WITNESS_BLOCK_MISSING:/,
+  'containing block RPC result null': /WITNESS_BLOCK_MISSING:/,
+  'signed wire fee payer key mutated without re-signing': /SIGNATURE_INVALID:/,
+  'signed wire required-signature header mutated': /SIGNATURE_COUNT:/,
+  'signed wire compiled program index mutated without re-signing': /SIGNATURE_INVALID:/,
+  'signed wire compiled account index mutated without re-signing': /SIGNATURE_INVALID:/
   'signed message altered consistently in tx and block': /SIGNATURE_INVALID:/,
   'submitted wire bytes differ from finalized bytes': /WIRE_FINALIZED_TRANSACTION:/,
   'all submitted signed wires deleted': /WIRE_REQUIRED:/,
@@ -215,6 +332,10 @@ const expectedFailure = {
   'instruction account flags relabelled with intact signed bytes': /ATTR_INSTRUCTION_ACCOUNTS:/,
   'requested privilege flags falsified against pinned IDL': /ATTR_REQUESTED_IDL:/,
   'requested accounts contradict builder intent': /ATTR_REQUESTED_ACCOUNTS:/,
+  'duplicate signed-effective instruction metadata': /ATTR_INSTRUCTIONS:/,
+  'duplicate requested instruction evidence': /ATTR_REQUESTED_REQUIRED:/,
+  'contradictory duplicated builder metadata': /ATTR_REQUESTED_ACCOUNTS:/,
+  'containing block execution metadata contradicts tx': /containing block execution disagrees with transaction/,
   'message blockhash relabelled with intact signed bytes': /ATTR_BLOCKHASH:/,
   'expected rejection relabelled as success': /recorded execution result disagrees with finalized ledger/,
   'deployed ELF byte altered': /deployed ELF bytes differ from target\/deploy artifact/,

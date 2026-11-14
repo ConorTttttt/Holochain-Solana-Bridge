@@ -305,3 +305,78 @@ test('ALT lookup data cannot be accepted merely by supplying RPC account labels'
   ]);
   rejected('ALT_UNVERIFIED', () => decodeSignedWire(withAlt));
 });
+
+test('SEC-38-3 cryptographic wire payer/header/program/account mutations select exact invariants', () => {
+  const { wire, message, decoded, fixtureSigners, record, rpc, witness } = fixture('legacy', 1);
+  const payer = fixtureSigners[0];
+  const signMessage = (msg, signer = payer) =>
+    Buffer.concat([vec(1), sign(null, msg, signer.privateKey), msg]);
+  const changedPayer = key('SEC-38-3 substituted fee payer');
+  const feePayerMessage = Buffer.from(message);
+  feePayerMessage.set(changedPayer.raw, 4); // three-byte header + one-byte static count
+  rejected('SIGNATURE_INVALID', () => decodeSignedWire(
+    Buffer.concat([wire.subarray(0, 65), feePayerMessage])));
+  const coherentlySignedSubstitution = decodeSignedWire(signMessage(feePayerMessage, changedPayer));
+  assert.equal(coherentlySignedSubstitution.feePayer, changedPayer.address);
+  rejected('ATTR_FEE_PAYER', () => assertArchiveAttribution(
+    coherentlySignedSubstitution, [record], witness, rpc));
+
+  const impossibleRequired = Buffer.from(message);
+  impossibleRequired[0] = 2; // compact wire declares one signature
+  rejected('SIGNATURE_COUNT', () => decodeSignedWire(signMessage(impossibleRequired)));
+  const impossibleReadonly = Buffer.from(message);
+  impossibleReadonly[1] = 1; // all required signers readonly, payer cannot be writable
+  rejected('SIGNATURE_COUNT', () => decodeSignedWire(signMessage(impossibleReadonly)));
+
+  const staticCount = decoded.staticKeys.length;
+  const ixAt = 3 + 1 + 32 * staticCount + 32 + 1;
+  const invalidProgramIndex = Buffer.from(message);
+  invalidProgramIndex[ixAt] = 255;
+  rejected('WIRE_PROGRAM_INDEX', () =>
+    decodeSignedWire(signMessage(invalidProgramIndex)));
+  const invalidAccountIndex = Buffer.from(message);
+  assert.equal(invalidAccountIndex[ixAt + 1], 2);
+  invalidAccountIndex[ixAt + 2] = 255;
+  rejected('WIRE_ACCOUNT_INDEX', () =>
+    decodeSignedWire(signMessage(invalidAccountIndex)));
+
+  // A validly signed change to a different in-range program index is still
+  // contradictory to submitted attribution and the original RPC JSON.
+  const changedProgram = Buffer.from(message);
+  changedProgram[ixAt] = staticCount - 1;
+  const changedDecoded = decodeSignedWire(signMessage(changedProgram));
+  rejected('ATTR_PROGRAM', () =>
+    assertArchiveAttribution(changedDecoded, [record], witness, rpc));
+  rejected('RPC_PROGRAM_INDEX', () =>
+    assertRpcMessage(changedDecoded, rpc, { transaction: rpc.transaction }, 'program-index mutation'));
+  // A changed signed-wire account index also disagrees with signed RPC identity.
+  const changedAccount = Buffer.from(message);
+  changedAccount[ixAt + 2] = 1;
+  const changedAccountDecoded = decodeSignedWire(signMessage(changedAccount));
+  rejected('RPC_INSTRUCTION_ACCOUNTS', () => assertRpcMessage(
+    changedAccountDecoded, rpc, { transaction: rpc.transaction }, 'account-index mutation'));
+});
+
+test('SEC-38-3 rejects duplicate requested and effective instruction evidence', () => {
+  const { decoded, record, rpc, witness } = fixture('legacy', 1);
+  const duplicateEffective = structuredClone(record);
+  duplicateEffective.instructions.push(structuredClone(record.instructions[0]));
+  rejected('ATTR_INSTRUCTIONS', () =>
+    assertArchiveAttribution(decoded, [duplicateEffective], witness, rpc));
+  const duplicateRequested = structuredClone(record);
+  duplicateRequested.requestedInstructions.push(structuredClone(record.requestedInstructions[0]));
+  rejected('ATTR_REQUESTED_REQUIRED', () =>
+    assertArchiveAttribution(decoded, [duplicateRequested], witness, rpc));
+  const conflictingDuplicate = structuredClone(record);
+  conflictingDuplicate.requestedInstructionAccounts[0].writable = false;
+  rejected('ATTR_REQUESTED_ACCOUNTS', () =>
+    assertArchiveAttribution(decoded, [record, conflictingDuplicate], witness, rpc));
+});
+
+test('SEC-38-3 v0 ALT RPC claims fail closed even for a signed no-ALT control', () => {
+  const { decoded, rpc } = fixture(0, 1);
+  const loaded = structuredClone(rpc);
+  loaded.meta.loadedAddresses.readonly.push(key('invented ALT loaded key').address);
+  rejected('ALT_UNVERIFIED', () =>
+    assertRpcMessage(decoded, loaded, { transaction: loaded.transaction }));
+});
