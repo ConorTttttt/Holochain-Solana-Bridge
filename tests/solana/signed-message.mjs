@@ -177,7 +177,11 @@ export function assertRpcMessage(decoded, parsed, blockEntry, label = 'RPC') {
   requireEvidence(blockEntry?.transaction, 'RPC_BLOCK_MISSING', label);
   same(blockEntry.transaction, tx, 'RPC_BLOCK_MESSAGE', label);
 }
-export function assertArchiveAttribution(decoded, records, witness, parsed) {
+// The signed message authenticates EFFECTIVE privileges, not instruction-builder
+// requested flags. The latter are source intent and need a separately pinned
+// instruction schema (Anchor IDL) to assert exact requested flags. Never claim
+// that request flags can be independently recovered from a Solana wire message.
+export function assertArchiveAttribution(decoded, records, witness, parsed, anchorIdl = null) {
   const label = witness.signature;
   const wires = [];
   for (const record of records) {
@@ -222,6 +226,55 @@ export function assertArchiveAttribution(decoded, records, witness, parsed) {
           isSigner: a.isSigner, isWritable: a.isWritable }))
       })), 'ATTR_INSTRUCTIONS');
     }
+    if (Object.hasOwn(record, 'requestedInstructions') ||
+        Object.hasOwn(record, 'requestedInstructionAccounts')) {
+      requireEvidence(Array.isArray(record.requestedInstructions) &&
+        Array.isArray(record.requestedInstructionAccounts) &&
+        record.requestedInstructions.length === decoded.instructions.length &&
+        decoded.instructions.length === 1, 'ATTR_REQUESTED_REQUIRED',
+      label + ': incomplete or unsupported requested-instruction evidence');
+      touched.add('requestedInstructions');
+      touched.add('requestedInstructionAccounts');
+      const requested = record.requestedInstructions[0];
+      const signed = decoded.instructions[0];
+      requireEvidence(requested && Array.isArray(requested.accounts) &&
+        requested.accounts.length === signed.accounts.length,
+      'ATTR_REQUESTED_ACCOUNTS', label + ': requested account count differs from signed');
+      same(requested.index, signed.index, 'ATTR_REQUESTED_INDEX', label);
+      same(requested.programId, signed.programId, 'ATTR_REQUESTED_PROGRAM', label);
+      same(requested.dataBase64, signed.dataBase64, 'ATTR_REQUESTED_DATA', label);
+      const expectedRequestedAccounts = requested.accounts.map((a, i) => {
+        const effective = signed.accounts[i];
+        same(a.index, effective.index, 'ATTR_REQUESTED_ACCOUNTS', label);
+        same(a.pubkey, effective.pubkey, 'ATTR_REQUESTED_ACCOUNTS', label);
+        requireEvidence(typeof a.isSigner === 'boolean' &&
+          typeof a.isWritable === 'boolean', 'ATTR_REQUESTED_FLAGS',
+        label + ': requested permissions must be booleans');
+        requireEvidence((!a.isSigner || effective.isSigner) &&
+          (!a.isWritable || effective.isWritable), 'ATTR_REQUESTED_FLAGS',
+        label + ': requested privilege exceeds signed effective privilege');
+        return { address: a.pubkey, signer: a.isSigner, writable: a.isWritable };
+      });
+      if (anchorIdl) {
+        requireEvidence(anchorIdl.address === signed.programId,
+          'ATTR_REQUESTED_IDL', label + ': program is not reviewed IDL address');
+        const data = Buffer.from(signed.dataBase64, 'base64');
+        const definition = anchorIdl.instructions?.find(ix =>
+          Array.isArray(ix.discriminator) && ix.discriminator.length === 8 &&
+          Buffer.from(ix.discriminator).equals(data.subarray(0, 8)));
+        requireEvidence(definition && Array.isArray(definition.accounts),
+          'ATTR_REQUESTED_IDL', label + ': no instruction discriminator in pinned IDL');
+        const metas = definition.accounts.map(meta => ({
+          isSigner: meta.signer === true,
+          isWritable: meta.writable === true,
+        }));
+        same(requested.accounts.map(a => ({
+          isSigner: a.isSigner, isWritable: a.isWritable,
+        })), metas, 'ATTR_REQUESTED_IDL', label + ': requested flags vs IDL');
+      }
+      same(record.requestedInstructionAccounts, expectedRequestedAccounts,
+        'ATTR_REQUESTED_ACCOUNTS', label + ': requested fields disagree');
+    }
     if (Object.hasOwn(record, 'emittingProgramId')) {
       const emitter = (parsed.meta?.logMessages ?? []).map(line =>
         /^Program ([1-9A-HJ-NP-Za-km-z]+) failed:/.exec(line)?.[1]).find(Boolean) ?? null;
@@ -229,7 +282,8 @@ export function assertArchiveAttribution(decoded, records, witness, parsed) {
     }
   }
   for (const name of ['feePayer', 'signerPubkeys', 'recentBlockhash',
-    'instructionProgramId', 'instructionAccounts', 'instructions']) {
+    'instructionProgramId', 'instructionAccounts', 'instructions',
+    'requestedInstructions', 'requestedInstructionAccounts']) {
     requireEvidence(touched.has(name), 'ATTR_REQUIRED',
       label + ': no submitted attribution for ' + name);
   }
