@@ -347,14 +347,24 @@ test('SEC-38-3 cryptographic wire payer/header/program/account mutations select 
   const changedDecoded = decodeSignedWire(signMessage(changedProgram));
   rejected('ATTR_PROGRAM', () =>
     assertArchiveAttribution(changedDecoded, [record], witness, rpc));
-  rejected('RPC_PROGRAM_INDEX', () =>
+  // A re-signed synthetic wire gets a NEW signature. That signed-wire/RPC
+  // signature mismatch must reject first; only after coherently updating the
+  // RPC signature label can program-index mismatch be the failing invariant.
+  rejected('RPC_SIGNATURES', () =>
     assertRpcMessage(changedDecoded, rpc, { transaction: rpc.transaction }, 'program-index mutation'));
+  const programRpc = structuredClone(rpc);
+  programRpc.transaction.signatures = changedDecoded.signatures;
+  rejected('RPC_PROGRAM_INDEX', () =>
+    assertRpcMessage(changedDecoded, programRpc,
+      { transaction: programRpc.transaction }, 'program-index mutation'));
   // A changed signed-wire account index also disagrees with signed RPC identity.
   const changedAccount = Buffer.from(message);
   changedAccount[ixAt + 2] = 1;
   const changedAccountDecoded = decodeSignedWire(signMessage(changedAccount));
+  const accountRpc = structuredClone(rpc);
+  accountRpc.transaction.signatures = changedAccountDecoded.signatures;
   rejected('RPC_INSTRUCTION_ACCOUNTS', () => assertRpcMessage(
-    changedAccountDecoded, rpc, { transaction: rpc.transaction }, 'account-index mutation'));
+    changedAccountDecoded, accountRpc, { transaction: accountRpc.transaction }, 'account-index mutation'));
 });
 
 test('SEC-38-3 rejects duplicate requested and effective instruction evidence', () => {
