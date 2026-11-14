@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,8 +37,15 @@ async function serve(block7 = true) {
   return { server, history, url: 'http://127.0.0.1:' + port };
 }
 function command(args) {
-  return spawnSync(process.execPath, ['tests/solana/produce-history-archive.mjs', ...args],
-    { encoding: 'utf8', timeout: 10000 });
+  // Async child: the mock HTTP servers run on THIS process event loop.
+  return new Promise(resolve => {
+    const child = spawn(process.execPath,
+      ['tests/solana/produce-history-archive.mjs', ...args], { timeout: 10000 });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('close', status => resolve({ status, stdout, stderr }));
+  });
 }
 function load(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 function checkManifest(dir) {
@@ -54,7 +61,7 @@ test('inclusive produced slots, full raw getBlock and same-host limitation', asy
   const a = await serve(), b = await serve();
   const dir = mkdtempSync(join(tmpdir(), 'sol-archive-mock-'));
   try {
-    const p = command([
+    const p = await command([
       '--provider-a-id=sourceA', '--provider-a-operator=operatorA',
       '--provider-a-url=' + a.url,
       '--provider-b-id=sourceB', '--provider-b-operator=operatorB',
@@ -97,7 +104,7 @@ test('null produced-block RPC records error and cannot pass', async () => {
   const a = await serve(false), b = await serve();
   const dir = mkdtempSync(join(tmpdir(), 'sol-archive-null-'));
   try {
-    const p = command([
+    const p = await command([
       '--provider-a-id=a', '--provider-a-operator=operatorA', '--provider-a-url=' + a.url,
       '--provider-b-id=b', '--provider-b-operator=operatorB', '--provider-b-url=' + b.url,
       '--from-slot=5', '--to-slot=7', '--out=' + dir,
@@ -121,7 +128,7 @@ test('four-account pre-capture records raw finalized context, never historical c
   const dir = mkdtempSync(join(tmpdir(), 'sol-archive-capture-'));
   try {
     const addresses = Array(4).fill('11111111111111111111111111111111').join(',');
-    const p = command(['--capture-four-accounts=pre', '--provider-a-id=sourceA',
+    const p = await command(['--capture-four-accounts=pre', '--provider-a-id=sourceA',
       '--provider-a-url=' + a.url, '--four-addresses=' + addresses, '--out=' + dir]);
     assert.equal(p.status, 0, p.stderr);
     const row = load(join(dir, 'refund-pre-four-accounts.json'));
