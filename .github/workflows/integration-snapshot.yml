@@ -50,6 +50,12 @@ jobs:
           node --check demo/observation-contract.mjs
           node --check demo/observation-contract.test.mjs
           bash scripts/ci/record.sh demo-contract-denials node --test demo/observation-contract.test.mjs
+      - name: Source-domain derivation unit refusals (synthetic; NOT installation)
+        run: |
+          node --check demo/a0-bind-same-run-dna.mjs
+          node --check demo/a0-report-installed-readonly.mjs
+          node --test demo/a0-bind-same-run-dna.test.mjs
+          node --test demo/a0-report-installed-readonly.test.mjs
       - name: Test A0 SHA binding and refusal to promote audit-only file inventory
         run: |
           node --check demo/a0-evidence-summary.mjs
@@ -329,4 +335,97 @@ jobs:
             target/localnet-evidence/restart-validator-before.log
             target/localnet-evidence/restart-validator-after.log
           if-no-files-found: error
+          retention-days: 14
+
+  own-dna-same-run-build-readonly:
+    name: Same-run SOL/OBS-bound real Holochain 0.7.1 build and admin-only install
+    needs: [solana-lifecycle, cross-lane-js]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Retrieve ORIGINAL producer artifacts from THIS same workflow run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: .
+      - name: Retrieve ACTUAL OBS Kit admission and seven-stage preauthorization from THIS run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: integration-cross-lane-js
+          path: .
+      - name: Verify ORIGINAL archived bytes and source domain; test derived DNA binding negatives
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
+          test -s target/localnet-evidence/demo-source-domain.json
+          test -s target/localnet-evidence/evidence-manifest.sha256
+          (cd target/localnet-evidence && sha256sum -c evidence-manifest.sha256)
+          (cd ci-artifacts && sha256sum -c observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
+          (cd ci-artifacts && sha256sum -c a0-preauthorization-seven-stage.json.sha256)
+          node --test demo/a0-bind-same-run-dna.test.mjs
+          node --test demo/a0-report-installed-readonly.test.mjs
+          node demo/a0-bind-same-run-dna.mjs --out ci-artifacts/a0-bound-dna
+          test -s ci-artifacts/a0-bound-dna/source-domain-binding.json
+          cmp holochain/demo/dna.yaml ci-artifacts/a0-bound-dna/bound-dna-source.yaml
+          echo 'Own DNA properties from actual same-run signed Solana source; NEVER archived #55 substitute.'
+      - name: Fail closed if either A4-reviewed native or WASM lock is uncommitted
+        run: |
+          set -euo pipefail
+          node demo/a0-runtime-gate.mjs --out ci-artifacts/a0-source-bound-build-readiness.json --require-build
+          test -s holochain/demo/Cargo.lock
+          test -s holochain/demo/ham-adapter/Cargo.lock
+          git ls-files --error-unmatch -- holochain/demo/Cargo.lock holochain/demo/ham-adapter/Cargo.lock
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Locked native HAM and WASMs; pack source-bound DNA and hApp (no zome call)
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add wasm32-unknown-unknown --toolchain 1.95.0
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command bash holochain/demo/build.sh \
+            2>&1 | tee ci-artifacts/a0-source-bound-build.log
+          test -s holochain/demo/demo-build-artifacts.sha256
+          (cd holochain/demo && sha256sum --check demo-build-artifacts.sha256)
+      - name: Install disposable OWN audit DNA and independently read actual CellId by Admin API
+        run: |
+          set -euo pipefail
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash scripts/ci/a0-own-dna-install-readonly.sh \
+            holochain/demo/holochain_solana_audit_demo.happ \
+            holochain/demo/holochain_solana_audit_demo.dna \
+            ci-artifacts/own-dna-conductor
+          test -s ci-artifacts/own-dna-conductor/own-dna-install-readonly.json
+      - name: Publish seven-stage report ONLY after actual installed identity proof
+        run: |
+          set -euo pipefail
+          node demo/a0-report-installed-readonly.mjs
+          (cd ci-artifacts && sha256sum --check a0-seven-stage-actual-install-readonly.json.sha256)
+      - name: Preserve exact source binding, compile/install outputs and failure artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: a0-same-run-source-bound-own-dna-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ci-artifacts/a0-bound-dna/
+            ci-artifacts/a0-source-bound-build-readiness.json
+            ci-artifacts/a0-source-bound-build.log
+            ci-artifacts/own-dna-conductor/
+            ci-artifacts/a0-seven-stage-actual-install-readonly.json
+            ci-artifacts/a0-seven-stage-actual-install-readonly.json.sha256
+            holochain/demo/demo-build-artifacts.sha256
+            holochain/demo/demo-build-dna-hash.txt
+          if-no-files-found: warn
           retention-days: 14
