@@ -96,7 +96,7 @@ npm --prefix tests/solana test
 # singleton: the first-initializer attack and full-u64 mint cannot run after
 # normal initialization. Anchor legacy test starts/resets its own validator.
 # The tests explicitly fail if config unexpectedly persists between runs.
-for scenario in lifecycle init-capture u64-max; do
+for scenario in lifecycle init-capture u64-max demo-domain; do
   echo "Executing isolated validator scenario: $scenario"
   BRIDGE_TEST_MODE="$scenario" NO_DNA=1 anchor test --skip-build --validator legacy \
     --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
@@ -104,9 +104,13 @@ for scenario in lifecycle init-capture u64-max; do
   node tests/solana/verify-witness-bundle.mjs "$scenario"
   # The verifier must also REJECT tampered/incomplete copies of this archive.
   node tests/solana/verify-witness-tamper.mjs "$scenario"
+  if [ "$scenario" = demo-domain ]; then
+    node tests/solana/verify-demo-domain.mjs
+    node tests/solana/verify-demo-domain-tamper.mjs
+  fi
 done
 # Separate two-process retained-ledger restart: it deploys the same compiled
 # ELF into a brand new disposable ledger, leaves a positive liability, kills
 # the validator, restarts WITHOUT --reset and reconstructs live receipts.
 bash tests/solana/restart-validator.sh
-echo "LOCALNET BUILD, THREE TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"
+echo "LOCALNET BUILD, FOUR TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"
