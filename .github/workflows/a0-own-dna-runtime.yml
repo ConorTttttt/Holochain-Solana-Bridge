@@ -36,6 +36,7 @@ jobs:
           git rev-parse HEAD > ci-artifacts/source-commit.sha
           node --check demo/a0-runtime-gate.mjs
           node --check demo/a0-own-dna-workflow.test.mjs
+          node --check scripts/ci/a0-demo-domain-kit-v2.mjs
           node --test demo/a0-runtime-gate.test.mjs demo/a0-own-dna-workflow.test.mjs demo/a0-dependency-bootstrap.test.mjs demo/a0-own-dna-install-readonly.test.mjs demo/a0-demo-domain-replay.test.mjs tests/holochain/demo/demo-abi.test.mjs 2>&1 | tee ci-artifacts/a0-runtime-refusal-tests.log
           node demo/a0-runtime-gate.mjs --out ci-artifacts/a0-runtime-readiness.json
           sha256sum ci-artifacts/a0-runtime-readiness.json > ci-artifacts/a0-runtime-readiness.sha256

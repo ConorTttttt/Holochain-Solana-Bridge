@@ -19,7 +19,7 @@ import {assertDemoDomainShape} from '../../tests/solana/demo-scope.mjs';
 
 const root='target/localnet-evidence/';
 const load=n=>{
- assert.match(n,/^[a-zA-Z0-9-]+(?:\\.rpc)?\\.json$/,'UNSAFE_ARCHIVE_POINTER');
+ assert.match(n,/^[a-zA-Z0-9-]+(?:[.]rpc)?[.]json$/,'UNSAFE_ARCHIVE_POINTER');
  return JSON.parse(readFileSync(root+n,'utf8'));
 };
 const sha=x=>createHash('sha256').update(x).digest('hex');
