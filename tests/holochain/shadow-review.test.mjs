@@ -15,7 +15,8 @@ const receipt = Object.freeze({ kind: 'solana-receipt-observation-v1',
   mintSupplyBaseUnits: '1000', activeVaultBaseUnits: '500', activeLiabilitiesBaseUnits: '300',
   configBump: 254, receiptBump: 249, commitmentRequested: 'finalized',
   transactionVerified: false, evidenceTrust: 'untrusted_rpc_snapshot',
-  refunded: false, state: 'active_refundable', creditEligible: false });
+  refunded: false, state: 'active_refundable', creditEligible: false,
+  independentConsensusVerified: false, spendableBaseUnits: '0', withdrawalAuthorized: false });
 const audit = (changes = {}, context = binding, journal = new Map()) =>
   reviewShadow({ ...receipt, ...changes }, context, journal);
 
@@ -104,4 +105,23 @@ test('same-slot OBS config/vault/mint conflicts reject; new-slot balance drift r
   const drift = audit({ finalizedSlot: 101, activeVaultBaseUnits: '600', vaultDigest: 'e'.repeat(64) }, binding, journal);
   assert.equal(drift.verdict, 'quarantined');
   assert.equal(drift.spendableBaseUnits, '0');
+});
+
+test('raw OBS observation denial flags are mandatory literal values', () => {
+  for (const [field, wrong, code] of [
+    ['independentConsensusVerified', true, 'INDEPENDENT_CONSENSUS_ESCALATION'],
+    ['spendableBaseUnits', '1', 'SPENDABLE_BALANCE_ESCALATION'],
+    ['withdrawalAuthorized', true, 'WITHDRAWAL_AUTHORIZATION_ESCALATION'],
+  ]) {
+    for (const value of [wrong, undefined]) {
+      const journal = new Map();
+      const result = audit({ [field]: value }, binding, journal);
+      assert.equal(result.verdict, 'rejected');
+      assert.ok(result.findings.includes(code), field);
+      assert.equal(journal.size, 0);
+      assert.equal(result.creditEligible, false);
+      assert.equal(result.spendableBaseUnits, '0');
+      assert.equal(result.withdrawalAuthorized, false);
+    }
+  }
 });
