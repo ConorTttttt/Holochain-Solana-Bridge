@@ -11,6 +11,7 @@ import { deriveBridgeAddresses } from './pda.mjs';
 import { CLASSIC_TOKEN_PROGRAM } from './verify.mjs';
 import { decodeFinalizedWire, verifyWireSignatures } from './transaction.mjs';
 import { validateGeneratedIdl } from '../scripts/verify-idl.mjs';
+import { isVerifiedHistoryCoverage } from './history.mjs';
 
 const SYSTEM = '11111111111111111111111111111111';
 const U64_MAX = (1n << 64n) - 1n;
@@ -186,7 +187,8 @@ export async function verifyRefundTransition({
     'refund liability/vault accounting mismatch');
   // A standalone archive cannot certify produced-slot continuity. A caller may
   // attach an indexer-built coverage record, but this remains a provider claim.
-  const covered=indexerHistory?.kind==='observer-history-coverage-v1' &&
+  const covered=isVerifiedHistoryCoverage(indexerHistory) &&
+    indexerHistory.kind==='observer-history-coverage-v1' &&
     indexerHistory.genesisHash===genesisHash &&
     indexerHistory.fromSlot<=preObservation.finalizedSlot &&
     indexerHistory.toSlot>=rpcTransaction.slot &&
