@@ -131,6 +131,56 @@ test('readonly requested fee-payer signer becomes writable in signed message', (
     assertArchiveAttribution(decoded, [requestedCoherenceTamper], witness, rpc, idl));
 });
 
+test('multi-instruction privilege union is effective at signed-message scope', () => {
+  const payer = key('union payer'), shared = key('union shared account');
+  const program = key('union target program');
+  const blockhash = createHash('sha256').update('union blockhash').digest();
+  // The original first builder instruction requested shared READONLY,
+  // while the second requested it WRITABLE. Solana's compiled static key
+  // header records writable for *both* occurrences; the per-instruction
+  // requested bit cannot be reconstructed from signed wire bytes alone.
+  const firstRequestedWritable = false, secondRequestedWritable = true;
+  assert.equal(firstRequestedWritable, false);
+  assert.equal(secondRequestedWritable, true);
+  const instructions = [Buffer.from([0x11]), Buffer.from([0x22])].map(data =>
+    Buffer.concat([Buffer.from([2]), vec(1), Buffer.from([1]),
+      vec(data.length), data]));
+  const message = Buffer.concat([
+    Buffer.from([1, 0, 1]), vec(3), payer.raw, shared.raw, program.raw,
+    blockhash, vec(2), ...instructions,
+  ]);
+  const signature = sign(null, message, payer.privateKey);
+  const wire = Buffer.concat([vec(1), signature, message]);
+  const decoded = decodeSignedWire(wire);
+  assert.equal(decoded.instructions.length, 2);
+  for (const ix of decoded.instructions) {
+    assert.equal(ix.accounts[0].pubkey, shared.address);
+    assert.equal(ix.accounts[0].isWritable, true,
+      'compiled message must promote shared account to writable for both instructions');
+  }
+  const tx = {
+    signatures: [base58(signature)],
+    message: {
+      accountKeys: [payer.address, shared.address, program.address],
+      recentBlockhash: base58(blockhash),
+      instructions: [
+        { programIdIndex: 2, accounts: [1], data: base58(Buffer.from([0x11])) },
+        { programIdIndex: 2, accounts: [1], data: base58(Buffer.from([0x22])) },
+      ],
+    },
+  };
+  assertRpcMessage(decoded, { version: 'legacy', transaction: tx },
+    { transaction: structuredClone(tx) }, 'signed union');
+  const rpcTamper = structuredClone(tx);
+  rpcTamper.message.instructions[0].accounts[0] = 0;
+  rejected('RPC_INSTRUCTION_ACCOUNTS', () =>
+    assertRpcMessage(decoded, { version: 'legacy', transaction: rpcTamper },
+      { transaction: structuredClone(rpcTamper) }, 'union tamper'));
+  const wireTamper = Buffer.from(wire);
+  wireTamper[wireTamper.length - 1] ^= 1;
+  rejected('SIGNATURE_INVALID', () => decodeSignedWire(wireTamper));
+});
+
 test('synthetic classic SPL Token request ABI is separately authenticated by opcode', () => {
   // The localnet tests actually submit unauthorized MintTo and SetAuthority
   // instructions to the SPL Token program. Those must not be judged against
