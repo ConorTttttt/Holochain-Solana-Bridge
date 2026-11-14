@@ -169,7 +169,7 @@ const cases = {
 };
 // SEC-38-3: accept only the intended rejection class, not a random crash.
 const expectedFailure = {
-  'archive marked incomplete': /partial\\/failed witness archive is never a PASS/,
+  'archive marked incomplete': /partial\/failed witness archive is never a PASS/,
   'finalized witness dropped while claiming complete': /finalized manifest does not cover EVERY recorded signed transaction/,
   'containing base64 block file missing': /ENOENT/,
   'signed message altered consistently in tx and block': /SIGNATURE_INVALID:/,
@@ -184,7 +184,7 @@ const expectedFailure = {
   'instruction account flags relabelled with intact signed bytes': /ATTR_INSTRUCTION_ACCOUNTS:/,
   'message blockhash relabelled with intact signed bytes': /ATTR_BLOCKHASH:/,
   'expected rejection relabelled as success': /recorded execution result disagrees with finalized ledger/,
-  'deployed ELF byte altered': /deployed ELF bytes differ from target\\/deploy artifact/,
+  'deployed ELF byte altered': /deployed ELF bytes differ from target\/deploy artifact/,
 };
 assert.deepEqual(Object.keys(expectedFailure).sort(), Object.keys(cases).sort(),
   'every tamper mutation requires one named expected failure reason');
@@ -192,7 +192,7 @@ for (const [name, mutate] of Object.entries(cases)) {
   const result = withCopy(mutate);
   assert.notEqual(result.status, 0, 'verifier ACCEPTED tampered archive: ' + name);
   assert.match(result.stderr, expectedFailure[name],
-    'WRONG REJECTION CLASS for ' + name + ':\\n' + result.stderr);
+    'WRONG REJECTION CLASS for ' + name + ':\n' + result.stderr);
   console.log('REJECTED (' + mode + '): ' + name + ' -> ' + expectedFailure[name]);
 }
 console.log('PASS: ' + mode + ' verifier rejected all ' + Object.keys(cases).length +
