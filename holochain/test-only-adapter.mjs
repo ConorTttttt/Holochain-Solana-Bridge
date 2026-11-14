@@ -12,8 +12,11 @@ export function createTestOnlyAdapter(binding) {
   const records = [];
   return Object.freeze({
     ingest(observation) {
-      const review = reviewShadowEvidence(observation, binding, journal);
       const duplicate = typeof observation?.id === 'string' && seen.has(observation.id);
+      // Duplicate diagnostics must never update the live journal, even if the
+      // reviewer would otherwise accept a newer slot or refund transition.
+      const review = reviewShadowEvidence(observation, binding,
+        duplicate ? new Map(journal) : journal);
       const verdict = duplicate ? 'rejected' : review.verdict;
       const findings = Object.freeze(duplicate
         ? [...new Set([...review.findings, 'DUPLICATE_EVIDENCE'])]
@@ -27,6 +30,7 @@ export function createTestOnlyAdapter(binding) {
         verdict,
         findings,
         creditEligible: false,
+        independentConsensusVerified: false,
         spendableBaseUnits: '0',
         withdrawalAuthorized: false,
         transactionVerified: false,
