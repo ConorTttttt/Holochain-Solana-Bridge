@@ -15,7 +15,8 @@ const snapshot = {kind:'solana-receipt-observation-v1', id:'genesis:program:rece
   activeLiabilitiesBaseUnits:'9007199254740993', configBump:255, receiptBump:248,
   commitmentRequested:'finalized', transactionVerified:false,
   evidenceTrust:'untrusted_rpc_snapshot', refunded:false,
-  state:'active_refundable', creditEligible:false};
+  state:'active_refundable', creditEligible:false,
+  independentConsensusVerified:false, spendableBaseUnits:'0', withdrawalAuthorized:false};
 const evidence = { ...Object.fromEntries(['id','program','receiptAddress','configAddress',
   'vaultAddress','mint','depositor','recipientCore','holochainScope','depositNonce',
   'amountBaseUnits','configBump','receiptBump'].map(k=>[k,snapshot[k]])),
@@ -29,7 +30,7 @@ const evidence = { ...Object.fromEntries(['id','program','receiptAddress','confi
   evidenceTrust:'rpc_finalized_transaction_and_later_account_snapshot',
   observationSlot:100, refundedAtObservation:false,
   limitations:['RPC provider claims are not independent consensus','Deposits remain refundable'],
-  creditEligible:false};
+  creditEligible:false, spendableBaseUnits:'0', withdrawalAuthorized:false};
 function denyEconomic(result) {
   assert.equal(result.creditEligible,false);
   assert.equal(result.spendableBaseUnits,'0');
