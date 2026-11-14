@@ -181,9 +181,20 @@ async function saveTransactionEvidence() {
   }
   try {
   for (const [signature, expected] of signatures) {
-    activeSignature = signature; archiveStage = 'confirming-finality';
-    const confirmation = await connection.confirmTransaction(signature, 'finalized');
-    assert.ok(confirmation.value, 'missing finalized status: ' + signature);
+    activeSignature = signature; archiveStage = 'checking-finalized-signature-status';
+    // confirmTransaction(signature, 'finalized') can reject its Promise with
+    // the InstructionError of an EXPECTED failed transaction. A negative
+    // on-chain test must not be mistaken for an archive failure. Read actual
+    // validator signature status without reclassifying meta.err as an exception.
+    let status = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const statuses = await connection.getSignatureStatuses([signature],
+        { searchTransactionHistory: true });
+      const candidate = statuses.value[0];
+      if (candidate?.confirmationStatus === 'finalized') { status = candidate; break; }
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    assert.ok(status, 'missing finalized signature status: ' + signature);
     let tx;
     archiveStage = 'fetching-finalized-transaction';
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -194,7 +205,7 @@ async function saveTransactionEvidence() {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     assert.ok(tx?.meta, 'finalized transaction has no execution meta: ' + signature);
-    assert.deepEqual(tx.meta.err, confirmation.value.err,
+    assert.deepEqual(tx.meta.err, status.err,
       'finalized transaction/status disagreement: ' + signature);
     if ('error' in expected) assert.deepEqual(tx.meta.err, expected.error,
       'confirmed/finalized execution disagreement: ' + signature);
@@ -279,6 +290,7 @@ async function saveTransactionEvidence() {
       signature: activeSignature, stage: archiveStage,
       finalizedCount: finalized.length, expectedCount: signatures.size,
       message: String(error?.message ?? error),
+      errorJson: error && typeof error === 'object' ? JSON.stringify(error) : null,
       stack: error?.stack ?? null,
     };
     mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
