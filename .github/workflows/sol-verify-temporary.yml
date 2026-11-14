@@ -10,6 +10,7 @@ on:
       - 'agent/sol/sec38-hardening-20261114'
       - 'agent/sol/sec38-attribution-review-20261114'
       - 'agent/sol/sec38-3-4-remediation-20261114'
+      - 'agent/sol/12-demo-source-domain-handoff-20261114'
     paths:
       - '.github/workflows/sol-verify-temporary.yml'
       - 'rust-toolchain.toml'
@@ -43,6 +44,11 @@ jobs:
           node --check tests/solana/verify-witness-tamper.mjs
           node --test tests/solana/signed-message-fixtures.test.mjs
           node --test tests/solana/confirmation-recovery.test.mjs
+          node --check tests/solana/demo-scope.mjs
+          node --check tests/solana/verify-demo-domain.mjs
+          node --check tests/solana/verify-demo-domain-tamper.mjs
+          node --check tests/solana/integration.test.mjs
+          node --test tests/solana/demo-scope.test.mjs
       - name: Install exact Rust 1.95.0
         run: |
           rustup toolchain install 1.95.0 --profile minimal
