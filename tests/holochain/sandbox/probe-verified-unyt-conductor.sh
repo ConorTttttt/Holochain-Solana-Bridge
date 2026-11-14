@@ -8,8 +8,12 @@ if [[ $# -ne 2 ]]; then
   exit 2
 fi
 VERIFIED="$(cd "$1" && pwd)"
-mkdir -p "$2/logs" "$2/sandboxes"
+mkdir -p "$2/logs"
 OUT="$(cd "$2" && pwd)"
+# Keep Lair Unix socket under SUN_LEN (108 bytes on Linux). CI workspace paths
+# are too long: /home/runner/work/.../ci-artifacts/.../sandboxes/agent-a/ks.
+# A private temporary root is removed at exit and is never uploaded.
+ROOT="$(mktemp -d /tmp/unyt-XXXXXX)"
 for cmd in hc holochain sha256sum timeout grep sed sleep; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "BLOCKED_UNYT_CONDUCTOR: missing $cmd" >&2
@@ -27,16 +31,16 @@ fi
 # publishes only logs, never conductor DBs or keystores. This known passphrase
 # is intentionally suitable ONLY for an isolated throwaway test account.
 PASSPHRASE='throwaway-ci-unyt-0.117.0-no-value'
-cd "$OUT"
+cd "$ROOT"
 printf '%s' "$PASSPHRASE" | timeout --signal=INT 300s hc sandbox --piped generate \
   --app-id unyt-v0117-audit \
   --in-process-lair \
-  --root "$OUT/sandboxes" --directories agent-a \
+  --root "$ROOT" --directories agent-a \
   "$VERIFIED/unyt.happ" > "$OUT/logs/install.log" 2>&1 || {
     echo 'BLOCKED_UNYT_CONDUCTOR: real hApp sandbox installation failed; see install.log' >&2
     exit 2
   }
-if [[ ! -s "$OUT/.hc" ]]; then
+if [[ ! -s "$ROOT/.hc" ]]; then
   echo 'BLOCKED_UNYT_CONDUCTOR: no sandbox path registry after install' >&2
   exit 2
 fi
@@ -49,6 +53,9 @@ cleanup() {
   if [[ -n "$RUN_PID" ]]; then
     kill -INT "$RUN_PID" 2>/dev/null || true
     wait "$RUN_PID" 2>/dev/null || true
+  fi
+  if [[ -d "$ROOT" ]]; then
+    rm -rf -- "$ROOT"
   fi
 }
 trap cleanup EXIT
