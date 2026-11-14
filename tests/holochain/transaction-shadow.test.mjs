@@ -27,6 +27,7 @@ const snapshot = Object.freeze({
   commitmentRequested: 'finalized', transactionVerified: false,
   evidenceTrust: 'untrusted_rpc_snapshot', refunded: false,
   state: 'active_refundable', creditEligible: false,
+  independentConsensusVerified: false, spendableBaseUnits: '0', withdrawalAuthorized: false,
 });
 const evidence = Object.freeze({
   ...Object.fromEntries([
@@ -42,7 +43,8 @@ const evidence = Object.freeze({
   verifiedByRpcClaim: true, transactionVerified: true,
   independentConsensusVerified: false,
   evidenceTrust: 'rpc_finalized_transaction_and_later_account_snapshot',
-  creditEligible: false, receiptSnapshot: snapshot, observationSlot: 100,
+  creditEligible: false, spendableBaseUnits: '0', withdrawalAuthorized: false,
+  receiptSnapshot: snapshot, observationSlot: 100,
   refundedAtObservation: false,
   limitations: ['RPC provider claims are not independent consensus'],
 });
@@ -166,4 +168,31 @@ test('both CLI entry points accept valid transaction evidence only in shadow mod
       inert(record);
     }
   } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('combined OBS evidence rejects missing or escalated denial flags at either layer', () => {
+  const probes = [
+    ['creditEligible', true, 'TX_EVIDENCE_TRUST_ESCALATION', 'CREDIT_ELIGIBILITY_ESCALATION'],
+    ['independentConsensusVerified', true, 'TX_EVIDENCE_TRUST_ESCALATION', 'INDEPENDENT_CONSENSUS_ESCALATION'],
+    ['spendableBaseUnits', '1', 'TX_EVIDENCE_TRUST_ESCALATION', 'SPENDABLE_BALANCE_ESCALATION'],
+    ['withdrawalAuthorized', true, 'TX_EVIDENCE_TRUST_ESCALATION', 'WITHDRAWAL_AUTHORIZATION_ESCALATION'],
+  ];
+  for (const [field, wrongValue, topFinding, nestedFinding] of probes) {
+    for (const value of [wrongValue, undefined]) {
+      const topJournal = new Map();
+      const top = reviewShadowEvidence({ ...evidence, [field]: value }, binding, topJournal);
+      assert.equal(top.verdict, 'rejected', field + ': parent');
+      assert.ok(top.findings.includes(topFinding), field + ': parent finding');
+      assert.equal(topJournal.size, 0);
+      inert(top);
+      const nestedJournal = new Map();
+      const nested = reviewShadowEvidence({
+        ...evidence, receiptSnapshot: { ...snapshot, [field]: value },
+      }, binding, nestedJournal);
+      assert.equal(nested.verdict, 'rejected', field + ': receipt');
+      assert.ok(nested.findings.includes(nestedFinding), field + ': receipt finding');
+      assert.equal(nestedJournal.size, 0);
+      inert(nested);
+    }
+  }
 });
