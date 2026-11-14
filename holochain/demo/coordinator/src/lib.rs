@@ -51,7 +51,12 @@ fn local_records() -> ExternResult<Vec<AuditRecord>> {
         .include_entries(true))?;
     let mut out = Vec::new();
     for record in records {
-        if let Some(observation) = record.entry().to_app_option::<AuditObservation>()? {
+        // SerializedBytesError is not From-convertible into WasmError in HDK 0.7.1.
+        // Refuse malformed local entries without leaking untrusted bytes/errors.
+        let entry = record.entry().to_app_option::<AuditObservation>()
+            .map_err(|_| wasm_error!(WasmErrorInner::Guest(
+                "invalid local audit entry serialization".into())))?;
+        if let Some(observation) = entry {
             out.push(audit_record(record.action_address().clone(), observation));
         }
     }
