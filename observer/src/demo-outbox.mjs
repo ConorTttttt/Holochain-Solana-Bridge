@@ -61,7 +61,7 @@ function checkObservation(v,expected){
   const s=v.source,p=v.proof;
   need(v.kind==='solana-observation-demo-v1'&&v.schemaVersion==='1'&&s.schemaVersion==='1','VERSION');
   need(s.sourceEventType==='deposit'&&p.evidenceKind==='solana-deposit-evidence-v1'&&
-    p.evidenceOrigin==='observer_reviewed_outbox'&&p.verifiedByRpcClaim===true&&
+    ['observer_reviewed_outbox','test_only_fixture'].includes(p.evidenceOrigin)&&p.verifiedByRpcClaim===true&&
     p.transactionVerified===true&&p.historyComplete===false,'UNVERIFIED_OR_REFUND');
   for(const k of ['genesisHash','program','mint','holochainScope'])need(s[k]===expected[k],'SCOPE_'+k);
   need(s.id===`${s.genesisHash}:${s.program}:${s.receiptAddress}`&&
@@ -82,7 +82,7 @@ function scopeOf(destination){
     !/unyt/i.test(destination.appId),'DESTINATION_NOT_CONTROLLED_DEMO');
   return structuredClone(destination);
 }
-function sourceProof(evidence,ledgerRecord,rpcTransaction,destination,codeVersion,expected){
+function sourceProof(evidence,ledgerRecord,rpcTransaction,destination,codeVersion,expected,origin){
   need(evidence?.kind==='solana-deposit-evidence-v1'&&evidence.transactionVerified===true&&
     evidence.verifiedByRpcClaim===true&&evidence.refundedAtObservation===false,'NOT_VERIFIED_ACTIVE_DEPOSIT');
   deny(evidence,'EVIDENCE'); deny(evidence.receiptSnapshot,'SNAPSHOT');
@@ -132,7 +132,7 @@ function sourceProof(evidence,ledgerRecord,rpcTransaction,destination,codeVersio
       amountBaseUnits:evidence.amountBaseUnits,sourceEventType:'deposit',witnessDigest,
       codeVersion,schemaVersion:'1'},
     proof:{...DENIALS,evidenceKind:'solana-deposit-evidence-v1',
-      evidenceOrigin:'observer_reviewed_outbox',verifiedByRpcClaim:true,
+      evidenceOrigin:origin,verifiedByRpcClaim:true,
       transactionVerified:true,historyComplete:false}};
   checkObservation(observation,expected);
   return {observation,components};
@@ -196,15 +196,56 @@ export class DemoOutbox {
     rows:Object.fromEntries(Object.entries(this.state.rows).map(([k,v])=>[k,{state:v.state,actionHash:v.actionHash}]))};}
   persist(){need(this.lockFd!==null,'CLOSED');syncedReplace(this.filename,this.state)}
   close(){if(this.lockFd!==null){closeSync(this.lockFd);unlinkSync(this.lockFile);this.lockFd=null}}
-  /** This method MUST be called only from the trusted OBS process, never with network JSON. */
-  queueVerified({ledger,evidence,rpcTransaction,codeVersion}){
+  /**
+   * Real Kit-backed ONLY: obtain original signed-wire plus containing block via
+   * the source-owned production indexer, re-verify Ed25519, IDL, SPL transfer,
+   * receipt PDA and two-provider later receipt snapshots IN THIS PROCESS.
+   * Untrusted caller JSON labels/booleans cannot create a reviewed origin.
+   */
+  async queueVerified({ledger,rpcUrls,signature,receiptAddress,expected,idl,codeVersion,fetchFn=fetch}){
+    need(Array.isArray(rpcUrls)&&rpcUrls.length===2&&
+      rpcUrls.every(x=>typeof x==='string'&&/^https?:\/\//.test(x))&&rpcUrls[0]!==rpcUrls[1],
+      'TWO_RPC_URLS_REQUIRED');
+    need(expected?.program===this.expected.program&&expected?.mint===this.expected.mint&&
+      expected?.scope===this.expected.holochainScope&&
+      typeof expected.config==='string'&&typeof expected.vault==='string',
+      'PINNED_DEPLOYMENT_MISMATCH');
+    const [{fetchFinalizedTransaction},{verifyDepositCandidates,attachReceiptObservation},
+      {observeRpc,reconcileObservations}]=await Promise.all([
+      import('./indexer.mjs'),import('./transaction.mjs'),import('./verify.mjs'),
+    ]);
+    const fetched=await fetchFinalizedTransaction({
+      rpcUrl:rpcUrls[0],signature,genesisHash:this.expected.genesisHash,fetchFn,
+    });
+    const candidates=await verifyDepositCandidates({
+      rpcTransaction:fetched.rpcTransaction,signature,expected,
+      genesisHash:this.expected.genesisHash,idl,
+      finalizedClaim:fetched.finalizedClaim,blockhash:fetched.blockhash,
+      source:'observer_reviewed_demo_original_rpc',
+    });
+    const matched=candidates.filter(x=>x.receiptAddress===receiptAddress);
+    need(matched.length===1,'DEPOSIT_NOT_AUTHENTICATED_OR_AMBIGUOUS');
+    const snapshots=await Promise.all(rpcUrls.map(rpcUrl=>observeRpc({
+      rpcUrl,expected:{...expected,receipt:receiptAddress},
+      genesisHash:this.expected.genesisHash,fetchFn,
+    })));
+    const evidence=attachReceiptObservation(matched[0],reconcileObservations(...snapshots));
+    return this.#queueInternal({ledger,evidence,rpcTransaction:fetched.rpcTransaction,
+      codeVersion,origin:'observer_reviewed_outbox'});
+  }
+  /** Explicit test-fixture ingestion only: NEVER upgrades to reviewed OBS origin. */
+  queueSyntheticFixture({ledger,evidence,rpcTransaction,codeVersion}){
+    need(process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE==='1','SYNTHETIC_DISABLED');
+    return this.#queueInternal({ledger,evidence,rpcTransaction,codeVersion,origin:'test_only_fixture'});
+  }
+  #queueInternal({ledger,evidence,rpcTransaction,codeVersion,origin}){
     need(ledger instanceof DepositLedger&&ledger.lockFd!==null,'LIVE_SOURCE_LEDGER_REQUIRED');
     need(ledger.state.genesisHash===this.expected.genesisHash&&
       ledger.state.program===this.expected.program,'SOURCE_LEDGER_SCOPE');
     const row=ledger.state.processed[evidence?.id];
     need(row!==undefined,'NOT_DURABLY_VERIFIED');
     const {observation,components}=sourceProof(evidence,row,rpcTransaction,
-      this.destination,codeVersion,this.expected);
+      this.destination,codeVersion,this.expected,origin);
     const fingerprint=domainDigest(DOMAIN+'/work',{observation,components,destination:this.destination});
     const prior=this.state.rows[evidence.id];
     if(prior){need(prior.fingerprint===fingerprint,'SOURCE_FINGERPRINT_CONFLICT');return prior.state;}
@@ -246,6 +287,8 @@ export class DemoOutbox {
   async deliver(id,client,{crashAt}={}){
     const row=this.state.rows[id];need(row,'UNKNOWN_SOURCE');
     if(row.state==='acked')return 'acked';
+    need(row.observation.proof.evidenceOrigin!=='test_only_fixture'||
+      process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE==='1','SYNTHETIC_DELIVERY_DISABLED');
     if(row.state!=='pending')return this.reconcile(id,client);
     try{
       const already=await this.#read(client,row);
