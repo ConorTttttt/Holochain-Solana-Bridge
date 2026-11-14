@@ -50,6 +50,11 @@ jobs:
           node --check demo/observation-contract.mjs
           node --check demo/observation-contract.test.mjs
           bash scripts/ci/record.sh demo-contract-denials node --test demo/observation-contract.test.mjs
+      - name: Test A0 SHA binding and refusal to promote audit-only file inventory
+        run: |
+          node --check demo/a0-evidence-summary.mjs
+          node --check demo/a0-evidence-summary.test.mjs
+          bash scripts/ci/record.sh demo-a0-failclosed node --test demo/a0-evidence-summary.test.mjs
       # IDL checks are REQUIRED: use genuine build output from the validator job,
       # never a synthetic/fabricated IDL. On missing artifacts, continue to the
       # strict cross-lane runner which reports the IDL skip as FAILURE.
@@ -115,6 +120,14 @@ jobs:
         run: bash scripts/ci/record.sh real-signed-wire-observer node --test observer/ci/s0-signed-wire-evidence.mjs
       - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
         run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
+      - name: Emit SHA-bound A0 BLOCKED machine inventory even when a prior step fails
+        if: always()
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          mkdir -p ci-artifacts
+          node demo/a0-evidence-summary.mjs --out ci-artifacts/a0-evidence-summary.json
+          sha256sum ci-artifacts/a0-evidence-summary.json | tee ci-artifacts/a0-evidence-summary.sha256
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
