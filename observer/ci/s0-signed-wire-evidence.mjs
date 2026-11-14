@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
 import { encode58, decodeReceipt } from '../src/decode.mjs';
 import { fetchFinalizedTransaction } from '../src/indexer.mjs';
+import { sameSolanaExecutionMeta } from '../../scripts/ci/s0-solana-execution-meta.mjs';
 import { verifyWireSignatures, verifyDepositCandidates, attachReceiptObservation } from '../src/transaction.mjs';
 import { DepositLedger } from '../src/ledger.mjs';
 import { verifySnapshot } from '../src/verify.mjs';
@@ -70,7 +71,8 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
         if(sig===item.signature) {
           occurrences++;
           assert.deepEqual(candidate.transaction,tx.transaction,'block wire contradicts transaction');
-          assert.deepEqual(candidate.meta,tx.meta,'block meta contradicts transaction');
+          assert.equal(sameSolanaExecutionMeta(candidate.meta,tx.meta),true,
+            'block meta contradicts transaction (all fields except empty rewards null/[])');
         }
       }
       assert.equal(occurrences,1,'signed transaction not unique in finalized block');
@@ -221,3 +223,30 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
     if(mode==='lifecycle')assert.ok(depositCount>0,'no real deposited receipt attributed by OBS');
   });
 }
+
+// CI-owned pinned copies of OBS #36's two boundary tests; real signed-wire
+// positive cases above still require exact transaction bytes and signatures.
+// Real getBlock({rewards:false}) reports rewards:null while matching getTransaction
+// reports rewards:[]; preserve byte-level wire equality separately.
+const baseline = Object.freeze({
+  err:null, fee:5000, preBalances:[10000,0], postBalances:[5000,5000],
+  preTokenBalances:[],postTokenBalances:[],innerInstructions:[],
+  logMessages:['Program log: verify'], computeUnitsConsumed:100,
+  loadedAddresses:{writable:[],readonly:[]}, status:{Ok:null}, rewards:null,
+});
+test('RPC rewards null versus empty list is the only accepted normalization',()=>{
+  assert.equal(sameSolanaExecutionMeta(baseline,{...baseline,rewards:[]}),true);
+  assert.equal(sameSolanaExecutionMeta({...baseline,rewards:[]},baseline),true);
+  assert.equal(sameSolanaExecutionMeta(baseline,{...baseline,rewards:null}),true);
+  assert.equal(sameSolanaExecutionMeta(baseline,{...baseline,rewards:[{pubkey:'attacker'}]}),false);
+  const {rewards,...missing}=baseline;
+  assert.equal(sameSolanaExecutionMeta(baseline,missing),false);
+});
+test('RPC execution, logs, token deltas and loaded ALT addresses remain strict',()=>{
+  for(const field of ['err','fee','preBalances','postBalances','preTokenBalances',
+    'postTokenBalances','innerInstructions','logMessages','loadedAddresses',
+    'computeUnitsConsumed','status']) {
+    const other={...baseline,[field]:field === 'fee' ? 1 : ['tampered']};
+    assert.equal(sameSolanaExecutionMeta(baseline,other),false,field);
+  }
+});
