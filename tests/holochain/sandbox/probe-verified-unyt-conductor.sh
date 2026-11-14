@@ -14,6 +14,24 @@ OUT="$(cd "$2" && pwd)"
 # are too long: /home/runner/work/.../ci-artifacts/.../sandboxes/agent-a/ks.
 # A private temporary root is removed at exit and is never uploaded.
 ROOT="$(mktemp -d /tmp/unyt-XXXXXX)"
+RUN_PID=''
+cleanup() {
+  if [[ -n "$RUN_PID" ]]; then
+    kill -INT "$RUN_PID" 2>/dev/null || true
+    wait "$RUN_PID" 2>/dev/null || true
+  fi
+  # Holochain prints a disposable keystore socket authentication token in
+  # startup logs. Never include it in the retained public CI artifacts.
+  for log in "$OUT/logs/install.log" "$OUT/logs/restart.log"; do
+    if [[ -f "$log" ]]; then
+      sed -Ei 's@(socket\?k=)[A-Za-z0-9_-]+@\1[REDACTED]@g' "$log"
+    fi
+  done
+  if [[ -d "$ROOT" ]]; then
+    rm -rf -- "$ROOT"
+  fi
+}
+trap cleanup EXIT
 for cmd in hc holochain sha256sum timeout grep sed sleep; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "BLOCKED_UNYT_CONDUCTOR: missing $cmd" >&2
@@ -48,17 +66,6 @@ hc sandbox list --verbose > "$OUT/logs/installed-sandbox.log" 2>&1
 
 # Generate starts a real conductor and installs the public hApp; this explicitly
 # restarts that SAME on-disk conductor to probe persistent app/cell state.
-RUN_PID=''
-cleanup() {
-  if [[ -n "$RUN_PID" ]]; then
-    kill -INT "$RUN_PID" 2>/dev/null || true
-    wait "$RUN_PID" 2>/dev/null || true
-  fi
-  if [[ -d "$ROOT" ]]; then
-    rm -rf -- "$ROOT"
-  fi
-}
-trap cleanup EXIT
 printf '%s' "$PASSPHRASE" | timeout --signal=INT 180s hc sandbox --piped run \
   > "$OUT/logs/restart.log" 2>&1 &
 RUN_PID=$!
