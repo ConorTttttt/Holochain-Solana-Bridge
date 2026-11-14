@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {A4_BINDING_DOMAIN,canonicalTypedV2,reviewBindingDigestPrimitive,
-  verifyBindingDigestReviewOnly} from '../src/v2-binding-review.mjs';
+  verifyBindingDigestReviewOnly,assertUniqueRawJsonObjectMembers} from '../src/v2-binding-review.mjs';
 
 const DENIALS={creditEligible:false,independentConsensusVerified:false,
   spendableBaseUnits:'0',withdrawalAuthorized:false};
@@ -59,4 +59,27 @@ test('A4 primitive is expressly not a typed or authenticated admission',()=>{
   assert.throws(()=>verifyBindingDigestReviewOnly({
     ...unsigned,bindingDigest:reviewBindingDigestPrimitive(unsigned),
   }),/OBS_V2_ABI_REVIEW_REFUSED:(SOURCE_SHAPE|WITNESS_SHAPE|PROOF_SHAPE)/);
+});
+
+
+test('v2 raw original sidecar: duplicate keys at any depth refuse before JSON.parse',()=>{
+  const accepted='{"jsonrpc":"2.0","result":{"value":[{"owner":"x","data":["e30=","base64"]}]}}';
+  assert.equal(assertUniqueRawJsonObjectMembers(accepted),true);
+  assert.equal(assertUniqueRawJsonObjectMembers(
+    '{"text":"{\\"owner\\":2}","result":[1,2]}'),true);
+  const rejected=[
+    '{"result":{"value":[{"owner":"x","owner":"y"}]}}',
+    '{"result":{"value":[{"owner":"x","ow\\u006eer":"y"}]}}',
+    '{"result":{"context":{"slot":42,"slot":43}}}',
+    '{"result":1,"result":2}',
+    '{"result":{"__proto__":1}}',
+  ];
+  for(const raw of rejected){
+    assert.throws(()=>assertUniqueRawJsonObjectMembers(raw),
+      /OBS_V2_ABI_REVIEW_REFUSED:RAW_JSON_(DUPLICATE_KEY|PROTOTYPE_KEY)/);
+  }
+  for(const malformed of ['{"result":}', '{"result":true} trailing']){
+    assert.throws(()=>assertUniqueRawJsonObjectMembers(malformed),
+      /OBS_V2_ABI_REVIEW_REFUSED:RAW_JSON_/);
+  }
 });
