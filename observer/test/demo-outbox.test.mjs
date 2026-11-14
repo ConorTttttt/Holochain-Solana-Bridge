@@ -179,3 +179,77 @@ test('21 exact A4 v1 record is root/source/proof, not A1 witness/destination',t=
   assert.equal('witness' in item,false);assert.equal('destination' in item,false);
   assert.equal(outbox.status.rollbackSecurityHold,ROLLBACK_HOLD);
 });
+
+function queueSecondSource({outbox,ledger,tx,evidence}) {
+  const secondReceipt='1'.repeat(31)+'2';
+  const id=`${genesisHash}:${program}:${secondReceipt}`;
+  const second={...evidence,id,receiptAddress:secondReceipt,
+    instructionPath:'outer:1',
+    occurrenceId:`${genesisHash}:${program}:${signature}:outer:1`,
+    receiptSnapshot:{...evidence.receiptSnapshot,id,receiptAddress:secondReceipt}};
+  ledger.commit({checkpoint:18,evidence:[second]});
+  assert.equal(outbox.queueSyntheticFixture({ledger,evidence:second,rpcTransaction:tx,
+    codeVersion:'obs-review-2931c5fc'}),'pending');
+  return second;
+}
+test('22 overlapping async signed deliveries of same source are refused',async t=>{
+  const {outbox,evidence,queue}=make(t);queue();
+  const client=remote();let release,entered;
+  const enteredPromise=new Promise(resolve=>{entered=resolve});
+  const original=client.write.bind(client);
+  client.write=async(...args)=>{
+    entered();await new Promise(resolve=>{release=resolve});
+    return original(...args);
+  };
+  const first=outbox.deliver(evidence.id,client);
+  await enteredPromise;
+  await assert.rejects(outbox.deliver(evidence.id,client),/CONCURRENT_DELIVERY/);
+  release();
+  assert.equal(await first,'acked');assert.equal(client.writes,1);
+});
+test('23 two independent receipt sources deliver out of order without conflation',async t=>{
+  const {outbox,ledger,tx,evidence,queue}=make(t);queue();
+  const second=queueSecondSource({outbox,ledger,tx,evidence});
+  const client=remote();const original=client.write.bind(client);
+  client.write=async(item,...args)=>{
+    await original(item,...args);
+    const actionHash='uhCkk-UNIQUE-MOCK-'+item.source.instructionIndex;
+    client.records.get(item.source.id).actionHash=actionHash;
+    return {actionHash};
+  };
+  assert.equal(await outbox.deliver(second.id,client),'acked');
+  assert.equal(await outbox.deliver(evidence.id,client),'acked');
+  assert.equal(client.writes,2);
+  assert.equal(outbox.status.rows[second.id].actionHash,'uhCkk-UNIQUE-MOCK-1');
+  assert.equal(outbox.status.rows[evidence.id].actionHash,'uhCkk-UNIQUE-MOCK-0');
+});
+test('24 reused remote ActionHash across separate sources refuses second ACK',async t=>{
+  const {outbox,ledger,tx,evidence,queue}=make(t);queue();
+  const second=queueSecondSource({outbox,ledger,tx,evidence});
+  const client=remote();
+  assert.equal(await outbox.deliver(evidence.id,client),'acked');
+  assert.equal(await outbox.deliver(second.id,client),'uncertain');
+  assert.equal(await outbox.reconcile(second.id,client),'hold');
+  assert.equal(outbox.status.rows[evidence.id].state,'acked');
+  assert.equal(outbox.status.rows[second.id].state,'hold');
+});
+test('25 wrong destination AGENT refuses before signed write',async t=>{
+  const {outbox,evidence,queue}=make(t);queue();
+  const client=remote();
+  client.preflight=async()=>({...destination,agentKey:'different-agent'});
+  assert.equal(await outbox.deliver(evidence.id,client),'pending');
+  assert.equal(client.writes,0);
+});
+test('26 Holochain outage during uncertain reconciliation becomes durable hold',async t=>{
+  const {outbox,evidence,queue}=make(t);queue();
+  const client=remote();
+  assert.equal(await outbox.deliver(evidence.id,client,{crashAt:'after_uncertain'}),'uncertain');
+  client.preflight=async()=>{throw Error('conductor offline')};
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');
+  assert.equal(client.writes,0);
+});
+test('27 same receipt with different instruction occurrence refuses source rewrite',t=>{
+  const {queue,evidence}=make(t);queue();
+  assert.throws(()=>queue({...evidence,instructionPath:'outer:1',
+    occurrenceId:`${genesisHash}:${program}:${signature}:outer:1`}),/DURABLE_SOURCE_CONFLICT/);
+});
