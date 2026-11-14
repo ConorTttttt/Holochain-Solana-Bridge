@@ -86,6 +86,10 @@ jobs:
           test "$(cat target/localnet-evidence/source-commit.txt)" = "${{ github.event.pull_request.head.sha || github.sha }}"
           test -s target/localnet-evidence/evidence-manifest.sha256
           (cd target/localnet-evidence && sha256sum -c evidence-manifest.sha256)
+      - name: Validate and replay SOL-owned original Anchor keys sync patch into disposable checkout only
+        run: |
+          set -euo pipefail
+          bash scripts/ci/record.sh original-post-sync-anchor-source node scripts/ci/a0-replay-source-patch.mjs
       - name: Require complete exact-SHA-bound real validator witness bundles
         run: |
           set -euo pipefail
@@ -266,7 +270,7 @@ jobs:
           mkdir -p target/localnet-evidence
           git rev-parse HEAD > target/localnet-evidence/source-commit.txt
           (cd target/localnet-evidence &&
-            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name 'demo-source-domain.json' -o -name 'demo-domain-*.json' -o -name '*.txt' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
+            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name 'demo-source-domain.json' -o -name 'demo-domain-*.json' -o -name '*.txt' -o -name 'tracked-*-sync.sha256' -o -name 'anchor-keys-sync.patch' -o -name 'build-inputs.sha256' -o -name 'cargo-lock.sha256' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
             sort -z | xargs -0 -r sha256sum) > target/localnet-evidence/evidence-manifest.sha256
       - name: Verify exact published workspace and Solana Node graphs
         run: |
@@ -282,6 +286,12 @@ jobs:
             target/deploy/deposit_prototype.so
             target/localnet-evidence/*.txt
             target/localnet-evidence/evidence-manifest.sha256
+            target/localnet-evidence/tracked-pre-sync.sha256
+            target/localnet-evidence/tracked-post-sync.sha256
+            target/localnet-evidence/anchor-keys-sync.patch
+            target/localnet-evidence/anchor-keys-sync-tracked-changes.txt
+            target/localnet-evidence/build-inputs.sha256
+            target/localnet-evidence/cargo-lock.sha256
             target/localnet-evidence/active-receipt.json
             target/localnet-evidence/refunded-receipt.json
             target/localnet-evidence/two-active-receipts.json
