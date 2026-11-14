@@ -1,15 +1,17 @@
-# AUDIT-ONLY DEMO DNA. The scope values MUST be replaced with a verified
-# disposable localnet source domain before build; this fixture is NEVER live.
+# AUDIT-ONLY DEMO DNA. Source: SOL PR #55 exact SHA c071e4c98e7b2dd04a18374f3792c0a90ce4b284,
+# original localnet signed initialize+deposit at slots 10/42, archive 14118166967.
+# Archived local validator is disposable/not a new live network. NO Unyt or economics.
+# The network seed is fresh public identification, NOT a signing secret or proof.
 manifest_version: '0'
 name: holochain_solana_audit_demo
 integrity:
-  network_seed: DEMO-ONLY-REPLACE-WITH-FRESH-RANDOM-SEED
+  network_seed: hsc-audit-demo55-0a2c4d3d6dedf0dab61496349f61d9cd
   properties:
     demoOnly: true
-    genesisHash: Ay3GSFNuCwTjMzLSyotzzsYcbdQfVAqrZwkdeHFN4wDK
-    program: EHT4VAKN1p1XMVkANkMunF8T6Hv3ASskRNDiEPQZ8nYh
-    mint: HbyzbpqUCx6A9g7xzau81eNvtJ6Ak4dTBaN1dHGxzyBc
-    holochainScope: '0707070707070707070707070707070707070707070707070707070707070707'
+    genesisHash: BvMfXydfN4vFMSkWzDhBb5mwM1cJYyXswzsFFhrZ5dVv
+    program: 387eqrHkQHuZG82k8s4cGA3v5U8f433C2iWQe9x8LYG1
+    mint: 3V3vun9zdKfaVtW6i89kdagbBnTvACMCVmdWRtcsg8ig
+    holochainScope: '85738d0a1b3e751bfa70c94700b1f0b2ef8a881839cb585071219962c9616fe7'
   zomes:
     - name: solana_audit_integrity
       hash: null
