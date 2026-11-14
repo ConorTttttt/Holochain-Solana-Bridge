@@ -1,0 +1,264 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto';
+import { fetchFinalizedTransaction, indexFinalizedRange, rpcRequest } from '../src/indexer.mjs';
+import { encode58 } from '../src/decode.mjs';
+
+const pub=n=>encode58(Buffer.alloc(32,n));
+const program='FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG';
+const genesisHash=pub(10),mint=pub(11),config=pub(12),vault=pub(13),scope='07'.repeat(32);
+const disc=x=>[...createHash('sha256').update('account:'+x).digest().subarray(0,8)];
+const seeds=(tag,...others)=>[{kind:'const',value:[...Buffer.from(tag)]},...others];
+const acct=x=>({kind:'account',path:x}), arg=x=>({kind:'arg',path:x});
+const fakeIdl={
+  address:program,
+  accounts:['BridgeConfig','DepositReceipt'].map(name=>({name,discriminator:disc(name)})),
+  types:[
+    {name:'BridgeConfig',type:{kind:'struct',fields:[
+      {name:'admin',type:'pubkey'},{name:'mint',type:'pubkey'},
+      {name:'scope',type:{array:['u8',32]}},{name:'paused',type:'bool'},
+      {name:'total_active',type:'u64'},{name:'bump',type:'u8'}]}},
+    {name:'DepositReceipt',type:{kind:'struct',fields:[
+      {name:'depositor',type:'pubkey'},{name:'mint',type:'pubkey'},
+      {name:'vault',type:'pubkey'},{name:'config',type:'pubkey'},
+      {name:'recipient_core',type:{array:['u8',32]}},{name:'scope',type:{array:['u8',32]}},
+      {name:'nonce',type:'u64'},{name:'amount',type:'u64'},
+      {name:'refunded',type:'bool'},{name:'bump',type:'u8'}]}},
+  ],
+  instructions:[
+    {name:'initialize',accounts:[
+      {name:'config',pda:{seeds:seeds('config')}},
+      {name:'vault',pda:{seeds:seeds('vault',acct('mint'))}},
+    ]},
+    {name:'deposit',accounts:[
+      {name:'config',pda:{seeds:seeds('config')}},
+      {name:'vault',pda:{seeds:seeds('vault',acct('mint'))}},
+      {name:'receipt',pda:{seeds:seeds('deposit',acct('depositor'),arg('nonce'))}},
+    ]},
+  ],
+};
+const idlText=JSON.stringify(fakeIdl);
+const expected={program,mint,config,vault,scope,
+  idlSha256:createHash('sha256').update(idlText).digest('hex')};
+const urls=['https://rpc-a.example','https://rpc-b.example'];
+function fixture(t) {
+  const directory=mkdtempSync(join(tmpdir(),'obs-rpc-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  return join(directory,'ledger.json');
+}
+const baseBlock={blockhash:pub(25),previousBlockhash:pub(26),parentSlot:19,transactions:[]};
+function signedWire({forged=false,failed=true,signerCount=1,forgeSignerIndex=-1,missingSecond=false}={}) {
+  // Legacy signed wire with actual Ed25519 signatures for all required signers.
+  // Zero-filled second signature is the on-wire missing-signature placeholder.
+  const pairs=Array.from({length:signerCount},()=>generateKeyPairSync('ed25519'));
+  const signers=pairs.map(({publicKey})=>
+    Buffer.from(publicKey.export({format:'der',type:'spki'})).subarray(-32));
+  const message=Buffer.concat([
+    Buffer.from([signerCount,0,0,signerCount]),...signers,Buffer.alloc(32,15),Buffer.from([0]),
+  ]);
+  const signatures=pairs.map(({privateKey})=>edSign(null,message,privateKey));
+  if(missingSecond) signatures[1]=Buffer.alloc(64);
+  if(forgeSignerIndex>=0) signatures[forgeSignerIndex][0]^=1;
+  if(forged) message[4 + signerCount*32]^=1; // Mutate recent blockhash AFTER signing.
+  const wire=Buffer.concat([Buffer.from([signerCount]),...signatures,message]);
+  return {
+    version:'legacy',slot:20,transaction:[wire.toString('base64'),'base64'],
+    meta:{err:failed ? {InstructionError:[0,'InvalidInstructionData']} : null},
+    expectedSignature:encode58(signatures[0]),
+  };
+}
+function rpcMock(options={}) {
+  const calls=[];
+  return {
+    calls,
+    fetchFn:async(url,init)=>{
+      const req=JSON.parse(init.body);
+      calls.push({provider:new URL(url).hostname,method:req.method,params:req.params});
+      const isB=url===urls[1];
+      let result;
+      switch(req.method) {
+        case 'getGenesisHash':result=(options.wrongGenesis && isB) ? pub(33):genesisHash; break;
+        case 'getFirstAvailableBlock':result=options.pruned && isB ? 21:1;break;
+        case 'getSlot':result=100;break;
+        case 'getBlocks': {
+          // getBlocks(start, end) lists produced slots ONLY within the inclusive
+          // requested window. A restarted indexer begins at checkpoint + 1.
+          const [start,end]=req.params;
+          const produced=(options.parentBroken || options.bothProduced ||
+            (options.listConflict && isB)) ? [20,21] : [20];
+          result=produced.filter(slot=>slot>=start && slot<=end);
+          break;
+        }
+        case 'getBlock':result=options.prunedBlock && isB ? null :
+          {...baseBlock,
+            ...(req.params[0]===21 ? {
+              blockhash:pub(27),parentSlot:options.parentBroken ? 19:20,
+              previousBlockhash:options.parentBroken ? pub(28):baseBlock.blockhash,
+            } : {blockhash:options.blockConflict && isB ? pub(44):baseBlock.blockhash}),
+            transactions:options.unsupported ? [{version:2,meta:{err:null},transaction:[]}] :
+              options.failedTx && req.params[0]===(options.failedAtSlot ?? 20) ? [options.failedTx] : []};break;
+        default:throw Error('Unexpected '+req.method);
+      }
+      return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+    },
+  };
+}
+function input(t,options={}) {
+  const rpc=rpcMock(options);
+  return {...rpc, options:{
+    rpcUrls:urls,expected,genesisHash, trustedDeploymentSlot:20,
+    idlText, ledgerPath:fixture(t), toSlot:21,fetchFn:rpc.fetchFn,
+  }};
+}
+test('scans produced finalized blocks and commits skipped slots, restart performs no replay',async t=>{
+  const {options,calls}=input(t);
+  const first=await indexFinalizedRange(options);
+  assert.equal(first.checkpoint,21);
+  assert.equal(first.processed,0);
+  assert.equal(first.creditEligible,false);
+  assert.equal(calls.filter(x=>x.method==='getBlock').length,2);
+  const restart=await indexFinalizedRange(options);
+  assert.equal(restart.alreadyIndexed,true);
+  assert.equal(restart.checkpoint,21);
+  assert.equal(calls.filter(x=>x.method==='getBlock').length,2);
+  assert.equal(calls.find(x=>x.method==='getBlock').params[1].maxSupportedTransactionVersion,1);
+  assert.equal(calls.find(x=>x.method==='getBlock').params[1].commitment,'finalized');
+});
+for(const [name,variation,pattern] of [
+  ['provider blockhash disagreement',{blockConflict:true},/disagree about block/],
+  ['provider list disagreement',{listConflict:true},/produced-slot enumeration/],
+  ['parent-chain discontinuity',{parentBroken:true},/parent-chain discontinuity/],
+  ['pruned archive',{pruned:true},/historical data pruned/],
+  ['missing historical block',{prunedBlock:true},/missing\/pruned finalized block/],
+  ['unsupported transaction version',{unsupported:true},/unsupported transaction version/],
+  ['different provider genesis',{wrongGenesis:true},/provider genesis mismatch/],
+]){
+  test('fail closed on '+name,async t=>{
+    const {options}=input(t,variation);
+    await assert.rejects(indexFinalizedRange(options),pattern);
+  });
+}
+test('RPC transport rejects missing result and explicit error',async()=>{
+  const stub=async(_url,request)=>({
+    ok:true,json:async()=>({
+      jsonrpc:'2.0',id:1,
+      ...(JSON.parse(request.body).params[0]==='bad' ? {error:{code:-32000,message:'history pruned'}} : {}),
+    }),
+  });
+  await assert.rejects(rpcRequest(urls[0],'getBlock',[20],stub),/missing RPC getBlock result/);
+  await assert.rejects(rpcRequest(urls[0],'getBlock',['bad'],stub),/RPC getBlock error -32000/);
+});
+
+test('failed transactions require valid Ed25519 signatures before checkpoint advancement',async t=>{
+  const {options}=input(t);
+  const poisoned=rpcMock({bothProduced:true,failedTx:signedWire({forged:true}),failedAtSlot:21});
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:poisoned.fetchFn}),
+    /invalid Ed25519 transaction signature/);
+  // Slot 20 was checked; slot 21 was not, so neither cursor nor replay journal
+  // may claim slot 21. The lock must be released for safe resumption.
+  const persisted=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+  assert.equal(persisted.checkpoint,20);
+  assert.deepEqual(Object.keys(persisted.blocks),['20']);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+  const clean=rpcMock({bothProduced:true,failedTx:signedWire(),failedAtSlot:21});
+  const resumed=await indexFinalizedRange({...options,fetchFn:clean.fetchFn});
+  assert.equal(resumed.checkpoint,21);
+  assert.equal(resumed.processed,0,'failed transactions must never issue deposit evidence');
+  assert.equal(resumed.creditEligible,false);
+});
+
+test('two correctly signed required signers in a failed transaction allow a no-evidence checkpoint',async t=>{
+  const {options}=input(t);
+  const rpc=rpcMock({bothProduced:true,failedTx:signedWire({signerCount:2}),failedAtSlot:21});
+  const result=await indexFinalizedRange({...options,fetchFn:rpc.fetchFn});
+  assert.equal(result.checkpoint,21);
+  assert.equal(result.processed,0);
+  assert.equal(result.creditEligible,false);
+});
+for(const [label,settings] of [
+  ['forged second signer',{signerCount:2,forgeSignerIndex:1}],
+  ['zero-filled missing second signature',{signerCount:2,missingSecond:true}],
+  ['changed message with two signers',{signerCount:2,forged:true}],
+]) {
+  test('cannot advance checkpoint over '+label,async t=>{
+    const {options}=input(t);
+    const rpc=rpcMock({bothProduced:true,failedTx:signedWire(settings),failedAtSlot:21});
+    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),
+      /invalid Ed25519 transaction signature/);
+    const state=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+    assert.equal(state.checkpoint,20);
+    assert.deepEqual(Object.keys(state.blocks),['20']);
+    assert.equal(Object.keys(state.processed).length,0);
+    assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+  });
+}
+test('a restarted scan refuses an out-of-range RPC listing rather than skipping validation',async t=>{
+  const {options}=input(t);
+  const clean=rpcMock({bothProduced:true});
+  const first=await indexFinalizedRange({...options,toSlot:20,fetchFn:clean.fetchFn});
+  assert.equal(first.checkpoint,20);
+  const invalidRange=async(url,init)=>{
+    const request=JSON.parse(init.body);
+    if(request.method==='getBlocks')return {
+      ok:true,json:async()=>({jsonrpc:'2.0',id:1,result:[20,21]}),
+    };
+    return clean.fetchFn(url,init);
+  };
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:invalidRange}),
+    /invalid\/incomplete ordered slot listing/);
+  assert.equal(JSON.parse(readFileSync(options.ledgerPath,'utf8')).checkpoint,20);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+});
+
+test('getTransaction inclusion refuses unrelated forged signatures in containing block',async()=>{
+  const target=signedWire({failed:false});
+  const unrelated=signedWire({forged:true});
+  const containing={...baseBlock,transactions:[
+    {version:target.version,transaction:target.transaction,meta:target.meta},
+    {version:unrelated.version,transaction:unrelated.transaction,meta:unrelated.meta},
+  ]};
+  const fetchFn=async(_url,request)=>{
+    const {method}=JSON.parse(request.body);
+    const result=method==='getGenesisHash' ? genesisHash :
+      method==='getTransaction' ? target :
+      method==='getBlock' ? containing : undefined;
+    return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result})};
+  };
+  await assert.rejects(fetchFinalizedTransaction({
+    rpcUrl:urls[0],signature:target.expectedSignature,genesisHash,fetchFn,
+  }),/invalid Ed25519 transaction signature/);
+});
+
+test('a resumed scan rejects a forged secondary signature without advancing checkpoint',async t=>{
+  const {options}=input(t);
+  const initial=rpcMock({bothProduced:true});
+  const first=await indexFinalizedRange({...options,toSlot:20,fetchFn:initial.fetchFn});
+  assert.equal(first.checkpoint,20);
+
+  // The durable journal is reopened: the only requested range is [21,21].
+  const poisoned=rpcMock({
+    bothProduced:true,failedTx:signedWire({signerCount:2,forgeSignerIndex:1}),
+    failedAtSlot:21,
+  });
+  await assert.rejects(indexFinalizedRange({...options,fetchFn:poisoned.fetchFn}),
+    /invalid Ed25519 transaction signature/);
+  assert.deepEqual(poisoned.calls.filter(x=>x.method==='getBlocks')
+    .map(x=>x.params.slice(0,2)),[[21,21],[21,21]]);
+  const persisted=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
+  assert.equal(persisted.checkpoint,20);
+  assert.deepEqual(Object.keys(persisted.blocks),['20']);
+  assert.equal(Object.keys(persisted.processed).length,0);
+  assert.equal(existsSync(options.ledgerPath+'.lock'),false);
+
+  // A subsequent, fully signed history may advance the slot without deposits.
+  const recovered=rpcMock({
+    bothProduced:true,failedTx:signedWire({signerCount:2}),failedAtSlot:21,
+  });
+  const resumed=await indexFinalizedRange({...options,fetchFn:recovered.fetchFn});
+  assert.equal(resumed.checkpoint,21);
+  assert.equal(resumed.processed,0);
+  assert.equal(resumed.creditEligible,false);
+});
