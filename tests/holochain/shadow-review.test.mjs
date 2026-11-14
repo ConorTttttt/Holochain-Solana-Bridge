@@ -25,6 +25,7 @@ test('consistent observation stays quarantined; there is no spendable balance', 
   assert.equal(output.verdict, 'quarantined');
   assert.equal(output.spendableBaseUnits, '0');
   assert.equal(output.creditEligible, false);
+  assert.equal(output.independentConsensusVerified, false);
   assert.equal(output.withdrawalAuthorized, false);
   assert.ok(output.findings.includes('REFUNDABLE_COLLATERAL'));
 });
@@ -120,6 +121,7 @@ test('raw OBS observation denial flags are mandatory literal values', () => {
       assert.ok(result.findings.includes(code), field);
       assert.equal(journal.size, 0);
       assert.equal(result.creditEligible, false);
+      assert.equal(result.independentConsensusVerified, false);
       assert.equal(result.spendableBaseUnits, '0');
       assert.equal(result.withdrawalAuthorized, false);
     }
