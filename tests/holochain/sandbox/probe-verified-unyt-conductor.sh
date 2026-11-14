@@ -20,11 +20,14 @@ cleanup() {
     kill -INT "$RUN_PID" 2>/dev/null || true
     wait "$RUN_PID" 2>/dev/null || true
   fi
-  # Holochain prints a disposable keystore socket authentication token in
-  # startup logs. Never include it in the retained public CI artifacts.
-  for log in "$OUT/logs/install.log" "$OUT/logs/restart.log"; do
+  # Scrub ALL retained logs (including admin/list output), not merely the
+  # startup streams. Do not publish private Lair keystores or source-chain DBs.
+  for log in "$OUT"/logs/*.log; do
     if [[ -f "$log" ]]; then
-      sed -Ei 's@(socket\?k=)[A-Za-z0-9_-]+@\1[REDACTED]@g' "$log"
+      sed -Ei \
+        -e 's@(socket\?k=)[^[:space:]"\\]+@\1[REDACTED]@g' \
+        -e 's@((token|passphrase|password|secret)[[:space:]]*[:=][[:space:]]*)[^[:space:]",}]+@\1[REDACTED]@Ig' \
+        "$log"
     fi
   done
   if [[ -d "$ROOT" ]]; then
