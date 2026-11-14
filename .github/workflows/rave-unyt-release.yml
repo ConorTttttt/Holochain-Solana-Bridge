@@ -135,7 +135,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           mkdir -p ci-artifacts
-          printf '%s\\n' "$GITHUB_SHA" > ci-artifacts/source-commit.sha
+          printf '%s\n' "$GITHUB_SHA" > ci-artifacts/source-commit.sha
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: rave-unyt-release-bytes-${{ github.sha }}
@@ -149,9 +149,9 @@ jobs:
         run: |
           set -euo pipefail
           nix --version | tee ci-artifacts/conductor-nix-version.log
-          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \\
-            bash tests/holochain/sandbox/probe-verified-unyt-conductor.sh \\
-            "$PWD/ci-artifacts/verified-release" "$PWD/ci-artifacts/conductor-audit" \\
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash tests/holochain/sandbox/probe-verified-unyt-conductor.sh \
+            "$PWD/ci-artifacts/verified-release" "$PWD/ci-artifacts/conductor-audit" \
             2>&1 | tee ci-artifacts/conductor-probe.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
