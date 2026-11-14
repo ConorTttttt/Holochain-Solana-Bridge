@@ -11,7 +11,7 @@ The executable `observation-contract.mjs` accepts only an in-process,
 Observer-shaped signed-transaction + later account-snapshot handoff and returns
 `solana-observation-demo-v1`, with authentic source identity fields,
 a signed-wire SHA-256, original `getTransaction` execution-meta SHA-256,
-receipt digest, exact decimal amount and nonce strings, and a durable event
+receipt digest, exact decimal amount and nonce strings, and a stable event
 identity. It does **not** independently authenticate the input. A caller
 can fabricate its shape; therefore it must NEVER accept arbitrary imported
 JSON, and is only called *after* the Observer's actual Ed25519, transaction,
