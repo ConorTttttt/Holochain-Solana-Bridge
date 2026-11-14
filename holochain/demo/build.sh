@@ -36,19 +36,23 @@ echo 'LOCKFILE DIGESTS:'
 sha256sum Cargo.lock ham-adapter/Cargo.lock
 # Fail before packing if either native signing ABI or zome WASMs fail to compile.
 cargo +1.95.0 build --locked --manifest-path ham-adapter/Cargo.toml --release
-cargo +1.95.0 build --locked --manifest-path Cargo.toml \
-  -p solana_audit_integrity -p solana_audit --release --target wasm32-unknown-unknown
+# Holochain 0.7.1 WASM requires the custom getrandom backend; keep
+# native HAM/Lair build separate from this WASM-only compilation flag.
+RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--cfg getrandom_backend=\"custom\"" \
+  cargo +1.95.0 build --locked --manifest-path Cargo.toml \
+    -p solana_audit_integrity -p solana_audit --release --target wasm32-unknown-unknown
 hc dna pack .
 hc app pack .
+native_ham='ham-adapter/target/release/solana-audit-ham-adapter'
 wasm_integrity='target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm'
 wasm_coordinator='target/wasm32-unknown-unknown/release/solana_audit.wasm'
 bundle_dna='holochain_solana_audit_demo.dna'
 bundle_happ='holochain_solana_audit_demo.happ'
-for path in "$wasm_integrity" "$wasm_coordinator" "$bundle_dna" "$bundle_happ"; do
+for path in "$native_ham" "$wasm_integrity" "$wasm_coordinator" "$bundle_dna" "$bundle_happ"; do
   [[ -s "$path" ]] || { echo "BUILD ARTIFACT MISSING: $path" >&2; exit 3; }
 done
 echo 'SHA256 of actual artifacts:'
-sha256sum "$wasm_integrity" "$wasm_coordinator" "$bundle_dna" "$bundle_happ" \
+sha256sum "$native_ham" "$wasm_integrity" "$wasm_coordinator" "$bundle_dna" "$bundle_happ" \
   Cargo.lock ham-adapter/Cargo.lock | tee demo-build-artifacts.sha256
 echo 'HOLOCHAIN DNA ID (not the DNA bundle SHA256):'
 hc dna hash "$bundle_dna" | tee demo-build-dna-hash.txt
