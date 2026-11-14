@@ -33,7 +33,7 @@ if ! holochain --version | grep -Eq '(^|[[:space:]])0\.7\.1([[:space:]]|$)'; the
   exit 2
 fi
 sha256sum "$VERIFIED/unyt.happ" "$VERIFIED/alliance.dna" > "$OUT/verified-bundle-hashes.sha256"
-mkdir -p "$OUT/happ-unpacked" "$OUT/dna-unpacked"
+# hc unpack creates output directories itself and rejects pre-existing paths.
 hc app unpack "$VERIFIED/unyt.happ" --output "$OUT/happ-unpacked"
 hc dna unpack "$VERIFIED/alliance.dna" --output "$OUT/dna-unpacked"
 find "$OUT/happ-unpacked" "$OUT/dna-unpacked" -type f -print | sort > "$OUT/unpacked-files.txt"
