@@ -34,3 +34,12 @@ At every point, **unpaid externally redeemable obligations <= actually available
 **M5 — Two-way settlement.** Implement independent signing, one-time withdrawal identities, on-chain redemption, failed-payout recovery, on-chain pause/revocation, audits and operational disaster drills.
 
 This is a project gate checklist, not a claim that any later milestone has been implemented.
+
+## Sprint 0 independent SEC review (#10; 2026-11-13)
+
+- The detailed [cross-chain threat model](../security/THREAT_MODEL.md) defines P0/Critical risks, source-finality assumptions, Holochain fork/parked-spend rollback and recovery/migration replays.
+- The [P0 acceptance matrix and evidence plan](../security/ACCEPTANCE.md) lists positive and negative tests, operational requirements, independent sign-off and known unverified stages.
+- Run independent Node fixture tests with `node --test security/test/adversarial.test.mjs`. These validate the current denial boundary and illustrate an **untrusted RPC snapshot**; specification-only replay examples do **not** validate a deployed RAVE or Solana settlement system.
+- Release invariant per asset and scope: **B >= F + H + W + O**, where B is actually available finalized collateral, F is unpaid refundable entitlement, H is externally redeemable claim value (including reversible parked claims), W is authorized unpaid payouts **only for irreversibly extinguished claims removed from H**, and O is other competing liabilities. A possibly reversible Holochain spend cannot authorize payout.
+- **P0 STOP:** Any refunded/redeemable overlap, unverified Solana inclusion, Holochain fork or park reversal, migration replay, signer/upgrade compromise, non-durable paid marker or unresolved signer trust assumption blocks economic issuance and withdrawals. Neither RPC consensus labels nor green Node tests constitute proof.
+- **Independent review is mandatory; SEC cannot self-approve an economic state change.** The existing `creditEligible: false`, `CREDITING_DISABLED`, and `WITHDRAWALS_DISABLED` paths remain unchanged.
