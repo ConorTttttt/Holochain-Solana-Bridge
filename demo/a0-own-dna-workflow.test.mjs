@@ -30,3 +30,11 @@ test('no unsigned/zome mutation is scheduled by the build workflow',()=>{
   assert.doesNotMatch(job,/\s--\s+deliver(?:\s|$)/);
   assert.match(job,/a0-own-dna-build-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 });
+
+test('real owned-DNA installer is separately gated behind successful locked build',()=>{
+  const install=workflow.split('\n  own-dna-install-readonly:\n')[1];
+  assert.ok(install);
+  assert.match(install,/needs: \[own-dna-build\]/);
+  assert.match(install,/source-commit\.sha/);
+  assert.match(install,/a0-own-dna-install-readonly\.sh/);
+});
