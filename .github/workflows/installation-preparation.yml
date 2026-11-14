@@ -35,6 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command bash scripts/installation/runtime-inventory.sh
+      - name: Prepare exact installation arguments and binary/code hashes (NO AUTHORITY)
+        run: node scripts/installation/prepare-request.mjs
       - name: Test authorization refusals (synthetic keys; no real approvals or conductor)
         run: node --test demo/installation/*.test.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

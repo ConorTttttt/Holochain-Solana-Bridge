@@ -1,0 +1,17 @@
+{
+  "hc": {
+    "path": "/nix/store/5sw0c4hxnf472k6m13l5s37sdfxpypf4-hc-0.7.1/bin/hc",
+    "version": "holochain_cli 0.7.1",
+    "sha256": "7062a571b463ba314604dd01e3e0740f115e9f2518ac7cfda6c0b159a97e57fd"
+  },
+  "holochain": {
+    "path": "/nix/store/fx8695w5zd83psgq8vcs56dy7n80mh7q-holochain-0.7.1/bin/holochain",
+    "version": "holochain 0.7.1",
+    "sha256": "b30c5a49577ebc4ccee34e3f7a1c2cfab4590a4624a47700eee31d2211bb0d8a"
+  },
+  "lair-keystore": {
+    "path": "/nix/store/r29yxqcdwwlqy2pd53iw45mazfkz8pxr-lair-keystore-0.7.1/bin/lair-keystore",
+    "version": "lair_keystore 0.7.1",
+    "sha256": "b2ea8a42186eab6ecb359702943d5a6932946507baef2d489d4f9ce1cb2c4fc0"
+  }
+}
