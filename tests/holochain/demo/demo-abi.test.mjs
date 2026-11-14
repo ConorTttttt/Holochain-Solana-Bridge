@@ -41,3 +41,21 @@ bad('unsupported schema',f=>f.schemaVersion='2');
 bad('independent history cover claim',f=>f.proof.historyComplete=true);
 bad('invented provenance',f=>f.proof.evidenceOrigin='trusted_finality');
 bad('unsigned source shape',f=>f.source.signature='abc');
+
+// The target boundary must not accept a crafted 'reviewed' label on arbitrary JSON.
+// Real OBS delivery needs independently reviewed authenticated source-owned code.
+bad('unapproved observer_reviewed_outbox origin',f=>f.proof.evidenceOrigin='observer_reviewed_outbox');
+bad('no source witness digest',f=>f.source.witnessDigest='');
+bad('claim of missing transaction verification',f=>f.proof.transactionVerified=false);
+bad('claim of missing RPC verification',f=>f.proof.verifiedByRpcClaim=false);
+bad('unsupported empty finalized slot',f=>f.source.finalizedSlot=0);
+bad('unsafe JSON number for finalized slot',f=>f.source.finalizedSlot=9007199254740992);
+bad('negative instruction index',f=>f.source.instructionIndex=-1);
+bad('instruction index overflow',f=>f.source.instructionIndex=4294967296);
+bad('trailing extra proof field',f=>f.proof.evidenceAuth='trusted');
+bad('wrong mint',f=>f.source.mint='1'.repeat(32));
+bad('wrong program',f=>f.source.program='1'.repeat(32));
+bad('wrong evidence kind',f=>f.proof.evidenceKind='solana-refund-evidence-v1');
+bad('malformed depositor',f=>f.source.depositor='abc');
+bad('extra source proof field',f=>f.source.ledgerReceipt='self_signed');
+bad('numeric amount instead of exact decimal string',f=>f.source.amountBaseUnits=250000);
