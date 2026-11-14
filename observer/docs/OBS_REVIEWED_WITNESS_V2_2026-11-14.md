@@ -49,3 +49,120 @@ All 27 original mock/synthetic outbox regressions plus eleven new synthetic v2/l
 **A4:** propose strict deposit-only **v2** Rust/DNA/adapter input matching the full OBS proof; do not simply remove the `observer_reviewed_outbox` rejection. Supply compiled own-DNA/WASM SHA-256, real CellId+agent, pinned HAM/Lair signing, `CapGrantOptIn::Withheld`, exact verified author/source/action scope, typed readback, restart/crash and wrong-DNA/author/ABI tests. No capability-grant fallback or published Unyt coordinator calls. **A5:** independently review this proposed v2, replay/in-process trust assumptions, v1 rejection, hostile file rollback and off-host high-water-mark design; independently approve only an exact immutable audit-only call tuple, not a broad privilege.
 
 **Stop gates:** A0 genuine reviewed outbox Kit path: **not yet CI-proven at this new SHA**; A0 signed own-DNA delivery/ACK: **BLOCKED**; B1 full produced-slot/history/refund transition: **BLOCKED**; B2 published Unyt source/capability: **BLOCKED**; Gate C credit, withdrawal, settlement: **NO-GO**. All outputs retain `creditEligible:false`, `independentConsensusVerified:false`, `spendableBaseUnits:"0"`, `withdrawalAuthorized:false`. Never merge to main as economic bridge approval.
+
+
+## 2026-11-14 OBS v2 consistency hardening and executable vector handoff
+
+**OBS source hardening commits:** `12f20c2ff265e1f2b746002f93d2e42119b20626`,
+`ad319ca7ed5e5649b6ce22e1b34ea79bebb06daa`,
+`7afaf52d9df1eeb456712f34a47217810ab164c3`,
+`cc805c0efc30c527af81841c531552730c6a8bf4`.
+These are source changes, not a new independently approved trust model. The full
+original source claim remains pinned by `DemoOutbox.queueVerified`, not by an
+importable JSON document.
+
+### Portable SHA-256 / UTF-8 digest primitive vector
+
+The following **partial, explicitly synthetic digest-primitive test vector** is
+**NOT** a complete `solana-observation-demo-v2` payload, an authentic signed
+Solana transaction or an A4-authorized ABI. Its job is to freeze cross-language
+canonical JSON serialization, original-byte decoding, domain separation and
+a literal expected hash without relying on the runtime builder to generate
+both sides of its own assertion.
+
+- Synthetic input wire (base64): `AQID`.
+- Its original decoded bytes (hex): `010203`.
+- SHA-256 of the decoded 3 wire bytes:
+  `039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81`.
+- Domain: ASCII/UTF-8 `HSC/observer-authenticated-audit-witness/v2` followed
+  by **exactly one NUL byte** (`00`), then the following canonical UTF-8
+  JSON **without** a trailing newline:
+
+```json
+{"creditEligible":false,"destination":{"agentKey":"test-agent","dnaHash":"test-dna"},"independentConsensusVerified":false,"kind":"solana-observation-demo-v2","proof":{"historyComplete":false,"originalSignedWireBase64":"AQID"},"schemaVersion":"2","source":{"depositNonce":"42017","recipientCore":"abababababababababababababababababababababababababababababababab"},"spendableBaseUnits":"0","withdrawalAuthorized":false}
+```
+
+Expected canonical domain digest, lowercase SHA-256 hex:
+`739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91`.
+
+The literal cross-language value is asserted by
+`observer/test/demo-outbox.test.mjs` test 42; tests 39–41 challenge
+recomputed-checksum mutation and the narrow execution-metadata normalization.
+
+### **Full real-source** vector (produced only on accepted same-SHA localnet replay)
+
+`observer/ci/s0-signed-wire-evidence.mjs` now requires the exact current Git
+checkout HEAD to equal BOTH the SOL-produced `target/localnet-evidence/source-commit.txt`
+and the lifecycle index `sourceCommitSha`. Merely using a valid historical
+SOL archive from another SHA **must fail** `SAME_SHA_SOURCE_PRODUCER_REQUIRED`.
+
+When the complete original localnet deposit + Kit queue replay **actually passes**,
+it emits these four CI files; do not fabricate or treat their paths as evidence
+of execution before a verifiable CI artifact exists:
+
+1. `ci-artifacts/observer-reviewed-v2-original-signed-localnet.json`:
+   complete source-rich witness, including exact signed wire base64,
+   full transaction metadata, whole containing block, both original and
+   later receipt snapshots, immutable destination, version and witness digest.
+2. `ci-artifacts/observer-reviewed-v2-original-signed-localnet.canonical.json`:
+   **exact original bytes of recursively sorted unsigned witness JSON**,
+   without a trailing newline, excluding only the final witness digest.
+3. `ci-artifacts/observer-reviewed-v2-original-signed-localnet.witness-digest.txt`:
+   the expected `sha256(domain || 00 || canonical-unsigned-JSON)`.
+4. `ci-artifacts/observer-reviewed-v2-original-signed-localnet.json.sha256`:
+   SHA-256 manifest for all three files, for local corruption detection only.
+
+The CI test computes the domain digest independently using
+`node:crypto.createHash('sha256')`, checks it equals the Observer digest,
+then executes original-wire, fee, genesis and owner negative mutations, plus
+recomputed-checksum source/occurrence/block/metadata/receipt/scope negatives.
+Those names denote **attempted checks**, not published successful results
+until the same-head workflow exits successfully.
+
+### Structural self-check vs authenticated verification
+
+`verifyReviewedWitnessV2` now checks the exact source `id`, instruction
+`occurrenceId`, 40-character lowercase Git source commit, decimal-u64 amount
+and nonce, original wire slot/version/result, exactly one matching original
+signed wire in the containing block, exact execution metadata with **only**
+the verified `rewards:null` ↔ `rewards:[]` equivalence, both receipt
+identities/slot order, and literal denial flags. It also rejects
+uncontrolled app identifiers and non-audit destination role/zome fields.
+
+**It is a structural self-check, not an authentication API.** Anyone can
+recompute `witnessDigest`; a malicious producer may also coherently rewrite
+all source fields, signed-wire bytes or target identifiers and recompute an
+unkeyed hash. The receiver **must not** accept this object from raw JSON,
+trust `proof.evidenceOrigin`, or use the digest as proof that OBS production
+`queueVerified` executed. Source origin requires the original in-process
+Kit verifier, the immutable pinned ledger identity and a **separate,
+independently reviewed authenticated transport/source attestation**.
+
+### A4 / A5 exact interface and unresolved gates
+
+A4 must bind actual **full CellId = (DNA hash, agent public key)**,
+installed app/role/zome/function, externally managed Lair signer identity
+and permitted source-version/epoch to the signed input and returned ActionHash.
+The proposed OBS journal destination remains the five-field
+`dnaHash,agentKey,appId,role,zome` snapshot: it does **not** prove
+actual deployed CellId, signer, authorization or an independently approved v2
+zome input type. A4's existing v1 ABI cannot accept a lossy projection
+of v2, nor should OBS relax its `REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED`
+delivery and reconciliation guards. A5 independently reviews source/ABI,
+full proof and digest, correct cell/agent, untrusted JSON injection,
+hostile-file rollback, type-level readback and ambiguity before approving
+**any** externally authenticated demo-only call.
+
+Agent 1 owns the integration checkout and original validator artifact.
+Required run on **one source SHA**: SOL local-validator producer and
+`node --test observer/ci/s0-signed-wire-evidence.mjs` after genuine original
+files and built IDL/ELF exist in that same checkout; record source SHA,
+`@solana/kit` lockfile, actual signatures, IDL and ELF SHA-256, pass/fail/skip,
+the three evidence files and the manifest. An OBS-only green unit test or an
+old A1 archive is not this acceptance.
+
+**Remaining:** `HOSTILE_FILE_ROLLBACK_UNPROTECTED`,
+`historyComplete:false`, `historyIndexed:false`,
+`refundDurablyCommitted:false`. No independent RPC finality,
+global exactly-once, revocation or economic permission. Security Gate C
+remains **NO-GO**.
