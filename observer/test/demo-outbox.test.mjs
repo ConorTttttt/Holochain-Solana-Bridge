@@ -253,3 +253,32 @@ test('27 same receipt with different instruction occurrence refuses source rewri
   assert.throws(()=>queue({...evidence,instructionPath:'outer:1',
     occurrenceId:`${genesisHash}:${program}:${signature}:outer:1`}),/DURABLE_SOURCE_CONFLICT/);
 });
+
+
+test('28 real Solana RPC fractional uiAmount display is bound, never used as exact quantity',t=>{
+  const {queue,tx,evidence,outbox}=make(t);
+  const meta={...tx.meta,postTokenBalances:[{uiTokenAmount:{
+    amount:'250000',decimals:6,uiAmount:0.25,uiAmountString:'0.25',
+  }}]};
+  assert.equal(queue(evidence,{...tx,meta}),'pending');
+  const witness=outbox.state.rows[evidence.id].observation.source.witnessDigest;
+  assert.match(witness,/^[0-9a-f]{64}$/);
+  const altered={...meta,postTokenBalances:[{uiTokenAmount:{
+    amount:'250000',decimals:6,uiAmount:0.26,uiAmountString:'0.25',
+  }}]};
+  assert.throws(()=>queue(evidence,{...tx,meta:altered}),/SOURCE_FINGERPRINT_CONFLICT/);
+  assert.throws(()=>canonicalJSON({uiAmount:0.25}),/NON_CANONICAL_NUMBER/,
+    'generic proof/ledger JSON stays integer-only');
+});
+test('29 unrelated RPC fractional, unsafe, negative or nonfinite values refuse',t=>{
+  const {queue,tx,evidence}=make(t);
+  const bad=[
+    {...tx.meta,fee:5000.5},
+    {...tx.meta,postTokenBalances:[{uiTokenAmount:{uiAmount:-0}}]},
+    {...tx.meta,postTokenBalances:[{uiTokenAmount:{uiAmount:-0.5}}]},
+    {...tx.meta,postTokenBalances:[{uiTokenAmount:{uiAmount:Infinity}}]},
+    {...tx.meta,postTokenBalances:[{uiTokenAmount:{uiAmount:Number.MAX_SAFE_INTEGER+1}}]},
+  ];
+  for(const meta of bad)assert.throws(()=>queue(evidence,{...tx,meta}),
+    /NON_CANONICAL_RPC_NUMERIC/);
+});
