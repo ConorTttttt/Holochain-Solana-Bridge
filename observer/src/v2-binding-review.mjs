@@ -12,6 +12,10 @@ import {verifyReviewedWitnessV2} from './demo-witness-v2.mjs';
 import {addressBytes,decode58,encode58} from './decode.mjs';
 
 export const A4_BINDING_DOMAIN='HSC/solana-audit-demo-v2/source-to-dna';
+// Explicit review-only resource bounds. A4/Rust must ratify identical values
+// before a typed transport ABI can be considered frozen or activated.
+export const MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES=32*1024*1024;
+export const MAX_TYPED_BINDING_CANONICAL_UTF8_BYTES=96*1024*1024;
 const DENIALS=Object.freeze({creditEligible:false,independentConsensusVerified:false,
   spendableBaseUnits:'0',withdrawalAuthorized:false});
 const fail=code=>{throw Error('OBS_V2_ABI_REVIEW_REFUSED:'+code)};
@@ -33,7 +37,7 @@ const sha=x=>createHash('sha256').update(x).digest('hex');
  * It is an integrity guard, NOT an RPC provenance or signer verification.
  */
 export function assertUniqueRawJsonObjectMembers(raw){
-  if(typeof raw!=='string'||raw.length>32*1024*1024)
+  if(typeof raw!=='string'||Buffer.byteLength(raw,'utf8')>MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES)
     fail('RAW_JSON_UNAVAILABLE_OR_TOO_LARGE');
   let pos=0;
   const space=()=>{while(pos<raw.length&&' \t\r\n'.includes(raw[pos]))pos++};
@@ -225,6 +229,10 @@ function assertReviewShape(record){
     if(!hex64(record.proof[k]))fail('PROOF_DIGEST_TYPE_'+k);
   if(typeof record.proof.originalObserverWitnessCanonicalJson!=='string'||
     typeof record.proof.originalFourAccountRpcUtf8!=='string'||
+    Buffer.byteLength(record.proof.originalObserverWitnessCanonicalJson,'utf8')>
+      MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES||
+    Buffer.byteLength(record.proof.originalFourAccountRpcUtf8,'utf8')>
+      MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES||
     sha(Buffer.from(record.proof.originalObserverWitnessCanonicalJson,'utf8'))!==
       record.proof.originalObserverWitnessCanonicalSha256||
     sha(Buffer.from(record.proof.originalFourAccountRpcUtf8,'utf8'))!==
@@ -301,13 +309,19 @@ function assertReviewShape(record){
 export function verifyBindingDigestReviewOnly(record){
   if(!plain(record)||!hex64(record.bindingDigest))fail('BINDING_DIGEST_TYPE');
   const unsigned=assertReviewShape(record);
+  const canonical=Buffer.from(canonicalTypedV2(unsigned),'utf8');
+  if(canonical.length>MAX_TYPED_BINDING_CANONICAL_UTF8_BYTES)
+    fail('CANONICAL_RECORD_TOO_LARGE');
   const digest=sha(Buffer.concat([Buffer.from(A4_BINDING_DOMAIN,'utf8'),
-    Buffer.from([0]),Buffer.from(canonicalTypedV2(unsigned),'utf8')]));
+    Buffer.from([0]),canonical]));
   if(digest!==record.bindingDigest)fail('BINDING_DIGEST_CHANGED');
   return true;
 }
 /** Digest primitive for independent vectors, not an admission or schema check. */
 export function reviewBindingDigestPrimitive(unsigned){
+  const canonical=Buffer.from(canonicalTypedV2(unsigned),'utf8');
+  if(canonical.length>MAX_TYPED_BINDING_CANONICAL_UTF8_BYTES)
+    fail('CANONICAL_RECORD_TOO_LARGE');
   return sha(Buffer.concat([Buffer.from(A4_BINDING_DOMAIN,'utf8'),
-    Buffer.from([0]),Buffer.from(canonicalTypedV2(unsigned),'utf8')]));
+    Buffer.from([0]),canonical]));
 }
