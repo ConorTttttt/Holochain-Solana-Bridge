@@ -110,7 +110,7 @@ for (const witness of bundle.finalized) {
   assert.equal(decoded.signatures[0], witness.signature,
     'archived signed bytes do not carry the witnessed transaction signature');
   const records = recordsBySignature.get(witness.signature);
-  const submitted = assertArchiveAttribution(decoded, records, witness, parsed);
+  const submitted = assertArchiveAttribution(decoded, records, witness, parsed, idl);
   assert.ok(submitted.equals(signedBytes),
     'WIRE_FINALIZED_TRANSACTION: original submitted wire differs from getTransaction');
   assert.deepEqual(witness.meta.logMessages, parsed.meta?.logMessages,

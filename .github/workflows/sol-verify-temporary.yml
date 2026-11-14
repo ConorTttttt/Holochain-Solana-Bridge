@@ -8,6 +8,7 @@ on:
       - 'agent/sol/7-anchor-build'
       - 'claude/solana-independent-fix'
       - 'agent/sol/sec38-hardening-20261114'
+      - 'agent/sol/sec38-attribution-review-20261114'
     paths:
       - '.github/workflows/sol-verify-temporary.yml'
       - 'rust-toolchain.toml'

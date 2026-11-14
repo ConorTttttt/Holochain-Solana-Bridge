@@ -83,7 +83,19 @@ const cases = {
     const bundle = readJson(join(dir, bundleName));
     const record = bundle.transactions.find((r) => typeof r.signedWireBase64 === 'string');
     assert.ok(record, 'tamper setup: no submitted wire bytes recorded');
-    record.signedWireBase64 = flipMessageByte(record.signedWireBase64);
+    // Multiple operation labels may contain the SAME original submitted wire.
+    // Mutate every copy identically to isolate RPC/wire mismatch; contradictory
+    // duplicate wires are tested separately as WIRE_CONFLICT.
+    const altered = flipMessageByte(record.signedWireBase64);
+    let changed = 0;
+    for (const entry of bundle.transactions) {
+      if (entry.signature !== record.signature ||
+          !Object.hasOwn(entry, 'signedWireBase64')) continue;
+      assert.equal(typeof entry.signedWireBase64, 'string');
+      entry.signedWireBase64 = altered;
+      changed++;
+    }
+    assert.ok(changed > 0, 'tamper setup: signature had no submitted wires');
     writeJson(join(dir, bundleName), bundle);
   },
   'all submitted signed wires deleted': (dir) => {
@@ -141,6 +153,25 @@ const cases = {
     record.instructionAccounts[0].writable = !record.instructionAccounts[0].writable;
     writeJson(join(dir, bundleName), bundle);
   },
+  'requested privilege flags falsified against pinned IDL': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructions?.length &&
+      r.requestedInstructionAccounts?.length);
+    assert.ok(record, 'tamper setup: missing separate requested account records');
+    record.requestedInstructions[0].accounts[0].isWritable =
+      !record.requestedInstructions[0].accounts[0].isWritable;
+    record.requestedInstructionAccounts[0].writable =
+      record.requestedInstructions[0].accounts[0].isWritable;
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'requested accounts contradict builder intent': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructionAccounts?.length);
+    assert.ok(record, 'tamper setup: no requested account flags');
+    record.requestedInstructionAccounts[0].writable =
+      !record.requestedInstructionAccounts[0].writable;
+    writeJson(join(dir, bundleName), bundle);
+  },
   'message blockhash relabelled with intact signed bytes': (dir) => {
     const bundle = readJson(join(dir, bundleName));
     const record = bundle.transactions.find(r => r.recentBlockhash);
@@ -182,6 +213,8 @@ const expectedFailure = {
   'program attribution relabelled with intact signed bytes': /ATTR_PROGRAM:/,
   'instruction data relabelled with intact signed bytes': /ATTR_INSTRUCTIONS:/,
   'instruction account flags relabelled with intact signed bytes': /ATTR_INSTRUCTION_ACCOUNTS:/,
+  'requested privilege flags falsified against pinned IDL': /ATTR_REQUESTED_IDL:/,
+  'requested accounts contradict builder intent': /ATTR_REQUESTED_ACCOUNTS:/,
   'message blockhash relabelled with intact signed bytes': /ATTR_BLOCKHASH:/,
   'expected rejection relabelled as success': /recorded execution result disagrees with finalized ledger/,
   'deployed ELF byte altered': /deployed ELF bytes differ from target\/deploy artifact/,

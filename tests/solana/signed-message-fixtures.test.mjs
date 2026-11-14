@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createPrivateKey, createPublicKey, sign } from 'node:crypto';
-import { base58, decodeSignedWire, assertRpcMessage, assertArchiveAttribution } from './signed-message.mjs';
+import { base58, decode58, decodeSignedWire, assertRpcMessage, assertArchiveAttribution } from './signed-message.mjs';
 
 function vec(n) {
   assert.ok(Number.isSafeInteger(n) && n >= 0 && n < 65536);
@@ -30,7 +30,7 @@ function fixture(version, signerCount) {
   const programIndex = signers.length;
   const otherIndex = accounts.length - 1;
   const hash = createHash('sha256').update('blockhash/' + version + '/' + signerCount).digest();
-  const instructionData = Buffer.from([1, 2, 3, 0, 255]);
+  const instructionData = Buffer.from([1, 2, 3, 0, 255, 9, 8, 7, 23]);
   const ix = Buffer.concat([
     Buffer.from([programIndex]), vec(2), Buffer.from([0, otherIndex]),
     vec(instructionData.length), instructionData
@@ -75,6 +75,8 @@ function fixture(version, signerCount) {
     ],
     emittingProgramId: null
   };
+  record.requestedInstructions = structuredClone(record.instructions);
+  record.requestedInstructionAccounts = structuredClone(record.instructionAccounts);
   return { wire, message, fixtureSigners: signers, decoded, record, rpc,
     witness: { signature: record.signature, messageRecentBlockhash: base58(hash) } };
 }
@@ -96,6 +98,157 @@ for (const [name, version, signers] of [
     assert.deepEqual(assertArchiveAttribution(decoded, [record], witness, rpc), wire);
   });
 }
+test('readonly requested fee-payer signer becomes writable in signed message', () => {
+  const { wire, decoded, record, rpc, witness } = fixture('legacy', 1);
+  assert.equal(decoded.instructions[0].accounts[0].isWritable, true,
+    'fee payer must be writable in the effective compiled message');
+  // Model an Anchor instruction declaring a readonly signer that also pays
+  // fees. The wire proves the effective writable bit; the pinned IDL (not
+  // the wire) attests the requested readonly intent.
+  record.requestedInstructions[0].accounts[0].isWritable = false;
+  record.requestedInstructionAccounts[0].writable = false;
+  const idl = {
+    address: record.instructionProgramId,
+    instructions: [{
+      discriminator: [...Buffer.from(record.instructions[0].dataBase64, 'base64').subarray(0, 8)],
+      accounts: [{ signer: true, writable: false },
+        { signer: false, writable: false }],
+    }],
+  };
+  assert.deepEqual(assertArchiveAttribution(decoded, [record], witness, rpc, idl), wire);
+  const effectiveTamper = structuredClone(record);
+  effectiveTamper.instructionAccounts[0].writable = false;
+  rejected('ATTR_INSTRUCTION_ACCOUNTS', () =>
+    assertArchiveAttribution(decoded, [effectiveTamper], witness, rpc, idl));
+  const idlTamper = structuredClone(record);
+  idlTamper.requestedInstructions[0].accounts[0].isWritable = true;
+  idlTamper.requestedInstructionAccounts[0].writable = true;
+  rejected('ATTR_REQUESTED_IDL', () =>
+    assertArchiveAttribution(decoded, [idlTamper], witness, rpc, idl));
+  const requestedCoherenceTamper = structuredClone(record);
+  requestedCoherenceTamper.requestedInstructionAccounts[0].writable = true;
+  rejected('ATTR_REQUESTED_ACCOUNTS', () =>
+    assertArchiveAttribution(decoded, [requestedCoherenceTamper], witness, rpc, idl));
+});
+
+test('multi-instruction privilege union is effective at signed-message scope', () => {
+  const payer = key('union payer'), shared = key('union shared account');
+  const program = key('union target program');
+  const blockhash = createHash('sha256').update('union blockhash').digest();
+  // The original first builder instruction requested shared READONLY,
+  // while the second requested it WRITABLE. Solana's compiled static key
+  // header records writable for *both* occurrences; the per-instruction
+  // requested bit cannot be reconstructed from signed wire bytes alone.
+  const firstRequestedWritable = false, secondRequestedWritable = true;
+  assert.equal(firstRequestedWritable, false);
+  assert.equal(secondRequestedWritable, true);
+  const instructions = [Buffer.from([0x11]), Buffer.from([0x22])].map(data =>
+    Buffer.concat([Buffer.from([2]), vec(1), Buffer.from([1]),
+      vec(data.length), data]));
+  const message = Buffer.concat([
+    Buffer.from([1, 0, 1]), vec(3), payer.raw, shared.raw, program.raw,
+    blockhash, vec(2), ...instructions,
+  ]);
+  const signature = sign(null, message, payer.privateKey);
+  const wire = Buffer.concat([vec(1), signature, message]);
+  const decoded = decodeSignedWire(wire);
+  assert.equal(decoded.instructions.length, 2);
+  for (const ix of decoded.instructions) {
+    assert.equal(ix.accounts[0].pubkey, shared.address);
+    assert.equal(ix.accounts[0].isWritable, true,
+      'compiled message must promote shared account to writable for both instructions');
+  }
+  const tx = {
+    signatures: [base58(signature)],
+    message: {
+      accountKeys: [payer.address, shared.address, program.address],
+      recentBlockhash: base58(blockhash),
+      instructions: [
+        { programIdIndex: 2, accounts: [1], data: base58(Buffer.from([0x11])) },
+        { programIdIndex: 2, accounts: [1], data: base58(Buffer.from([0x22])) },
+      ],
+    },
+  };
+  assertRpcMessage(decoded, { version: 'legacy', transaction: tx },
+    { transaction: structuredClone(tx) }, 'signed union');
+  const rpcTamper = structuredClone(tx);
+  rpcTamper.message.instructions[0].accounts[0] = 0;
+  rejected('RPC_INSTRUCTION_ACCOUNTS', () =>
+    assertRpcMessage(decoded, { version: 'legacy', transaction: rpcTamper },
+      { transaction: structuredClone(rpcTamper) }, 'union tamper'));
+  const wireTamper = Buffer.from(wire);
+  wireTamper[wireTamper.length - 1] ^= 1;
+  rejected('SIGNATURE_INVALID', () => decodeSignedWire(wireTamper));
+});
+
+test('synthetic classic SPL Token request ABI is separately authenticated by opcode', () => {
+  // The localnet tests actually submit unauthorized MintTo and SetAuthority
+  // instructions to the SPL Token program. Those must not be judged against
+  // the bridge Anchor IDL; they have their own public standard-program ABI.
+  const TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+  const authority = key('spl synthetic payer authority');
+  const mint = key('spl synthetic mint');
+  const destination = key('spl synthetic destination');
+  const token = { address: TOKEN, raw: decode58(TOKEN) };
+  const idl = { address: key('unrelated anchor program').address, instructions: [] };
+  const hash = createHash('sha256').update('spl synthetic blockhash').digest();
+  for (const opcode of [7, 6]) {
+    const mintTo = opcode === 7;
+    const accounts = mintTo ? [authority, mint, destination, token] : [authority, mint, token];
+    const accountIndexes = mintTo ? [1, 2, 0] : [1, 0];
+    const data = mintTo
+      ? Buffer.from([7, 1, 0, 0, 0, 0, 0, 0, 0])
+      : Buffer.concat([Buffer.from([6, 0, 1]), mint.raw]);
+    // Unsigned token program is readonly; unsigned mint/destination writable.
+    const message = Buffer.concat([
+      Buffer.from([1, 0, 1]), vec(accounts.length), ...accounts.map(a => a.raw),
+      hash, vec(1), Buffer.from([accounts.length - 1]),
+      vec(accountIndexes.length), Buffer.from(accountIndexes),
+      vec(data.length), data,
+    ]);
+    const signature = sign(null, message, authority.privateKey);
+    const wire = Buffer.concat([vec(1), signature, message]);
+    const decoded = decodeSignedWire(wire);
+    const effective = decoded.instructions[0].accounts.map(a =>
+      ({ index: a.index, pubkey: a.pubkey, isSigner: a.isSigner,
+        isWritable: a.isWritable }));
+    const requested = effective.map(a => ({ ...a,
+      isWritable: a.pubkey === authority.address ? false : a.isWritable }));
+    assert.equal(requested.at(-1).isWritable, false,
+      'authority requested readonly despite payer effective writable');
+    const record = {
+      label: 'SYNTHETIC-SPL-' + opcode, signature: base58(signature),
+      signedWireBase64: wire.toString('base64'),
+      feePayer: authority.address, signerPubkeys: [authority.address],
+      recentBlockhash: base58(hash), instructionProgramId: TOKEN,
+      instructions: [{ index: 0, programId: TOKEN, dataBase64: data.toString('base64'),
+        accounts: effective }],
+      instructionAccounts: effective.map(a =>
+        ({ address: a.pubkey, signer: a.isSigner, writable: a.isWritable })),
+      requestedInstructions: [{ index: 0, programId: TOKEN,
+        dataBase64: data.toString('base64'), accounts: requested }],
+      requestedInstructionAccounts: requested.map(a =>
+        ({ address: a.pubkey, signer: a.isSigner, writable: a.isWritable })),
+    };
+    const rpc = { meta: { logMessages: [] } };
+    const witness = { signature: record.signature, messageRecentBlockhash: base58(hash) };
+    assert.deepEqual(assertArchiveAttribution(decoded, [record], witness, rpc, idl), wire);
+    const tamper = structuredClone(record);
+    tamper.requestedInstructions[0].accounts[0].isWritable = false;
+    tamper.requestedInstructionAccounts[0].writable = false;
+    rejected('ATTR_REQUESTED_IDL', () =>
+      assertArchiveAttribution(decoded, [tamper], witness, rpc, idl));
+    const effectiveTamper = structuredClone(record);
+    effectiveTamper.instructions[0].accounts.at(-1).isWritable = false;
+    rejected('ATTR_INSTRUCTIONS', () =>
+      assertArchiveAttribution(decoded, [effectiveTamper], witness, rpc, idl));
+  }
+  // Unknown foreign programs have NO default "trust request labels" mode.
+  const { decoded, record, rpc, witness } = fixture('legacy', 1);
+  rejected('ATTR_REQUESTED_PROGRAM', () =>
+    assertArchiveAttribution(decoded, [record], witness, rpc, idl));
+});
+
 test('synthetic signed-message tamper and attribution tamper reject by class', () => {
   const { wire, decoded, record, rpc, witness } = fixture(0, 2);
   const corruptedSignature = Buffer.from(wire);
