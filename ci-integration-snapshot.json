@@ -1,8 +1,8 @@
 {
-  "status": "FROZEN SOURCE INPUT CANDIDATE — EXACT-HEAD CI PENDING; NO ECONOMIC AUTHORIZATION",
+  "status": "P0 RED — audited historical cd4ab8dd run has two failing integrated jobs; CI witness-handoff repair unverified at new head; NO ECONOMIC AUTHORIZATION",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "9f620bc7a6bbc5b920ea1cba87ec46bc0e293dd2"
+    "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
   },
   "sources": {
     "SOL": {
@@ -26,7 +26,7 @@
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "338f3b6c3f98631916b1d5f2cc3535fd9e629c6b",
+  "parentIntegrationCommit": "cd4ab8dd61ec7353b330ba4a55f1d0ac5f5a9bf0",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/run-cross-lane-tests.mjs",
@@ -76,7 +76,7 @@
       "security/evidence/2026-11-13-agent5-exact-head-gates.md"
     ]
   },
-  "method": "Latest immutable specialist blobs plus two explicitly tracked CI-only SOL witness-test adjustments, merged into updated CI base with two parents. No specialist branch rewrites.",
+  "method": "Preserved executed P0 failure cd4ab8dd; CI-only workflow upload allowlist and cross-job provenance checks; updated CI readiness, with unchanged specialist implementation/source pins. New integration commit requires independent full exact-head workflow success.",
   "exceptions": [
     "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
     "No binary/IDL hashes reused across disposable program IDs"
@@ -152,7 +152,7 @@
   },
   "ciBaseMerged": {
     "branch": "agent/ci/11-build-pipeline",
-    "sha": "4a97505d9f624da481fe24b6649e9c94974870d9"
+    "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
   },
   "executedIntermediate": {
     "commit": "19bf4878cf6f9351b22f3a91bdc0c01a8914b9df",
@@ -177,5 +177,58 @@
       "error": "mutated instruction count causes Codec u8 empty array instead of signature check",
       "status": "integration-only test fixture corrected pending SEC source backport"
     }
+  },
+  "lastVerifiedExecution": {
+    "integrationSha": "cd4ab8dd61ec7353b330ba4a55f1d0ac5f5a9bf0",
+    "sharedActionsRun": 43529253015,
+    "sharedActionsConclusion": "success",
+    "sharedPassingJobs": 6,
+    "integrationActionsRun": 43529253005,
+    "integrationActionsConclusion": "failure",
+    "integrationJobs": {
+      "solanaLifecycle": "failure Custom 6004 at integration.test.mjs:592",
+      "sdkFixtures": "failure missing three genuine transaction archives",
+      "publishedRaveRust": "success 12/12"
+    },
+    "partialLocalnetEvidenceArtifact": 14087460958,
+    "artifactFileCount": 24,
+    "disposableProgramId": "B8WpDXUeH96FiWYmhqwpF3Hf4MKNagM5XpZJtaVuPvF",
+    "idlSha256": "ea6f78383e6fa9148a560f628fb7648bacede90388a4951c1f158f71c2b2cf83",
+    "elfSha256": "8162421ae2dd56927510d381bbe6c70ce760750e6d53ce2f02683ef106439928",
+    "errorAttribution": "MintFreezable is IDL enum code 6004, but the failing transaction/signature/issuer has not been captured. No SOL fix claimed.",
+    "blockers": [
+      "lifecycle multiwallet subtest threw before archive writer",
+      "isolated init-capture and u64-max modes never ran",
+      "retained-ledger restart not reached",
+      "signed wire replay/shadow end-to-end tests have no mandatory transaction archive"
+    ]
+  },
+  "integrationOnlyCiRemediation": {
+    "date": "2026-11-14",
+    "status": "unverified until exact-head workflows complete",
+    "workflow": ".github/workflows/integration-snapshot.yml",
+    "requirements": [
+      "consumer re-runs SOL verifier on all original downloaded local-validator archives",
+      "verification binds each mode to checked-out source SHA, compiled ELF and generated IDL plus genesis/program",
+      "source owner must publish genuine signed base64 getTransaction and full base64 getBlock RPC, execution meta and account bytes",
+      "missing source evidence fails closed; no fixture fabrication"
+    ],
+    "newlyUploadedPublicSnapshotPaths": [
+      "target/localnet-evidence/sprint1-two-wallets-live.json",
+      "target/localnet-evidence/sprint1-initializer-capture.json",
+      "target/localnet-evidence/sprint1-u64-refunded.json"
+    ],
+    "pendingSourceBackports": [
+      "SOL original full base64 block capture / witness regex and failure transaction logs",
+      "OBS signer restart test diagnostic correction",
+      "SEC valid-message Ed25519 tamper test"
+    ]
+  },
+  "shadowMilestone": {
+    "status": "NOT DEMONSTRATED at real signed-wire + durable-ledger + refund handoff",
+    "adapter": "JavaScript shadow-only verifier, not genuine Unyt conductor",
+    "holochainDependency": "Authentic Unyt conductor, compatible deployed DNA/zomes, independent consensus/finality verification and multi-agent reconciliation still required",
+    "creditEligible": false,
+    "withdrawalAuthorized": false
   }
 }
