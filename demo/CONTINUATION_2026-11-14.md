@@ -43,3 +43,12 @@ typed readback and restart/replay verification. No DEMO READY claim.
 `creditEligible:false`, `independentConsensusVerified:false`,
 `spendableBaseUnits:"0"`, `withdrawalAuthorized:false`; history incomplete;
 published Unyt and economic gates remain blocked.
+
+
+At `026b1b1`, shared CI 43647669191 passed 6/6. Same-run workflow
+43647669216 passed real SOL lifecycle, OBS Kit replay, source binding and
+both tracked-lock gates, then failed during build with exit 101. Native HAM
+and both WASMs built locally. Pinned Holonix puts real Cargo on PATH; direct
+Cargo rejects rustup-only `+1.95.0` with the same exit 101 (reproduced).
+PR #65 now checks exact compiler versions and invokes plain Cargo. No
+compilation or packaging pass is inferred for the revised CI until executed.

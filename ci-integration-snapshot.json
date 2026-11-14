@@ -17,9 +17,10 @@
       "status": "A3_SOURCE_BLOBS_ADOPTED_V2_REVIEW_NOT_APPROVAL"
     },
     "RAVE": {
-      "sha": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c",
-      "pr": 44,
-      "status": "A4_REVIEWED_NATIVE_LOCK_AND_MACRO_DEPENDENCY_ADOPTED_BUILD_PENDING_NO_MUTATION_AUTHORIZATION"
+      "sha": "7ccee3db4a86125bd914a9821f62cba783af0660",
+      "pr": 65,
+      "status": "A4_REVIEWED_LOCKS_PLUS_RAVE_COMPILER_AND_HOLONIX_FIXES_REVIEW_PENDING_NO_MUTATION_AUTHORIZATION",
+      "upstream": "PR #44 c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
     },
     "SEC": {
       "sha": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
@@ -701,8 +702,8 @@
     },
     "holochain/demo/build.sh": {
       "lane": "RAVE",
-      "sha": "b457164ebc410df912ace747a330748878d0fa3e",
-      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+      "sha": "ed46c5e2397b0a0752dae55b8c4e4f456b9d6ba6",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
     },
     "holochain/demo/coordinator/Cargo.toml": {
       "lane": "RAVE",
@@ -816,8 +817,8 @@
     },
     "holochain/demo/COORDINATOR_COMPILE_FIX_2026-11-14.md": {
       "lane": "RAVE",
-      "sha": "041b9bfa37ef0584463638444040227b5a44a1d1",
-      "sourceCommit": "f34fc175a9d3d7f4ad452fe3a27677be0705779c"
+      "sha": "49588255a7cd44fa966d9722fd5cdf8b637ed0c4",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
     }
   },
   "integrationOnlyProvenance": {
@@ -895,5 +896,10 @@
     "sourceCommit": "f34fc175a9d3d7f4ad452fe3a27677be0705779c",
     "scope": "explicit serialization error mapping only; review pending",
     "noMutationAuthorization": true
+  },
+  "holonixCargoRemediation": {
+    "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660",
+    "reason": "real Cargo binary rejects rustup-only +toolchain syntax with exit 101; verify exact compiler versions and use directly",
+    "approval": false
   }
 }

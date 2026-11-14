@@ -17,9 +17,9 @@
       "status": "DRAFT_SOURCE_ONLY"
     },
     "ownAuditDna": {
-      "pr": 44,
-      "sha": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c",
-      "status": "A4_REVIEWED_BOTH_LOCKS_AND_MACRO_DEPENDENCY_ADOPTED_BUILD_PENDING"
+      "pr": 65,
+      "sha": "7ccee3db4a86125bd914a9821f62cba783af0660",
+      "status": "REVIEWED_LOCKS_PRESERVED_COMPILER_AND_HOLONIX_FIXES_PENDING_CI_AND_REVIEW"
     },
     "solanaRemediation": {
       "pr": 50,
