@@ -96,6 +96,8 @@ export function reviewShadowEvidence(evidence, binding, journal) {
       evidence.independentConsensusVerified !== false ||
       evidence.evidenceTrust !== 'rpc_finalized_transaction_and_later_account_snapshot' ||
       evidence.creditEligible !== false ||
+      evidence.spendableBaseUnits !== '0' ||
+      evidence.withdrawalAuthorized !== false ||
       !Array.isArray(evidence.limitations) || evidence.limitations.length === 0 ||
       !evidence.limitations.every(isText)) {
     flag('TX_EVIDENCE_TRUST_ESCALATION');
