@@ -139,6 +139,18 @@ jobs:
           (cd ci-artifacts && sha256sum --check observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
       # OBS #57 permits archived RPC injection ONLY inside Node's test-runner child;
       # run the original replay under that context, never relax production OBS.
+      - name: Test audit-only execution source binding and generate NEW DNA build input (no install/write)
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          node --check demo/a0-execution-bound-dna.mjs
+          node --test demo/a0-execution-bound-dna.test.mjs
+          node demo/a0-execution-bound-dna.mjs --out ci-artifacts/a0-execution-bound-dna.yaml
+          (cd ci-artifacts && sha256sum --check a0-execution-bound-dna.yaml.sha256)
+          (cd ci-artifacts && sha256sum --check a0-execution-bound-dna.report.json.sha256)
+          # Source template is source-owned and MUST stay byte-identical.
+          node scripts/ci/verify-integration-provenance.mjs
       # CI-owned preauthorization stage runner repeats the genuine same-SHA
       # source-owned Kit replay. Its seven-stage report is NOT a Holochain ACK
       # and stage 4 stays closed absent independent exact-tuple approval.
