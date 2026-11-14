@@ -884,6 +884,7 @@ version = "0.1.0"
 dependencies = [
  "bs58",
  "hdi",
+ "holochain_serialized_bytes",
  "rmp-serde",
  "serde",
 ]

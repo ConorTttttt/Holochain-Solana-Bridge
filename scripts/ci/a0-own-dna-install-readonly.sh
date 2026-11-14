@@ -4,6 +4,8 @@
 set +x
 set -Eeuo pipefail
 umask 077
+# Installation/genesis mutate state. Stop before even allocating a keystore.
+node "$(dirname "$0")/../../demo/a0-mutation-boundary.mjs" --require-authorization
 if [[ $# -ne 3 ]]; then
   echo 'Usage: a0-own-dna-install-readonly.sh <verified-happ> <verified-dna> <output-dir>' >&2
   exit 2

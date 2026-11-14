@@ -3,7 +3,7 @@
 # Not a Holochain installation, authorization, Unyt proof or Solana finality proof.
 set -euo pipefail
 cd "$(dirname "$0")"
-for tool in cargo rustc hc sha256sum git; do
+for tool in cargo rustc hc sha256sum git python3; do
   command -v "$tool" >/dev/null || { echo "MISSING $tool" >&2; exit 2; }
 done
 for lock in Cargo.lock ham-adapter/Cargo.lock; do
@@ -34,6 +34,9 @@ cargo +1.95.0 --version
 hc --version
 echo 'LOCKFILE DIGESTS:'
 sha256sum Cargo.lock ham-adapter/Cargo.lock
+# Refuse unreviewed dependency graph/source changes even when a candidate
+# Cargo.lock exists. This is an offline STRUCTURAL gate, not a compiler result.
+python3 verify-native-lock.py
 # Fail before packing if either native signing ABI or zome WASMs fail to compile.
 cargo +1.95.0 build --locked --manifest-path ham-adapter/Cargo.toml --release
 # Holochain 0.7.1 WASM requires the custom getrandom backend; keep

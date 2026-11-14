@@ -404,7 +404,7 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: integration-cross-lane-js
-          path: .
+          path: ci-artifacts
       - name: Verify ORIGINAL archived bytes and source domain; test derived DNA binding negatives
         run: |
           set -euo pipefail
@@ -442,6 +442,8 @@ jobs:
           test -s holochain/demo/demo-build-artifacts.sha256
           (cd holochain/demo && sha256sum --check demo-build-artifacts.sha256)
       - name: Install disposable OWN audit DNA and independently read actual CellId by Admin API
+        # Installation is a mutation, even with admin-only identity readback.
+        if: ${{ false }} # Independent exact-call authorization absent
         run: |
           set -euo pipefail
           nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
@@ -451,10 +453,13 @@ jobs:
             ci-artifacts/own-dna-conductor
           test -s ci-artifacts/own-dna-conductor/own-dna-install-readonly.json
       - name: Publish seven-stage report ONLY after actual installed identity proof
+        if: ${{ false }} # No authorized installation has executed
         run: |
           set -euo pipefail
           node demo/a0-report-installed-readonly.mjs
           (cd ci-artifacts && sha256sum --check a0-seven-stage-actual-install-readonly.json.sha256)
+      - name: Record the exact installation request and stop before Holochain mutation
+        run: node demo/a0-mutation-boundary.mjs --out ci-artifacts/a0-install-authorization-request.json
       - name: Preserve exact source binding, compile/install outputs and failure artifacts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -471,5 +476,13 @@ jobs:
             ci-artifacts/a0-seven-stage-actual-install-readonly.json.sha256
             holochain/demo/demo-build-artifacts.sha256
             holochain/demo/demo-build-dna-hash.txt
+            ci-artifacts/a0-install-authorization-request.json
+            holochain/demo/holochain_solana_audit_demo.dna
+            holochain/demo/holochain_solana_audit_demo.happ
+            holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm
+            holochain/demo/Cargo.lock
+            holochain/demo/ham-adapter/Cargo.lock
           if-no-files-found: warn
           retention-days: 14

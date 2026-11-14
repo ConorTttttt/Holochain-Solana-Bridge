@@ -18,8 +18,8 @@
     },
     "ownAuditDna": {
       "pr": 44,
-      "sha": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a",
-      "status": "A4_WASM_LOCK_ADOPTED_NATIVE_LOCK_MISSING_AND_SAME_RUN_SOURCE_PROPERTIES_UNBUILT"
+      "sha": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c",
+      "status": "A4_REVIEWED_BOTH_LOCKS_AND_MACRO_DEPENDENCY_ADOPTED_BUILD_PENDING"
     },
     "solanaRemediation": {
       "pr": 50,
@@ -59,7 +59,9 @@
     "holochain/demo/build.sh",
     "holochain/demo/integrity/src/lib.rs",
     "holochain/demo/coordinator/src/lib.rs",
-    "holochain/demo/ham-adapter/src/main.rs"
+    "holochain/demo/ham-adapter/src/main.rs",
+    "holochain/demo/integrity/Cargo.toml",
+    "holochain/demo/coordinator/Cargo.toml"
   ],
   "policy": {
     "approvedObserverDnaV2Abi": false,
@@ -69,5 +71,5 @@
     "allowSolanaWithdrawal": false,
     "readOnlyBuildEvaluationOnly": true
   },
-  "note": "A1 exact HEAD immutable candidate source-owner Git blobs, same-run source-domain binding implementation pending; A4 native HAM lock missing. No signed call/capability grant."
+  "note": "Both source-owned reviewed A4 locks adopted unchanged. Compilation/packaging allowed; installation, enablement, genesis, grants and zome writes require independent exact-call authorization. No authorization supplied."
 }

@@ -1,5 +1,5 @@
 {
-  "status": "P0 DRAFT INTEGRATION — exact A3 #57 source and A4 #44 root lock adopted; new head CI execution REQUIRED; no signed write",
+  "status": "P0 DRAFT: reviewed A4 build remediation adopted; installation and all Holochain mutation require independent exact-call authorization",
   "base": {
     "branch": "agent/ci/16-a0-build-pr-preflight-20261114",
     "sha": "093a7454a36c3a26cc107b06b1334a289940811e"
@@ -17,9 +17,9 @@
       "status": "A3_SOURCE_BLOBS_ADOPTED_V2_REVIEW_NOT_APPROVAL"
     },
     "RAVE": {
-      "sha": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a",
+      "sha": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c",
       "pr": 44,
-      "status": "A4_REVIEWED_ROOT_LOCK_AND_STANDALONE_NATIVE_MANIFEST_ADOPTED_NATIVE_LOCK_STILL_MISSING"
+      "status": "A4_REVIEWED_NATIVE_LOCK_AND_MACRO_DEPENDENCY_ADOPTED_BUILD_PENDING_NO_MUTATION_AUTHORIZATION"
     },
     "SEC": {
       "sha": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
@@ -111,7 +111,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "NEW CANDIDATE NOT EXECUTED: prior A1 2bc6887b CI 6/6 shared 3/3 cross lane; native HAM lock absent and Holochain build not achieved",
+  "latestExecutionStatus": "New candidate CI pending. No new compiled, installed, signed-action or runtime identity claim.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -701,8 +701,8 @@
     },
     "holochain/demo/build.sh": {
       "lane": "RAVE",
-      "sha": "19d55d084f4342668dd9cabaa25943a3a101ebd3",
-      "sourceCommit": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a"
+      "sha": "b457164ebc410df912ace747a330748878d0fa3e",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
     },
     "holochain/demo/coordinator/Cargo.toml": {
       "lane": "RAVE",
@@ -711,8 +711,8 @@
     },
     "holochain/demo/coordinator/src/lib.rs": {
       "lane": "RAVE",
-      "sha": "5a70b37be792c767d8fdb092e1e8c0c5bdd08f74",
-      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+      "sha": "3feb1b857269813516b7fc4c545c81c4af934408",
+      "sourceCommit": "f34fc175a9d3d7f4ad452fe3a27677be0705779c"
     },
     "holochain/demo/dna.yaml": {
       "lane": "RAVE",
@@ -736,8 +736,8 @@
     },
     "holochain/demo/integrity/Cargo.toml": {
       "lane": "RAVE",
-      "sha": "d04eaa18cc234a4c7653a9b30b14270d61411f55",
-      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+      "sha": "119efbd02ad001a22653b5df36fc07bb8517b358",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
     },
     "holochain/demo/integrity/src/lib.rs": {
       "lane": "RAVE",
@@ -791,8 +791,33 @@
     },
     "holochain/demo/Cargo.lock": {
       "lane": "RAVE",
-      "sha": "6a0a3da541a6c1333d56367994725e64b2e295a4",
-      "sourceCommit": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a"
+      "sha": "caf6a2e7d7f649bc0a4f9dd9c2a736bfd113d7f9",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+    },
+    "holochain/demo/ham-adapter/Cargo.lock": {
+      "lane": "RAVE",
+      "sha": "6a2ef82e2187cc388e9fa30c94a0791c8ba6d574",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+    },
+    "holochain/demo/verify-native-lock.py": {
+      "lane": "RAVE",
+      "sha": "2e3ae751d83350e125515e1f73290f7c98c035c3",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+    },
+    "holochain/demo/REAL_LOCKED_BUILD_EVIDENCE_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "301b02872d000d4f373824b21c25a1f4287b75c5",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+    },
+    "holochain/demo/DEPENDENCY_AND_RUNTIME_AUDIT_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "7be15e30933f933233e856e4799e245203ea3bf1",
+      "sourceCommit": "c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+    },
+    "holochain/demo/COORDINATOR_COMPILE_FIX_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "041b9bfa37ef0584463638444040227b5a44a1d1",
+      "sourceCommit": "f34fc175a9d3d7f4ad452fe3a27677be0705779c"
     }
   },
   "integrationOnlyProvenance": {
@@ -805,7 +830,7 @@
     }
   },
   "currentAcceptance": {
-    "A0": "BLOCKED_NOT_ACCEPTED pending audited v2 destination, two committed A4 Cargo locks and real source-backed DNA properties",
+    "A0": "BLOCKED: compile/pack evidence pending; installation and zome mutations require independent exact-call authorization",
     "B1": "BLOCKED incomplete full original two-provider produced-slot history",
     "B2": "BLOCKED released Unyt coordinator source/capability",
     "C": "NO-GO economic"
@@ -865,5 +890,10 @@
     },
     "notYetReviewed": "All adopted source is still candidate evidence; authenticated A4/A5 v2 ABI and audit write NOT authorized."
   },
-  "sourceDomainPolicy": "Same integrated validator producer and OBS consumer SHA separately recorded. Derive DNA props only from original generated manifest at exact same-run SHA, never freeze historical A2 #55 source identity. Stage4 independent exact tuple approval required."
+  "sourceDomainPolicy": "Same integrated validator producer and OBS consumer SHA separately recorded. Derive DNA props only from original generated manifest at exact same-run SHA, never freeze historical A2 #55 source identity. Stage4 independent exact tuple approval required.",
+  "coordinatorCompileRemediation": {
+    "sourceCommit": "f34fc175a9d3d7f4ad452fe3a27677be0705779c",
+    "scope": "explicit serialization error mapping only; review pending",
+    "noMutationAuthorization": true
+  }
 }
