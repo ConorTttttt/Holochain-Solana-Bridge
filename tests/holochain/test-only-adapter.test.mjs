@@ -22,6 +22,7 @@ const observation = Object.freeze({ kind: 'solana-receipt-observation-v1',
 const ingest = (changes = {}, target = binding) => createTestOnlyAdapter(target).ingest({ ...observation, ...changes });
 const inert = record => {
   assert.equal(record.creditEligible, false);
+  assert.equal(record.independentConsensusVerified, false);
   assert.equal(record.spendableBaseUnits, '0');
   assert.equal(record.withdrawalAuthorized, false);
   assert.equal(record.conductorExecuted, false);
