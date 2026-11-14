@@ -32,6 +32,34 @@ function validateRecoveredEntries(state) {
       'corrupt stored receipt evidence/occurrence/fingerprint');
     occurrences.add(row.occurrenceId);
   }
+  for (const [id,row] of Object.entries(state.processed)) {
+    if (row.refund === undefined) continue;
+    const refund=row.refund, item=refund?.evidence;
+    need(record(refund) && record(item) &&
+      item.kind==='solana-refund-evidence-v1' &&
+      item.creditEligible===false && item.transactionVerified===true &&
+      item.independentConsensusVerified===false &&
+      item.spendableBaseUnits==='0' && item.withdrawalAuthorized===false &&
+      item.historyCoveredByTwoRpcClaims===true &&
+      item.id===id && item.receiptAddress===row.evidence.receiptAddress &&
+      item.depositOccurrenceId===row.occurrenceId &&
+      item.depositTransactionHash===row.transactionHash &&
+      item.amountBaseUnits===row.amountBaseUnits &&
+      item.occurrenceId===refund.occurrenceId &&
+      item.transactionHash===refund.transactionHash &&
+      item.amountBaseUnits===refund.amountBaseUnits &&
+      refund.fingerprint===hash(item) &&
+      typeof refund.occurrenceId==='string' &&
+      !occurrences.has(refund.occurrenceId) &&
+      Number.isSafeInteger(item.finalizedSlot) &&
+      item.finalizedSlot>row.evidence.finalizedSlot &&
+      item.finalizedSlot<=state.checkpoint &&
+      item.preObservation?.refunded===false &&
+      item.postObservation?.refunded===true &&
+      item.postObservation?.finalizedSlot===item.finalizedSlot,
+      'corrupt stored refund transition/fingerprint/replay/authority');
+    occurrences.add(refund.occurrenceId);
+  }
   for (const [key, blockhash] of Object.entries(state.blocks)) {
     const n = Number(key);
     need(/^(0|[1-9][0-9]*)$/.test(key) && Number.isSafeInteger(n) &&
@@ -74,12 +102,17 @@ export class DepositLedger {
   }
   get checkpoint() { return this.state.checkpoint; }
   get processed() { return {...this.state.processed}; }
+  /** Explicit observed state: a refunded receipt may never be labelled locked. */
+  receiptState(id) {
+    const row=this.state.processed[id];
+    return !row ? 'unknown' : row.refund ? 'refunded' : 'active_refundable_unverified';
+  }
   /** Commit new evidence and cursor in ONE atomic replacement (write+fsync+rename+dir fsync). */
-  commit({checkpoint, block, evidence = []}) {
+  commit({checkpoint, block, evidence = [], refunds = []}) {
     need(this.lockFd !== null, 'ledger closed');
     slot(checkpoint);
     need(checkpoint >= this.state.checkpoint, 'checkpoint regression');
-    need(Array.isArray(evidence), 'invalid evidence batch');
+    need(Array.isArray(evidence) && Array.isArray(refunds), 'invalid evidence/refund batch');
     const next=structuredClone(this.state);
     if (block) {
       slot(block.slot);
@@ -111,6 +144,45 @@ export class DepositLedger {
       next.processed[item.id] = {
         occurrenceId:item.occurrenceId, transactionHash:item.transactionHash,
         amountBaseUnits:item.amountBaseUnits, fingerprint, evidence:item,
+      };
+    }
+    // Each authenticated refund revokes ONE previously observed active receipt.
+    // Duplicate refunds (even byte-identical replays) are rejected. A complete
+    // produced-slot history claim is mandatory but is NOT independent consensus.
+    const refundOccurrences=new Set();
+    for (const item of refunds) {
+      need(item?.kind==='solana-refund-evidence-v1' &&
+        item.creditEligible===false && item.transactionVerified===true &&
+        item.independentConsensusVerified===false &&
+        item.spendableBaseUnits==='0' && item.withdrawalAuthorized===false &&
+        item.historyCoveredByTwoRpcClaims===true &&
+        typeof item.id==='string' && typeof item.occurrenceId==='string',
+        'invalid, incomplete-history or authoritative refund evidence');
+      const prior=next.processed[item.id];
+      need(prior && !prior.refund,'duplicate refund or missing original deposit');
+      need(prior.evidence.refundedAtObservation===false &&
+        prior.evidence.receiptSnapshot?.refunded===false,
+        'original deposit was already refunded/unverified');
+      need(item.depositOccurrenceId===prior.occurrenceId &&
+        item.depositTransactionHash===prior.transactionHash &&
+        item.amountBaseUnits===prior.amountBaseUnits &&
+        item.receiptAddress===prior.evidence.receiptAddress &&
+        Number.isSafeInteger(item.finalizedSlot) &&
+        item.finalizedSlot>prior.evidence.finalizedSlot &&
+        item.finalizedSlot<=checkpoint &&
+        item.preObservation?.refunded===false &&
+        item.postObservation?.refunded===true &&
+        item.postObservation?.finalizedSlot===item.finalizedSlot,
+        'refund contradicts original receipt/slot/state');
+      need(!refundOccurrences.has(item.occurrenceId) &&
+        !Object.values(next.processed).some(row =>
+          row.occurrenceId===item.occurrenceId ||
+          row.refund?.occurrenceId===item.occurrenceId),
+        'duplicated refund occurrence');
+      refundOccurrences.add(item.occurrenceId);
+      prior.refund={
+        occurrenceId:item.occurrenceId,transactionHash:item.transactionHash,
+        amountBaseUnits:item.amountBaseUnits,fingerprint:hash(item),evidence:item,
       };
     }
     next.checkpoint=checkpoint;
