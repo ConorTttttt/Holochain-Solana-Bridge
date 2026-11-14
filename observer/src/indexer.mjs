@@ -44,7 +44,7 @@ const blockOptions = Object.freeze({
 const txOptions = Object.freeze({
   commitment:'finalized',encoding:'base64',maxSupportedTransactionVersion:MAX_VERSION,
 });
-async function signatureOf(item) {
+export async function signatureOf(item) {
   need(item?.transaction?.[1]==='base64' && typeof item.transaction[0]==='string', 'raw transaction missing');
   const encoded=item.transaction[0];
   const raw=Buffer.from(encoded,'base64');
