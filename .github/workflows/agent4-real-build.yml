@@ -1,0 +1,121 @@
+name: A4 real locked native and WASM compilation
+on:
+  push:
+    branches: [agent/rave/10-controlled-audit-dna-ham-review]
+    paths: [.github/workflows/agent4-real-build.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  real-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - name: Pinned Rust and exact source
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts/a4
+          test "$GITHUB_REF_NAME" = 'agent/rave/10-controlled-audit-dna-ham-review'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "$GITHUB_SHA" > ci-artifacts/a4/input-sha.txt
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add --toolchain 1.95.0 wasm32-unknown-unknown
+          rustc +1.95.0 -Vv | tee ci-artifacts/a4/rust-version.log
+          cargo +1.95.0 --version
+      - name: Original resolver provenance and strict source-bound lock extraction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/ConorTttttt/Holochain-Solana-Bridge/actions/artifacts/14126981827/zip > ci-artifacts/a4/original-artifact.zip
+          echo '160f9e9d7dd142af6e4cd8e949a4529eec22bcc4db2b8ead5e0f77852cdad5d5  ci-artifacts/a4/original-artifact.zip' | sha256sum --check
+          python3 - <<'PY'
+          import hashlib, json, pathlib, tomllib, zipfile
+          root=pathlib.Path('holochain/demo')
+          with zipfile.ZipFile('ci-artifacts/a4/original-artifact.zip') as z:
+              prov=json.loads(z.read('ci-artifacts/a0-bootstrap-provenance.json'))
+              assert prov['sourceCommit']=='b7379764f9ba7b20c2e72898df73e181c8ec2380'
+              assert prov['rust']=='1.95.0' and prov['hamRevision']=='fbb4b6eb8a79a507e9453b709ed00f15c5618fb4'
+              for name,digest in [('Cargo.lock','85ce7ffafbdf158148a62c64d87fb582b6fe06ffa164e774006c2bdd9afa9751'),('ham-adapter/Cargo.lock','08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399')]:
+                  blob=z.read('holochain/demo/'+name)
+                  assert hashlib.sha256(blob).hexdigest()==digest
+                  target=root/name
+                  if name=='Cargo.lock': assert target.read_bytes()==blob
+                  else:
+                      assert not target.exists() or target.read_bytes()==blob
+                      target.write_bytes(blob)
+          manifest=tomllib.loads((root/'ham-adapter/Cargo.toml').read_text())
+          assert manifest['workspace']=={'resolver':'2'}
+          assert set(manifest['dependencies'])=={'anyhow','serde','serde_json','ham','holochain_client','holo_hash','tokio'}
+          assert manifest['dependencies']['ham']=={'git':'https://github.com/unytco/ham','rev':'fbb4b6eb8a79a507e9453b709ed00f15c5618fb4'}
+          assert manifest['dependencies']['holochain_client']=='=0.9.1' and manifest['dependencies']['holo_hash']=='=0.7.1'
+          print('ORIGINAL_RESOLVER_ARTIFACT_AND_CURRENT_STANDALONE_MANIFEST_OK')
+          PY
+          python3 holochain/demo/verify-native-lock.py | tee ci-artifacts/a4/native-structural-review.log
+          sha256sum holochain/demo/Cargo.lock holochain/demo/ham-adapter/Cargo.lock | tee ci-artifacts/a4/initial-lock-digests.txt
+      - name: Real Rust 1.95.0 cargo metadata and both locked dependency trees
+        run: |
+          set -euo pipefail
+          cd holochain/demo
+          cargo +1.95.0 metadata --locked --format-version 1 --manifest-path Cargo.toml > ../../ci-artifacts/a4/wasm-metadata.json 2> ../../ci-artifacts/a4/wasm-metadata-stderr.log
+          cargo +1.95.0 metadata --locked --format-version 1 --manifest-path ham-adapter/Cargo.toml > ../../ci-artifacts/a4/native-metadata.json 2> ../../ci-artifacts/a4/native-metadata-stderr.log
+          cargo +1.95.0 tree --locked --manifest-path Cargo.toml --target wasm32-unknown-unknown > ../../ci-artifacts/a4/wasm-tree.log 2>&1
+          cargo +1.95.0 tree --locked --manifest-path ham-adapter/Cargo.toml > ../../ci-artifacts/a4/native-tree.log 2>&1
+          cd ../..
+          echo '85ce7ffafbdf158148a62c64d87fb582b6fe06ffa164e774006c2bdd9afa9751  holochain/demo/Cargo.lock' | sha256sum --check
+          echo '08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399  holochain/demo/ham-adapter/Cargo.lock' | sha256sum --check
+          python3 holochain/demo/verify-native-lock.py
+      - name: Commit reviewed exact lock on A4 branch only (never force push)
+        run: |
+          set -euo pipefail
+          if ! git ls-files --error-unmatch holochain/demo/ham-adapter/Cargo.lock >/dev/null 2>&1; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+            git add holochain/demo/ham-adapter/Cargo.lock
+            test "$(git diff --cached --name-only)" = 'holochain/demo/ham-adapter/Cargo.lock'
+            git commit -m 'A4: reviewed native Cargo.lock from original artifact 14126981827'
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+          git rev-parse HEAD | tee ci-artifacts/a4/committed-source-sha.txt
+      - name: Compile real native HAM on committed source
+        run: |
+          set -euo pipefail
+          cargo +1.95.0 build --locked --manifest-path holochain/demo/ham-adapter/Cargo.toml --release 2>&1 | tee ci-artifacts/a4/native-build.log
+          sha256sum holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter | tee ci-artifacts/a4/native-sha256.txt
+      - name: Compile real integrity and coordinator WASM on committed source
+        run: |
+          set -euo pipefail
+          cd holochain/demo
+          RUSTFLAGS='--cfg getrandom_backend="custom"' cargo +1.95.0 build --locked --manifest-path Cargo.toml -p solana_audit_integrity -p solana_audit --release --target wasm32-unknown-unknown 2>&1 | tee ../../ci-artifacts/a4/wasm-build.log
+          sha256sum target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm target/wasm32-unknown-unknown/release/solana_audit.wasm | tee ../../ci-artifacts/a4/wasm-sha256.txt
+          sha256sum Cargo.lock ham-adapter/Cargo.lock | tee ../../ci-artifacts/a4/compiled-lock-sha256.txt
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Real hc 0.7.1 package/hash of the archived SOL-55 audit template only
+        run: |
+          set -euo pipefail
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command bash -c '
+            set -euo pipefail
+            hc --version
+            cd holochain/demo
+            hc dna pack .
+            hc app pack .
+            sha256sum holochain_solana_audit_demo.dna holochain_solana_audit_demo.happ Cargo.lock ham-adapter/Cargo.lock | tee ../../ci-artifacts/a4/actual-bundle-lock-sha256.txt
+            hc dna hash holochain_solana_audit_demo.dna | tee ../../ci-artifacts/a4/actual-holochain-dna-hash.txt
+          ' 2>&1 | tee ci-artifacts/a4/hc-pack.log
+          echo 'ARCHIVED SOL-55 ONLY: not same-run source; no installation, signed write, credit or withdrawal approval' | tee ci-artifacts/a4/limitations.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: a4-real-locked-run-${{ github.run_id }}
+          path: ci-artifacts/a4/
+          if-no-files-found: warn
+          retention-days: 14
