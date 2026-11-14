@@ -203,12 +203,22 @@ function assertReviewShape(record){
     if(!Array.isArray(values)||values.length!==4||
       originalRpc.result.context?.slot!==raw.proof.originalReceiptSnapshot.finalizedSlot)
       fail('RAW_FOUR_ACCOUNT_RPC_CONTEXT');
+    const owners=[
+      record.source.program,record.source.program,
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    ];
     for(const [i,k] of ['receiptDigest','configDigest','vaultDigest','mintDigest'].entries()){
       const account=values[i];
-      if(!Array.isArray(account?.data)||account.data[1]!=='base64')fail('RAW_ACCOUNT_ENCODING');
+      if(!Array.isArray(account?.data)||account.data.length!==2||
+        account.data[1]!=='base64')fail('RAW_ACCOUNT_ENCODING');
       const bytes=Buffer.from(account.data[0],'base64');
       if(bytes.toString('base64')!==account.data[0]||
         sha(bytes)!==raw.proof.originalReceiptSnapshot[k])fail('RAW_ACCOUNT_BYTES_CONTRADICT_SOURCE');
+      if(account.owner!==owners[i]||account.executable!==false||
+        !Number.isSafeInteger(account.lamports)||account.lamports<=0||
+        (account.space!==undefined&&account.space!==bytes.length))
+        fail('RAW_ACCOUNT_OWNER_OR_SHAPE');
     }
   }catch(e){fail('RAW_ORIGINAL_ACCOUNT_SNAPSHOT_INCOMPLETE_OR_CONTRADICTORY')}
   return unsigned;
