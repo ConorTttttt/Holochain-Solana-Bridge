@@ -29,8 +29,13 @@ fi
 # Neither a random seed nor passing YAML syntax proves that provenance.
 echo 'BUILD SOURCE (not runtime/call approval):'
 git rev-parse HEAD
-rustc +1.95.0 -Vv
-cargo +1.95.0 --version
+# Holonix exposes the actual compiler binaries, rather than rustup proxies.
+# A +toolchain argument is interpreted as a Cargo subcommand there (exit 101).
+# Refuse any other compiler version, then use the pinned binaries directly.
+[[ "$(rustc --version)" == "rustc 1.95.0 "* ]] || { echo 'REQUIRE rustc 1.95.0' >&2; exit 2; }
+[[ "$(cargo --version)" == "cargo 1.95.0 "* ]] || { echo 'REQUIRE cargo 1.95.0' >&2; exit 2; }
+rustc -Vv
+cargo --version
 hc --version
 echo 'LOCKFILE DIGESTS:'
 sha256sum Cargo.lock ham-adapter/Cargo.lock
@@ -38,11 +43,11 @@ sha256sum Cargo.lock ham-adapter/Cargo.lock
 # Cargo.lock exists. This is an offline STRUCTURAL gate, not a compiler result.
 python3 verify-native-lock.py
 # Fail before packing if either native signing ABI or zome WASMs fail to compile.
-cargo +1.95.0 build --locked --manifest-path ham-adapter/Cargo.toml --release
+cargo build --locked --manifest-path ham-adapter/Cargo.toml --release
 # Holochain 0.7.1 WASM requires the custom getrandom backend; keep
 # native HAM/Lair build separate from this WASM-only compilation flag.
 RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--cfg getrandom_backend=\"custom\"" \
-  cargo +1.95.0 build --locked --manifest-path Cargo.toml \
+  cargo build --locked --manifest-path Cargo.toml \
     -p solana_audit_integrity -p solana_audit --release --target wasm32-unknown-unknown
 hc dna pack .
 hc app pack .

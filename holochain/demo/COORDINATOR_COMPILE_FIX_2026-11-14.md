@@ -23,3 +23,15 @@ The companion integration PR adopts the exact coordinator blob and retains all
 four economic denials. Installation and every Holochain mutation remain blocked
 until independently authorized for the exact call. CI at the new SHA is pending;
 no signed action, readback or restart verification is claimed.
+
+
+The companion integration run 43647669216 passed the real Solana lifecycle,
+OBS Kit replay, source-domain binding and reviewed-lock gates, then returned
+exit 101 during the build command. Archived Azure logs are inaccessible from
+this workspace. Inspection of pinned Holonix shows it puts real Rust 1.95.0
+binaries on PATH, rather than rustup proxies. Reproducing with the actual
+installed `bin/cargo +1.95.0 --version` returns exit 101, “no such command”.
+The build script now checks exact `rustc` and `cargo` 1.95.0 versions and calls
+those binaries directly. This is a reproduced tooling defect and a likely CI
+failure cause; packaging success still requires the new actual CI execution.
+All source-domain, tracked-lock and economic gates remain intact.
