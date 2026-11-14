@@ -126,14 +126,16 @@ pub fn check(item: &AuditObservation) -> Result<(), String> {
         return Err("wrong DNA source scope".into());
     }
     if s.source_event_type != "deposit" || s.finalized_slot == 0
+        || s.finalized_slot > 9_007_199_254_740_991
         || s.code_version.is_empty() || s.code_version.len() > 96
         || !pubkey(&s.receipt_address, 32) || !pubkey(&s.depositor, 32)
         || !pubkey(&s.signature, 64)
         || !canonical_positive_u64(&s.amount_base_units)
         || !lowercase_hex_64(&s.witness_digest)
         || p.evidence_kind != "solana-deposit-evidence-v1"
-        || (p.evidence_origin != "test_only_fixture"
-            && p.evidence_origin != "observer_reviewed_outbox")
+        // The DNA itself refuses the unreviewed outbox label, not only HAM.
+        // A future authenticated source needs a separate reviewed ABI/capability.
+        || p.evidence_origin != "test_only_fixture"
         || !p.transaction_verified || !p.verified_by_rpc_claim || p.history_complete {
         return Err("invalid deposit event / witness / coverage claim".into());
     }
