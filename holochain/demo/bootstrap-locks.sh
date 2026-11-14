@@ -78,6 +78,13 @@ for filename, pins in locks.items():
           ", ".join(f"{name}={version}" for name, version in pins.items()))
     print("  NOTE: every transitive addition/change and package license still needs independent review")
 PY
+# Offline manifest/lock structural review precedes Cargo's actual locked resolver.
+# This accepts neither a different source nor a synthetic resolver success.
+python3 verify-native-lock.py
+# Unlike 'cargo metadata --no-deps', FULL metadata must resolve the transitive
+# graph. All of this runs under Rust 1.95.0, before either compiler is invoked.
+cargo +1.95.0 metadata --locked --format-version 1 --manifest-path Cargo.toml > /dev/null
+cargo +1.95.0 metadata --locked --format-version 1 --manifest-path ham-adapter/Cargo.toml > /dev/null
 # Cargo tree independently verifies that the generated resolver graph is usable
 # with the locked manifests. Logs are public dependency names, not credentials.
 echo 'LOCKED WASM DEPENDENCY GRAPH:'
