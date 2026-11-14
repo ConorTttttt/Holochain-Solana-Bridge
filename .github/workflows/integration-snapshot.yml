@@ -69,11 +69,40 @@ jobs:
       # SOL producer. The SOL source verifier binds every mode to git HEAD,
       # generated IDL, compiled SBPF and disposable-validator genesis; fail
       # when ANY required scenario or public snapshot was not uploaded.
+      - name: Reject incomplete public evidence download, wrong source SHA or tampered uploaded files
+        run: |
+          set -euo pipefail
+          test -s target/localnet-evidence/source-commit.txt
+          test "$(cat target/localnet-evidence/source-commit.txt)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          test -s target/localnet-evidence/evidence-manifest.sha256
+          (cd target/localnet-evidence && sha256sum -c evidence-manifest.sha256)
       - name: Require complete exact-SHA-bound real validator witness bundles
         run: |
           set -euo pipefail
           for scenario in lifecycle init-capture u64-max; do
             bash scripts/ci/record.sh "producer-witness-${scenario}" node tests/solana/verify-witness-bundle.mjs "$scenario"
+          done
+      - name: Require complete 54-transaction finalized witness inventory and independently checked tamper denials
+        run: |
+          set -euo pipefail
+          bash scripts/ci/record.sh count-original-signed-witnesses node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            import assert from "node:assert/strict";
+            const expected={"lifecycle":[17,28],"init-capture":[2,2],"u64-max":[3,2]};
+            let total=0;
+            for(const [mode,[accepted,rejected]] of Object.entries(expected)){
+              const index=JSON.parse(readFileSync("target/localnet-evidence/sprint1-"+mode+"-transactions.json","utf8"));
+              assert.equal(index.complete,true,mode+" incomplete");
+              const actualOk=index.finalized.filter(x=>x.meta?.err===null).length;
+              const actualBad=index.finalized.filter(x=>x.meta?.err!==null).length;
+              assert.deepEqual([actualOk,actualBad],[accepted,rejected],mode+" 54-witness distribution drift");
+              total+=index.finalized.length;
+            }
+            assert.equal(total,54,"not exactly 54 authentic finalized indexed witness records");
+            console.log("PASS: exactly 54 original finalized records in three scenarios");
+          '
+          for scenario in lifecycle init-capture u64-max; do
+            bash scripts/ci/record.sh "consumer-tamper-$scenario" node tests/solana/verify-witness-tamper.mjs "$scenario"
           done
       - name: Require original public Solana RPC transaction/block/account witnesses
         run: bash scripts/ci/record.sh real-rpc-fixture-coherence node --test tests/integration/s0-public-rpc-fixtures.test.mjs
@@ -159,7 +188,7 @@ jobs:
       - name: Install pinned Anchor CLI from tagged lockfile
         run: |
           source scripts/ci/toolchain.env
-          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
+          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --rev "8d9d1488d9b8af41b266d7513eea2e668adf15a2" anchor-cli --locked
       - name: Capture pinned runtime versions
         run: bash scripts/ci/record.sh integration-versions bash scripts/ci/tool-versions.sh
       - name: Run real localnet build, deploy and transaction assertions (SOL-owned script)
@@ -186,6 +215,15 @@ jobs:
             sha256sum tests/solana/package-lock.json | tee ci-artifacts/solana-package-lock.sha256
             cp tests/solana/package-lock.json ci-artifacts/solana-package-lock.json
           fi
+      - name: Retain exact checked-out SHA and public-only file manifest (including partial witnesses)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p target/localnet-evidence
+          git rev-parse HEAD > target/localnet-evidence/source-commit.txt
+          (cd target/localnet-evidence &&
+            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name '*.txt' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
+            sort -z | xargs -0 -r sha256sum) > target/localnet-evidence/evidence-manifest.sha256
       - name: Verify exact published workspace and Solana Node graphs
         run: |
           bash scripts/ci/record.sh sol-workspace-lock bash scripts/ci/check-lock-digest.sh workspace Cargo.lock
@@ -199,6 +237,7 @@ jobs:
             target/idl/deposit_prototype.json
             target/deploy/deposit_prototype.so
             target/localnet-evidence/*.txt
+            target/localnet-evidence/evidence-manifest.sha256
             target/localnet-evidence/active-receipt.json
             target/localnet-evidence/refunded-receipt.json
             target/localnet-evidence/two-active-receipts.json

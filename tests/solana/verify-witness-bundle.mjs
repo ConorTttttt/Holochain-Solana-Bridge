@@ -1,14 +1,15 @@
 // Fail-closed verification of public-only finalized RPC witness archives.
 // Run after each actual local-validator scenario. This is NOT a transaction test.
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const mode = process.argv[2];
 assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown witness mode');
-const dir = 'target/localnet-evidence';
+// WITNESS_DIR exists only so the tamper test can point at a mutated COPY.
+const dir = process.env.WITNESS_DIR ?? 'target/localnet-evidence';
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const idl = readJson('target/idl/deposit_prototype.json');
@@ -34,16 +35,82 @@ const openRpc = (name) => {
   return response.result;
 };
 
+// Independent wire-format decoding: no web3.js, so an SDK bug cannot hide a
+// mismatch between the archived bytes and what the RPC JSON claims.
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function base58(bytes) {
+  let n = BigInt('0x' + (Buffer.from(bytes).toString('hex') || '0'));
+  let out = '';
+  while (n > 0n) { out = B58[Number(n % 58n)] + out; n /= 58n; }
+  for (const byte of bytes) { if (byte !== 0) break; out = '1' + out; }
+  return out;
+}
+function compactU16(buf, offset) {
+  let value = 0;
+  for (let i = 0; i < 3; i++) {
+    const byte = buf[offset + i];
+    assert.ok(byte !== undefined, 'truncated compact-u16');
+    value |= (byte & 0x7f) << (7 * i);
+    if ((byte & 0x80) === 0) return [value, offset + i + 1];
+  }
+  throw new Error('invalid compact-u16');
+}
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+function verifySignedTransaction(bytes, label) {
+  const [count, sigStart] = compactU16(bytes, 0);
+  assert.ok(count > 0, label + ': no signatures');
+  const signatures = [];
+  for (let i = 0; i < count; i++) {
+    signatures.push(bytes.subarray(sigStart + 64 * i, sigStart + 64 * (i + 1)));
+  }
+  const message = bytes.subarray(sigStart + 64 * count);
+  let cursor = (message[0] & 0x80) ? 1 : 0; // v0+ messages carry a version prefix
+  const required = message[cursor];
+  cursor += 3;
+  const [keyCount, keyStart] = compactU16(message, cursor);
+  assert.equal(required, count, label + ': signature count != required signers');
+  assert.ok(keyCount >= required, label + ': fewer account keys than signers');
+  signatures.forEach((signature, i) => {
+    assert.equal(signature.length, 64, label + ': truncated signature');
+    const key = message.subarray(keyStart + 32 * i, keyStart + 32 * (i + 1));
+    const publicKey = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, key]),
+      format: 'der', type: 'spki' });
+    assert.ok(verifySignature(null, message, publicKey, signature),
+      label + ': ed25519 signature ' + i + ' does not verify over the archived message');
+  });
+  return base58(signatures[0]);
+}
+function errorEmitter(logs) {
+  return (logs ?? []).map(line =>
+    /^Program ([1-9A-HJ-NP-Za-km-z]+) failed:/.exec(line)?.[1]).find(Boolean) ?? null;
+}
+
 const bundle = readJson(join(dir, 'sprint1-' + mode + '-transactions.json'));
 assert.equal(bundle.mode, mode);
 checkBinding(bundle, mode);
+assert.equal(bundle.complete, true, mode + ': partial/failed witness archive is never a PASS');
+assert.ok(Array.isArray(bundle.transactions), mode + ': transaction index is missing');
+const recordedSignatures = new Set(bundle.transactions
+  .filter((record) => typeof record.signature === 'string')
+  .map((record) => record.signature));
+// Every recorded claim about a signature must agree with the finalized ledger.
+const recordsBySignature = new Map();
+for (const record of bundle.transactions) {
+  if (typeof record.signature !== 'string') continue;
+  if (!recordsBySignature.has(record.signature)) recordsBySignature.set(record.signature, []);
+  recordsBySignature.get(record.signature).push(record);
+}
+assert.ok(recordedSignatures.size > 0, mode + ': no recorded signed transactions');
 assert.ok(Array.isArray(bundle.finalized) && bundle.finalized.length > 0,
   mode + ': no finalized transaction witnesses');
+assert.equal(bundle.finalized.length, recordedSignatures.size,
+  mode + ': finalized manifest does not cover EVERY recorded signed transaction');
 const signatures = new Set();
 let accepted = 0;
 let rejected = 0;
 for (const witness of bundle.finalized) {
   assert.match(witness.signature, /^[1-9A-HJ-NP-Za-km-z]+$/);
+  assert.ok(recordedSignatures.has(witness.signature), 'unknown finalized transaction signature');
   assert.ok(!signatures.has(witness.signature), 'duplicate signature evidence');
   signatures.add(witness.signature);
   const parsed = openRpc(witness.getTransactionRawFile);
@@ -68,6 +135,24 @@ for (const witness of bundle.finalized) {
   assert.ok(signedBytes.length > 64, 'truncated signed transaction');
   assert.equal(signedBytes.toString('base64'), signed.transaction[0],
     'noncanonical signed base64');
+  assert.equal(verifySignedTransaction(signedBytes, witness.signature), witness.signature,
+    'archived signed bytes do not carry the witnessed transaction signature');
+  assert.deepEqual(witness.meta.logMessages, parsed.meta?.logMessages,
+    'witness logs differ from finalized getTransaction logs');
+  for (const record of recordsBySignature.get(witness.signature)) {
+    if (typeof record.signedWireBase64 === 'string') {
+      assert.equal(signed.transaction[0], record.signedWireBase64,
+        'finalized bytes differ from originally submitted wire bytes: ' + witness.signature);
+    }
+    if ('error' in record) {
+      assert.deepEqual(record.error, witness.meta.err,
+        'recorded execution result disagrees with finalized ledger: ' + record.label);
+    }
+    if ('emittingProgramId' in record) {
+      assert.equal(record.emittingProgramId, errorEmitter(parsed.meta?.logMessages),
+        'recorded failing program disagrees with finalized logs: ' + record.label);
+    }
+  }
   assert.ok(Array.isArray(block.transactions), 'full containing block is missing');
   const included = block.transactions.find((entry) =>
     entry.transaction?.signatures?.includes(witness.signature));
@@ -97,6 +182,10 @@ const fixtures = {
 for (const name of fixtures[mode]) {
   const snapshot = readJson(join(dir, name + '.json'));
   checkBinding(snapshot, name);
+  for (const [role, signature] of Object.entries(snapshot.signatures ?? {})) {
+    assert.ok(signatures.has(signature),
+      name + ': snapshot cites ' + role + ' signature without a finalized witness');
+  }
   assert.equal(snapshot.genesisHash, bundle.genesisHash, name + ': genesis changed');
   const rpc = openRpc(snapshot.getMultipleAccountsRawFile);
   assert.equal(rpc.context.slot, snapshot.slot, name + ': snapshot slot differs');
@@ -109,6 +198,33 @@ for (const name of fixtures[mode]) {
     assert.equal(raw.lamports, entry.lamports, name + ': account lamports differ');
   });
 }
+// Deployment identity: the program the validator executed must be the exact
+// hashed ELF, not merely a program at the expected address.
+const deployments = bundle.transactions.filter((record) =>
+  record.label === 'observed-deployment-upgrade-authority-not-governed');
+assert.equal(deployments.length, 1, mode + ': exactly one deployment observation required');
+const deploymentRecord = deployments[0];
+const deployment = openRpc(deploymentRecord.deploymentRawFile);
+const [programAccount, programDataAccount] = deployment.value;
+assert.ok(programAccount && programDataAccount, mode + ': missing deployed program accounts');
+assert.equal(programAccount.owner, 'BPFLoaderUpgradeab1e11111111111111111111111');
+assert.equal(programAccount.executable, true, mode + ': program account not executable');
+const programBytes = Buffer.from(programAccount.data[0], 'base64');
+assert.equal(programBytes.readUInt32LE(0), 2, mode + ': not an upgradeable Program account');
+assert.equal(base58(programBytes.subarray(4, 36)), deploymentRecord.programDataAddress,
+  mode + ': Program account points at a different ProgramData');
+assert.equal(programDataAccount.owner, 'BPFLoaderUpgradeab1e11111111111111111111111');
+const programData = Buffer.from(programDataAccount.data[0], 'base64');
+assert.equal(programData.readUInt32LE(0), 3, mode + ': not a ProgramData account');
+assert.equal(programData[12] === 1 ? base58(programData.subarray(13, 45)) : null,
+  deploymentRecord.upgradeAuthority, mode + ': recorded upgrade authority differs');
+const elf = readFileSync('target/deploy/deposit_prototype.so');
+const deployedElf = programData.subarray(45, 45 + elf.length);
+assert.ok(deployedElf.equals(elf), mode + ': deployed ELF bytes differ from target/deploy artifact');
+assert.ok(programData.subarray(45 + elf.length).every((byte) => byte === 0),
+  mode + ': unexpected nonzero bytes after deployed ELF');
+
 console.log('PASS: ' + mode + ' genesis/source/IDL/ELF-bound witnesses: ' +
   accepted + ' accepted, ' + rejected + ' included rejected, ' +
-  fixtures[mode].length + ' finalized account snapshots');
+  fixtures[mode].length + ' finalized account snapshots; all signatures ed25519-verified; ' +
+  'deployed ELF byte-identical (' + expected.elfSha256 + ')');

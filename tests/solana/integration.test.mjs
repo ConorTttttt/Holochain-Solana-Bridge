@@ -34,8 +34,14 @@ async function recordUpgradeAuthority() {
   assert.equal(data.readUInt32LE(0), 3, 'unexpected ProgramData state');
   assert.ok(data[12] === 0 || data[12] === 1, 'noncanonical upgrade authority option');
   const upgradeAuthority = data[12] === 1 ? new PublicKey(data.subarray(13, 45)).toBase58() : null;
+  // Raw program + ProgramData bytes let the verifier prove the DEPLOYED ELF
+  // is byte-identical to the hashed target/deploy artifact.
+  const deployment = await rawPublicRpc('getMultipleAccounts', [
+    [programId.toBase58(), programDataAddress.toBase58()],
+    { commitment: 'confirmed', encoding: 'base64' }]);
+  const deploymentRawFile = savePublicRpc('deployment-program-accounts.rpc.json', deployment);
   transactionEvidence.push({ label: 'observed-deployment-upgrade-authority-not-governed',
-    programDataAddress: programDataAddress.toBase58(), upgradeAuthority });
+    programDataAddress: programDataAddress.toBase58(), upgradeAuthority, deploymentRawFile });
 }
 async function recordMintAuthorities(label, mintAddress) {
   const mint = await getMint(connection, mintAddress, 'confirmed', TOKEN_PROGRAM_ID);
@@ -56,6 +62,81 @@ const U64_MAX = (1n << 64n) - 1n;
 const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
 assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
 const transactionEvidence = [];
+const operationJournal = [];
+let operationNumber = 0;
+const evidenceDirectory = new URL('../../target/localnet-evidence/', import.meta.url);
+function persistOperations() {
+  mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL('sprint1-' + mode + '-operations.json', evidenceDirectory),
+    JSON.stringify({ mode, ...artifactBinding, operations: operationJournal }, null, 2) + '\n',
+    { mode: 0o600 });
+}
+function errorEmitter(logs) {
+  return (logs ?? []).map(line =>
+    /^Program ([1-9A-HJ-NP-Za-km-z]+) failed:/.exec(line)?.[1]).find(Boolean) ?? null;
+}
+function operationName(ix) {
+  const method = ix.programId.equals(programId) && idl.instructions?.find(row =>
+    Buffer.from(row.discriminator).equals(ix.data.subarray(0, 8)));
+  return method ? 'bridge.' + method.name : ix.programId.toBase58();
+}
+async function traceSdk(label, callback, accountToTrace = null) {
+  // SDK convenience methods sometimes throw only the bare InstructionError,
+  // dropping the signature. Diff this account's actual validator history
+  // around the call; NEVER mistake a candidate for confirmed attribution.
+  const prior = accountToTrace
+    ? new Set((await connection.getSignaturesForAddress(accountToTrace, { limit: 50 }, 'confirmed'))
+      .map(row => row.signature))
+    : null;
+  const record = { number: ++operationNumber, label, type: 'sdk-helper', status: 'started' };
+  operationJournal.push(record); persistOperations();
+  try {
+    const result = await callback();
+    record.status = 'completed';
+    if (typeof result === 'string') record.signature = result;
+    return result;
+  } catch (error) {
+    record.status = 'threw';
+    record.error = String(error?.message ?? error);
+    record.rawError = error && typeof error === 'object'
+      ? JSON.stringify(error) : String(error);
+    record.signature = error?.signature ?? null;
+    record.logs = error?.logs ?? null;
+    if (record.signature) {
+      try {
+        const tx = await connection.getTransaction(record.signature,
+          { commitment: 'confirmed', maxSupportedTransactionVersion: 1 });
+        record.included = tx?.meta ? { slot: tx.slot, err: tx.meta.err,
+          logs: tx.meta.logMessages, emittingProgramId: errorEmitter(tx.meta.logMessages) } : null;
+      } catch (lookup) { record.lookupError = String(lookup); }
+    }
+    console.error('SDK_HELPER_FAILURE ' + JSON.stringify(record));
+    throw error;
+  } finally {
+    if (prior) {
+      try {
+        const after = await connection.getSignaturesForAddress(accountToTrace,
+          { limit: 50 }, 'confirmed');
+        const newSignatures = after.filter(row => !prior.has(row.signature));
+        record.accountHistoryCandidates = [];
+        for (const row of newSignatures) {
+          const tx = await connection.getTransaction(row.signature, {
+            commitment: 'confirmed', maxSupportedTransactionVersion: 1 });
+          record.accountHistoryCandidates.push({
+            signature: row.signature, slot: row.slot, error: row.err,
+            metaErr: tx?.meta?.err ?? null, logs: tx?.meta?.logMessages ?? null,
+            emittingProgramId: errorEmitter(tx?.meta?.logMessages),
+            instructionProgramIds: tx?.transaction?.message?.instructions?.map(ix =>
+              ix.programId?.toBase58() ??
+              tx.transaction.message.accountKeys?.[ix.programIdIndex]?.toBase58() ??
+              tx.transaction.message.staticAccountKeys?.[ix.programIdIndex]?.toBase58() ?? null) ?? [],
+          });
+        }
+      } catch (lookupError) { record.historyLookupError = String(lookupError); }
+    }
+    persistOperations();
+  }
+}
 // Bind every witness to the tested checkout and the *actual generated*
 // artifacts, not to the historical passing build or a declared placeholder.
 // No signing material is read: these files contain only the public IDL/ELF.
@@ -86,11 +167,14 @@ async function rawPublicRpc(method, params) {
   return { raw, parsed };
 }
 function savePublicRpc(name, response) {
-  assert.match(name, /^[a-zA-Z0-9-]+\.rpc\.json$/, 'unsafe public RPC fixture filename');
-  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(new URL(name, directory), response.raw + '\n', { mode: 0o600 });
-  return name;
+  // Distinct isolated validators can reuse the same slot number. Do not
+  // overwrite lifecycle blocks with init-capture/u64-max blocks in the final
+  // combined CI artifact: filenames and manifests are scenario-scoped.
+  const scopedName = mode + '-' + name;
+  assert.match(scopedName, /^[a-zA-Z0-9-]+\.rpc\.json$/, 'unsafe public RPC fixture filename');
+  mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL(scopedName, evidenceDirectory), response.raw + '\n', { mode: 0o600 });
+  return scopedName;
 }
 async function saveTransactionEvidence() {
   // Every signed success and failure is re-fetched at FINALIZED commitment.
@@ -98,28 +182,48 @@ async function saveTransactionEvidence() {
   // signatures, message versions, instruction accounts and execution metadata.
   // This LOCALNET evidence does not establish independent Solana finality.
   const finalized = [];
+  let activeSignature = null;
+  let archiveStage = 'initializing';
   const signatures = new Map();
   for (const entry of transactionEvidence) {
     if (entry.signature && !signatures.has(entry.signature)) signatures.set(entry.signature, entry);
   }
+  try {
   for (const [signature, expected] of signatures) {
-    const confirmation = await connection.confirmTransaction(signature, 'finalized');
-    assert.ok(confirmation.value, 'missing finalized status: ' + signature);
+    activeSignature = signature; archiveStage = 'checking-finalized-signature-status';
+    // confirmTransaction(signature, 'finalized') can reject its Promise with
+    // the InstructionError of an EXPECTED failed transaction. A negative
+    // on-chain test must not be mistaken for an archive failure. Read actual
+    // validator signature status without reclassifying meta.err as an exception.
+    // Deadline, not a 10 s attempt count: a transaction confirmed just before
+    // this hook can legitimately need ~32+ slots to root on test-validator.
+    let status = null;
+    const finalizeDeadline = Date.now() + 90_000;
+    while (Date.now() < finalizeDeadline) {
+      const statuses = await connection.getSignatureStatuses([signature],
+        { searchTransactionHistory: true });
+      const candidate = statuses.value[0];
+      if (candidate?.confirmationStatus === 'finalized') { status = candidate; break; }
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+    assert.ok(status, 'missing finalized signature status: ' + signature);
     let tx;
+    archiveStage = 'fetching-finalized-transaction';
     for (let attempt = 0; attempt < 20; attempt++) {
       tx = await connection.getTransaction(signature, {
-        commitment: 'finalized', maxSupportedTransactionVersion: 0,
+        commitment: 'finalized', maxSupportedTransactionVersion: 1,
       });
       if (tx?.meta) break;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     assert.ok(tx?.meta, 'finalized transaction has no execution meta: ' + signature);
-    assert.deepEqual(tx.meta.err, confirmation.value.err,
+    assert.deepEqual(tx.meta.err, status.err,
       'finalized transaction/status disagreement: ' + signature);
     if ('error' in expected) assert.deepEqual(tx.meta.err, expected.error,
       'confirmed/finalized execution disagreement: ' + signature);
+    archiveStage = 'raw-json-getTransaction';
     const transactionResponse = await rawPublicRpc('getTransaction', [signature, {
-      commitment: 'finalized', encoding: 'json', maxSupportedTransactionVersion: 0,
+      commitment: 'finalized', encoding: 'json', maxSupportedTransactionVersion: 1,
     }]);
     const rawTx = transactionResponse.parsed.result;
     assert.equal(rawTx.slot, tx.slot, 'SDK/raw getTransaction slot disagreement');
@@ -128,8 +232,9 @@ async function saveTransactionEvidence() {
     // JSON encoding exposes parsed instructions but does not retain the
     // signed transaction bytes. Obtain a second raw base64 RPC response so
     // Observer can independently decode the original on-wire signatures.
+    archiveStage = 'raw-base64-getTransaction';
     const signedResponse = await rawPublicRpc('getTransaction', [signature, {
-      commitment: 'finalized', encoding: 'base64', maxSupportedTransactionVersion: 0,
+      commitment: 'finalized', encoding: 'base64', maxSupportedTransactionVersion: 1,
     }]);
     const rawSigned = signedResponse.parsed.result;
     assert.equal(rawSigned.slot, tx.slot, 'base64 getTransaction slot disagreement');
@@ -142,21 +247,28 @@ async function saveTransactionEvidence() {
     assert.equal(typeof encodedTransaction, 'string');
     const signedBytes = Buffer.from(encodedTransaction, 'base64');
     assert.equal(signedBytes.toString('base64'), encodedTransaction, 'noncanonical base64 signed bytes');
+    if (typeof expected.signedWireBase64 === 'string') {
+      // The finalized ledger must contain EXACTLY the bytes this test signed.
+      assert.equal(encodedTransaction, expected.signedWireBase64,
+        'finalized transaction bytes differ from originally submitted wire bytes: ' + signature);
+    }
     const decodedSigned = VersionedTransaction.deserialize(signedBytes);
     assert.equal(decodedSigned.signatures.length, rawTx.transaction.signatures.length,
       'signed byte count disagrees with parsed RPC signatures');
     assert.ok(decodedSigned.signatures.length > 0 &&
       decodedSigned.signatures.every((bytes) => bytes.some((byte) => byte !== 0)),
       'missing signature bytes in finalized transaction');
+    archiveStage = 'raw-json-getBlock';
     const blockResponse = await rawPublicRpc('getBlock', [tx.slot, {
       commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
-      rewards: false, maxSupportedTransactionVersion: 0,
+      rewards: false, maxSupportedTransactionVersion: 1,
     }]);
     // Preserve the COMPLETE signed base64 containing block, in addition
     // to the decoded JSON, for independently verifiable replay.
+    archiveStage = 'raw-base64-getBlock';
     const signedBlockResponse = await rawPublicRpc('getBlock', [tx.slot, {
       commitment: 'finalized', encoding: 'base64', transactionDetails: 'full',
-      rewards: false, maxSupportedTransactionVersion: 0,
+      rewards: false, maxSupportedTransactionVersion: 1,
     }]);
     assert.ok(Array.isArray(signedBlockResponse.parsed.result?.transactions) &&
       signedBlockResponse.parsed.result.transactions.length > 0 &&
@@ -176,6 +288,7 @@ async function saveTransactionEvidence() {
     const signedTxFile = savePublicRpc('getTransaction-base64-' + signature + '.rpc.json', signedResponse);
     const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
     const signedBlockFile = savePublicRpc('getBlock-base64-' + tx.slot + '.rpc.json', signedBlockResponse);
+    archiveStage = 'recording-finalized-witness';
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
       previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
@@ -188,14 +301,30 @@ async function saveTransactionEvidence() {
       getBlockRawFile: blockFile, getBlockBase64RawFile: signedBlockFile,
     });
   }
-  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(new URL('sprint1-' + mode + '-transactions.json', directory),
-    JSON.stringify({
-      kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
-      mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
-      ...artifactBinding, transactions: transactionEvidence, finalized,
-    }, null, 2) + '\n', { mode: 0o600 });
+  } catch (error) {
+    const failure = {
+      kind: 'WITNESS-ARCHIVE-FAILURE-NOT-VERIFIED', mode, ...artifactBinding,
+      signature: activeSignature, stage: archiveStage,
+      finalizedCount: finalized.length, expectedCount: signatures.size,
+      message: String(error?.message ?? error),
+      errorJson: error && typeof error === 'object' ? JSON.stringify(error) : null,
+      stack: error?.stack ?? null,
+    };
+    mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(new URL('sprint1-' + mode + '-archive-error.json', evidenceDirectory),
+      JSON.stringify(failure, null, 2) + '\n', { mode: 0o600 });
+    console.error('WITNESS_ARCHIVE_FAILURE ' + JSON.stringify(failure));
+    throw error;
+  } finally {
+    mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(new URL('sprint1-' + mode + '-transactions.json', evidenceDirectory),
+      JSON.stringify({
+        kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
+        mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
+        ...artifactBinding, complete: finalized.length === signatures.size,
+        transactions: transactionEvidence, finalized,
+      }, null, 2) + '\n', { mode: 0o600 });
+  }
 }
 // Only public account bytes/keys/signatures may be archived; NEVER wallet keys.
 async function capturePublicAccountFixture(label, keys, signatures) {
@@ -297,14 +426,14 @@ async function assertCustodyConservation(label, minContextSlot) {
   assert.ok(BigInt(vault.amount) >= activeReceipts, label + ': vault cannot cover active receipts');
   // Donated surplus is permitted; only spendable custody >= obligations is required.
 }
-async function send(ix, signers) {
+async function send(ix, signers, label) {
   // Record pre-execution account bytes so a genuine unexpected on-chain
   // rejection can be traced back to the actual instruction and state.
   // Never capture keypair secrets, secret keys, seed phrases or wallet files.
   const relevantKeys = ix.keys.filter((key) =>
     !key.pubkey.equals(TOKEN_PROGRAM_ID) && !key.pubkey.equals(SystemProgram.programId));
   const before = await connection.getMultipleAccountsInfo(relevantKeys.map((key) => key.pubkey), 'confirmed');
-  const outcome = await submitOnChain(ix, signers);
+  const outcome = await submitOnChain(ix, signers, label);
   transactionEvidence.push({
     label: outcome.error === null ? 'confirmed-on-chain-success' : 'UNEXPECTED-ON-CHAIN-REJECTION',
     ...outcome,
@@ -345,35 +474,106 @@ async function fund(keypair) {
   const signature = await connection.requestAirdrop(keypair.publicKey, 3 * LAMPORTS_PER_SOL);
   await connection.confirmTransaction(signature, 'confirmed');
 }
-async function submitOnChain(ix, signers) {
-  // Reject preflight-only false positives: verify actual confirmed meta.err.
-  const blockhash = await connection.getLatestBlockhash('confirmed');
-  const tx = new Transaction({ feePayer: signers[0].publicKey, recentBlockhash: blockhash.blockhash }).add(ix);
-  tx.sign(...signers);
-  const signature = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 3 });
-  const confirmation = await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
-  let included;
-  for (let i = 0; i < 20; i++) {
-    included = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
-    if (included?.meta) break;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+async function submitOnChain(ix, signers, label = operationName(ix)) {
+  assert.ok(signers.length > 0, 'fee payer and signer needed');
+  const record = {
+    number: ++operationNumber, label, status: 'preparing',
+    feePayer: signers[0].publicKey.toBase58(),
+    signers: signers.map(s => s.publicKey.toBase58()),
+    instructions: [{ index: 0, programId: ix.programId.toBase58(),
+      dataBase64: Buffer.from(ix.data).toString('base64'),
+      accounts: ix.keys.map((key, index) => ({ index, pubkey: key.pubkey.toBase58(),
+        isSigner: key.isSigner, isWritable: key.isWritable })) }],
+  };
+  operationJournal.push(record); persistOperations();
+  try {
+    const blockhash = await connection.getLatestBlockhash('confirmed');
+    record.recentBlockhash = blockhash.blockhash;
+    const tx = new Transaction({ feePayer: signers[0].publicKey, recentBlockhash: blockhash.blockhash }).add(ix);
+    tx.sign(...signers);
+    const wire = tx.serialize();
+    record.signedWireBase64 = wire.toString('base64');
+    record.status = 'signed'; persistOperations();
+    let signature;
+    try {
+      signature = await connection.sendRawTransaction(wire, { skipPreflight: true, maxRetries: 3 });
+      record.signature = signature;
+      record.status = 'submitted'; persistOperations();
+    } catch (error) {
+      record.status = 'submission-error';
+      record.error = String(error?.message ?? error);
+      record.signature = error?.signature ?? null;
+      record.preflightLogs = error?.logs ?? null;
+      persistOperations();
+      throw error;
+    }
+    const confirmation = await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
+    record.confirmationError = confirmation.value.err;
+    record.status = 'confirmed'; persistOperations();
+    let included;
+    for (let i = 0; i < 20; i++) {
+      included = await connection.getTransaction(signature, {
+        commitment: 'confirmed', maxSupportedTransactionVersion: 1 });
+      if (included?.meta) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    assert.ok(included?.meta, 'transaction not included: ' + signature);
+    record.status = 'included';
+    record.slot = included.slot;
+    record.metaErr = included.meta.err;
+    record.logs = included.meta.logMessages;
+    record.emittingProgramId = errorEmitter(record.logs);
+    persistOperations();
+    assert.deepEqual(included.meta.err, confirmation.value.err,
+      'confirmation and included execution mismatch: ' + signature);
+    assert.ok(included.meta.logMessages?.length, 'missing included execution logs: ' + signature);
+    const outcome = {
+      signature, slot: included.slot, blockTime: included.blockTime,
+      operationLabel: label, feePayer: record.feePayer,
+      instructionProgramId: ix.programId.toBase58(), emittingProgramId: record.emittingProgramId,
+      signerPubkeys: record.signers, instructions: record.instructions,
+      instructionAccounts: record.instructions[0].accounts.map(key => ({
+        address: key.pubkey, signer: key.isSigner, writable: key.isWritable })),
+      recentBlockhash: included.transaction.message.recentBlockhash,
+      signedWireBase64: record.signedWireBase64,
+      error: included.meta.err, logs: included.meta.logMessages,
+    };
+    // This is before assertions in callers: preserve both halves of any race.
+    transactionEvidence.push({ label, ...outcome });
+    if (outcome.error !== null) console.error('INCLUDED_REJECTION ' +
+      JSON.stringify({ label, signature, metaErr: outcome.error,
+        emittingProgramId: record.emittingProgramId, logs: record.logs }));
+    return outcome;
+  } catch (error) {
+    if (!['included', 'submission-error'].includes(record.status)) {
+      record.status = 'failed'; record.exception = String(error?.message ?? error);
+      persistOperations();
+    }
+    throw error;
   }
-  assert.ok(included?.meta, 'transaction not included: ' + signature);
-  assert.deepEqual(included.meta.err, confirmation.value.err, 'confirmation and transaction mismatch');
-  assert.ok(included.meta.logMessages?.length, 'no validator execution logs');
-  return { signature, slot: included.slot, blockTime: included.blockTime,
-    instructionProgramId: ix.programId.toBase58(),
-    signerPubkeys: signers.map((signer) => signer.publicKey.toBase58()),
-    instructionAccounts: ix.keys.map((key) => ({
-      address: key.pubkey.toBase58(), signer: key.isSigner, writable: key.isWritable,
-    })),
-    recentBlockhash: included.transaction.message.recentBlockhash,
-    error: included.meta.err, logs: included.meta.logMessages };
 }
-async function rejectsInstruction(buildIx, signers, message) {
+// Expected rejections MUST name the program and custom error that rejects
+// them. A bare `meta.err !== null` check let several adversarial tests pass
+// for an unrelated reason (e.g. receipt PDA already in use), never reaching
+// the constraint they claimed to test.
+const EXPECT_PROGRAM = {
+  bridge: () => programId.toBase58(),
+  system: () => SystemProgram.programId.toBase58(),
+  token: () => TOKEN_PROGRAM_ID.toBase58(),
+};
+function assertRejectedBy(result, expected, message) {
+  assert.ok(expected && EXPECT_PROGRAM[expected.program] && Number.isInteger(expected.code),
+    message + ': expected rejection must name program and custom code');
+  assert.deepEqual(result.error, { InstructionError: [0, { Custom: expected.code }] },
+    message + ': rejected with the wrong error ' + JSON.stringify(result.error));
+  assert.equal(result.emittingProgramId, EXPECT_PROGRAM[expected.program](),
+    message + ': rejected by the wrong program ' + result.emittingProgramId);
+}
+async function rejectsInstruction(buildIx, signers, message, expected) {
   const ix = await buildIx(); // must encode successfully
-  const result = await submitOnChain(ix, signers);
+  const result = await submitOnChain(ix, signers, message);
   assert.notEqual(result.error, null, message + ': unexpectedly succeeded');
+  assertRejectedBy(result, expected, message);
   transactionEvidence.push({ label: message, ...result });
   await assertCustodyConservation('rejected transaction ' + message, result.slot);
   return result;
@@ -381,6 +581,7 @@ async function rejectsInstruction(buildIx, signers, message) {
 const same = (a, b) => assert.equal(a.toBase58(), b.toBase58());
 
 test('localnet-only: initialize, deposit, validation failures, pause and one refund', { timeout: 240_000, skip: mode !== 'lifecycle' }, async (t) => {
+  t.after(async () => saveTransactionEvidence());
   assert.equal(new URL(RPC).hostname, '127.0.0.1');
   assert.notEqual(idl.address, 'Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS',
     'run anchor keys sync with a freshly generated LOCAL keypair');
@@ -411,7 +612,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
 
   await t.test('freeze-enabled mint is rejected with atomic rollback', async () => {
     const frozenMint = await createMint(connection, owner, owner.publicKey, owner.publicKey, 6);
-    await rejectsInstruction(() => initIx(frozenMint, vaultFor(frozenMint)[0]), [owner], 'freeze-enabled init must fail');
+    await rejectsInstruction(() => initIx(frozenMint, vaultFor(frozenMint)[0]), [owner], 'freeze-enabled init must fail',
+      { program: 'bridge', code: 6004 }); // MintFreezable
     assert.equal(await connection.getAccountInfo(config), null);
   });
 
@@ -428,7 +630,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     same(v.mint, mint);
     assert.equal(v.delegate, null);
     assert.equal(v.closeAuthority, null);
-    await rejectsInstruction(() => initIx(mint, vault), [owner], 'second initialize must fail');
+    await rejectsInstruction(() => initIx(mint, vault), [owner], 'second initialize must fail',
+      { program: 'system', code: 0 }); // config PDA already in use
   });
 
   const [receipt, receiptBump] = receiptFor(owner.publicKey, nonce);
@@ -475,10 +678,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   }
 
   // Rejected transactions must leave all tracked state byte-for-byte intact.
-  async function rejectsUnchanged(buildIx, signers, label) {
+  async function rejectsUnchanged(buildIx, signers, label, expected) {
     const tracked = [config, vault, receipt];
     const before = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
-    await rejectsInstruction(buildIx, signers, label);
+    await rejectsInstruction(buildIx, signers, label, expected);
     const after = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
     for (let i = 0; i < tracked.length; i++) {
       assert.deepEqual(after[i]?.data, before[i]?.data, label + ': account data changed');
@@ -521,9 +724,18 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   });
 
   await t.test('duplicate nonce, wrong signer, wrong mint and wrong source fail atomically', async () => {
-    await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail');
-    await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail');
-    await rejectsUnchanged(() => depositIx({ from: strangerSource }), [owner], 'wrong source owner must fail');
+    await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail',
+      { program: 'system', code: 0 }); // receipt PDA already in use
+    await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail',
+      { program: 'bridge', code: 2006 }); // ConstraintSeeds on receipt
+    // An UNUSED nonce is required: Anchor creates `init` accounts while
+    // deserializing, before has_one/token constraints on other accounts are
+    // checked, so reusing nonce 42017 failed at the System Program instead.
+    const constraintNonce = new BN('42023');
+    const [constraintReceipt] = receiptFor(owner.publicKey, constraintNonce);
+    const fresh = { n: constraintNonce, receiptKey: constraintReceipt };
+    await rejectsUnchanged(() => depositIx({ ...fresh, from: strangerSource }), [owner],
+      'wrong source owner must fail', { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on source
     // The attacker correctly signs as both transaction payer and the named
     // depositor, but cannot use the OWNER's SPL source account.
     // Anchor's token::authority constraint must reject the INCLUDED signed
@@ -533,24 +745,37 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await rejectsUnchanged(() => depositIx({
       signer: attacker.publicKey, from: source, n: attackerNonce,
       receiptKey: attackerReceipt, amt: 1n,
-    }), [attacker], 'fully signed wrong-owner SPL source must fail on-chain');
+    }), [attacker], 'fully signed wrong-owner SPL source must fail on-chain',
+    { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on source
     assert.equal(await connection.getAccountInfo(attackerReceipt), null,
       'wrong-owner token transfer must not initialize an attacker receipt');
     const otherMint = await createMint(connection, owner, owner.publicKey, null, 6);
-    await rejectsUnchanged(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
-    await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
-    await rejectsUnchanged(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail');
-    await rejectsUnchanged(() => depositIx({ vaultKey: source }), [owner], 'substituted vault must fail');
+    await rejectsUnchanged(() => depositIx({ ...fresh, mintKey: otherMint }), [owner], 'wrong mint must fail',
+      { program: 'bridge', code: 2001 }); // config has_one = mint
+    await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail',
+      { program: 'bridge', code: 2006 }); // ConstraintSeeds on receipt
+    await rejectsUnchanged(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail',
+      { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on destination
+    // Realistic decoy: same mint AND token authority = config PDA, so the
+    // token::mint/token::authority constraints pass; only the vault PDA seeds
+    // constraint can reject it. Passing `source` as the vault (as before) is
+    // caught by the unrelated duplicate-mutable-account check instead.
+    const decoyVault = await createAccount(connection, owner, mint, config, Keypair.generate());
+    await rejectsUnchanged(() => depositIx({ ...fresh, vaultKey: decoyVault }), [owner],
+      'substituted config-owned decoy vault must fail', { program: 'bridge', code: 2006 }); // ConstraintSeeds on vault
+    assert.equal(await connection.getAccountInfo(constraintReceipt), null,
+      'rejected constraint tests must not create a receipt');
     const boundNonce = new BN('42019');
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: 0n }),
-      [owner], 'zero amount must fail');
+      [owner], 'zero amount must fail', { program: 'bridge', code: 6001 });
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], core: Array(32).fill(0) }),
-      [owner], 'zero recipient core must fail');
+      [owner], 'zero recipient core must fail', { program: 'bridge', code: 6002 });
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: (1n << 64n) - 1n }),
-      [owner], 'u64 maximum beyond funded balance must fail');
+      [owner], 'u64 maximum beyond funded balance must fail',
+      { program: 'token', code: 1 }); // SPL insufficient funds
     assert.equal(await connection.getAccountInfo(receiptFor(owner.publicKey, boundNonce)[0]), null,
       'failed boundary transfers must not create a receipt');
 
@@ -563,12 +788,12 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   await t.test('only admin pauses; deposits halt; refund works and is once-only', async () => {
     const pauseIx = (adminKey, paused) => program.methods.setPaused(paused)
       .accountsStrict({ admin: adminKey, config }).instruction();
-    await rejectsUnchanged(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail');
+    await rejectsUnchanged(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail', { program: 'bridge', code: 2001 });
     await send(await pauseIx(owner.publicKey, true), [owner]);
     const newNonce = new BN('42018');
     await rejectsUnchanged(
       () => depositIx({ n: newNonce, receiptKey: receiptFor(owner.publicKey, newNonce)[0] }),
-      [owner], 'paused deposit must fail');
+      [owner], 'paused deposit must fail', { program: 'bridge', code: 6000 });
     refundSignature = await send(await refundIx(), [owner]);
     await connection.confirmTransaction(refundSignature, 'finalized');
     assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
@@ -578,9 +803,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await assertRawState(0n, 0n, [{ key: receipt, n: nonce, value: amount, refunded: true, bump: receiptBump }]);
     await capturePublicAccountFixture('refunded-receipt', [receipt, config, vault, mint],
       { deposit: depositSignature, refund: refundSignature });
-    await rejectsUnchanged(() => refundIx(), [owner], 'second refund must fail');
+    await rejectsUnchanged(() => refundIx(), [owner], 'second refund must fail', { program: 'bridge', code: 6007 });
     await send(await pauseIx(owner.publicKey, false), [owner]);
-    await rejectsUnchanged(() => depositIx(), [owner], 'nonce remains consumed after refund');
+    await rejectsUnchanged(() => depositIx(), [owner], 'nonce remains consumed after refund',
+      { program: 'system', code: 0 });
     const maxNonce = new BN('18446744073709551615');
     const [maxReceipt, maxBump] = receiptFor(owner.publicKey, maxNonce);
     await send(await depositIx({ n: maxNonce, receiptKey: maxReceipt, amt: 1n }), [owner]);
@@ -613,7 +839,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       { key: receiptA, n: nA, value: 15_000n, refunded: true, bump: bumpA },
       { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
     ]);
-    await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail');
+    await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail', { program: 'bridge', code: 6007 });
     const finalRefundSig = await send(await refundIx({ receiptKey: receiptB }), [owner]);
     await connection.confirmTransaction(finalRefundSig, 'finalized');
     await assertRawState(0n, 0n, [
@@ -623,7 +849,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await capturePublicAccountFixture('two-refunded-receipts', [receiptA, receiptB, config, vault, mint], {});
   });
   await t.test('independent wallet accounting, concurrent deposits, rollback and authority attacks', async () => {
-    await mintTo(connection, owner, mint, strangerSource, owner, 300_000n);
+    await traceSdk('sixth-subtest-second-wallet-mint', () => mintTo(connection, owner, mint, strangerSource, owner, 300_000n), mint);
     const tracked = [
       { who: owner.publicKey, n: nonce, amount, refunded: true },
       { who: owner.publicKey, n: new BN(U64_MAX.toString()), amount: 1n, refunded: true },
@@ -689,10 +915,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       assert.equal((await getAccount(connection, source)).amount, sourceBalance, label + ': owner source');
       assert.equal((await getAccount(connection, strangerSource)).amount, strangerBalance, label + ': second source');
     }
-    async function rejectedWithoutChanges(label, instruction, signers, extra = []) {
+    async function rejectedWithoutChanges(label, instruction, signers, extra = [], expected) {
       const keys = [config, vault, source, strangerSource, ...extra];
       const before = await connection.getMultipleAccountsInfo(keys, 'confirmed');
-      await rejectsInstruction(() => Promise.resolve(instruction), signers, label);
+      await rejectsInstruction(() => Promise.resolve(instruction), signers, label, expected);
       const after = await connection.getMultipleAccountsInfo(keys, 'confirmed');
       for (let i = 0; i < keys.length; i++) {
         assert.deepEqual(after[i]?.data, before[i]?.data, label + ': changed account data');
@@ -703,10 +929,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     const n1 = new BN('60001'), n2 = new BN('60002');
     const [r1] = receiptFor(owner.publicKey, n1), [r2] = receiptFor(attacker.publicKey, n2);
     const concurrent = await Promise.all([
-      submitOnChain(await depositIx({ n: n1, receiptKey: r1, amt: 13_000n }), [owner]),
+      submitOnChain(await depositIx({ n: n1, receiptKey: r1, amt: 13_000n }), [owner], 'wallet-owner-parallel-deposit-13000'),
       submitOnChain(await depositIx({
         signer: attacker.publicKey, from: strangerSource, n: n2, receiptKey: r2, amt: 17_000n,
-      }), [attacker]),
+      }), [attacker], 'wallet-attacker-parallel-deposit-17000'),
     ]);
     for (let i = 0; i < concurrent.length; i++) {
       assert.equal(concurrent[i].error, null, 'different-wallet simultaneous deposit rejected');
@@ -726,34 +952,36 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     const failedNonce = new BN('60003'), [failedReceipt] = receiptFor(owner.publicKey, failedNonce);
     await rejectedWithoutChanges('failed SPL transfer rolls back receipt init',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, amt: sourceBalance + 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'token', code: 1 });
+    // Same account passed as source and vault: Anchor's duplicate-mutable check.
     await rejectedWithoutChanges('incorrect vault account rejected',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, vaultKey: source, amt: 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'bridge', code: 2040 }); // ConstraintDuplicateMutableAccount
     await rejectedWithoutChanges('token-program substitution rejected',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, tokenProg: SystemProgram.programId, amt: 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'bridge', code: 3008 }); // InvalidProgramId
     await rejectedWithoutChanges('unauthorized admin configuration update',
       await program.methods.setPaused(true).accountsStrict({ admin: attacker.publicKey, config }).instruction(),
-      [attacker], [r1, r2]);
+      [attacker], [r1, r2], { program: 'bridge', code: 2001 });
     await rejectedWithoutChanges('unauthorized mintTo rejected',
-      createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint]);
+      createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint],
+      { program: 'token', code: 4 }); // OwnerMismatch
     await rejectedWithoutChanges('mint authority reassignment by non-authority rejected',
       createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.MintTokens, attacker.publicKey),
-      [attacker], [mint]);
+      [attacker], [mint], { program: 'token', code: 4 }); // OwnerMismatch
     await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
       createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
-      [attacker], [mint]);
+      [attacker], [mint], { program: 'token', code: 16 }); // MintCannotFreeze
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
-      [attacker], [vault]);
+      [attacker], [vault], { program: 'token', code: 4 }); // OwnerMismatch
     await reconcile('after attempted CPI rollback and authority substitution');
 
     const partSignature = await send(await refundIx({ receiptKey: r1 }), [owner]);
     transactionEvidence.push({ label: 'partial-aggregate-refund', signature: partSignature, error: null });
     tracked.find((x) => x.n.eq(n1)).refunded = true;
     await reconcile('one of two wallet deposits refunded');
-    const strangerDestination = await createAccount(connection, attacker, mint, attacker.publicKey, Keypair.generate());
+    const strangerDestination = await traceSdk('sixth-subtest-refund-destination', () => createAccount(connection, attacker, mint, attacker.publicKey, Keypair.generate()), mint);
     const otherSignature = await send(await refundIx({
       signer: attacker.publicKey, to: strangerDestination, receiptKey: r2,
     }), [attacker]);
@@ -764,13 +992,15 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
 
     const raceNonce = new BN('60004'), [raceReceipt] = receiptFor(owner.publicKey, raceNonce);
     const sameNonceRace = await Promise.all([
-      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 73n }), [owner]),
-      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 74n }), [owner]),
+      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 73n }), [owner], 'same-nonce-race-73'),
+      submitOnChain(await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 74n }), [owner], 'same-nonce-race-74'),
     ]);
     assert.equal(sameNonceRace.filter((x) => x.error === null).length, 1,
       'same nonce race must have exactly one success');
     assert.equal(sameNonceRace.filter((x) => x.error !== null).length, 1,
       'duplicate nonce must be rejected by the validator');
+    assertRejectedBy(sameNonceRace.find((x) => x.error !== null), { program: 'system', code: 0 },
+      'same-nonce race loser'); // receipt PDA already in use
     sameNonceRace.forEach((outcome, i) =>
       transactionEvidence.push({ label: 'same-wallet-duplicate-nonce-race-' + i, ...outcome }));
     const wonAmount = sameNonceRace[0].error === null ? 73n : 74n;
@@ -778,19 +1008,19 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     sourceBalance -= wonAmount;
     await reconcile('exactly one racing nonce receipt remains active');
     await rejectedWithoutChanges('reusing racing receipt rejected',
-      await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 1n }), [owner], [raceReceipt]);
+      await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 1n }), [owner], [raceReceipt], { program: 'system', code: 0 });
     const raceRefundSignature = await send(await refundIx({ receiptKey: raceReceipt }), [owner]);
     transactionEvidence.push({ label: 'race-winner-refund', signature: raceRefundSignature, error: null });
     tracked.find((x) => x.n.eq(raceNonce)).refunded = true;
     await reconcile('all competing deposits refunded');
-    await saveTransactionEvidence();
-  });
+    });
 
 });
 
 test('isolated first-initializer capture attack (not safe for public deployment)', {
   timeout: 150_000, skip: mode !== 'init-capture'
-}, async () => {
+}, async (t) => {
+  t.after(async () => saveTransactionEvidence());
   assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
   await recordUpgradeAuthority();
   assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
@@ -816,12 +1046,12 @@ test('isolated first-initializer capture attack (not safe for public deployment)
     tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
   }).instruction();
   await rejectsInstruction(() => Promise.resolve(operatorInitIx), [operator],
-    'authorized operator cannot initialize after attacker captured singleton');
+    'authorized operator cannot initialize after attacker captured singleton', { program: 'system', code: 0 });
   const operatorPauseIx = await program.methods.setPaused(true).accountsStrict({
     admin: operator.publicKey, config,
   }).instruction();
   await rejectsInstruction(() => Promise.resolve(operatorPauseIx), [operator],
-    'operator cannot pause attacker-controlled config');
+    'operator cannot pause attacker-controlled config', { program: 'bridge', code: 2001 });
   const attackerPause = await program.methods.setPaused(true).accountsStrict({
     admin: attacker.publicKey, config,
   }).instruction();
@@ -832,12 +1062,12 @@ test('isolated first-initializer capture attack (not safe for public deployment)
   await capturePublicAccountFixture('sprint1-initializer-capture',
     [config, vaultFor(maliciousMint)[0], maliciousMint],
     { capture: captureSignature, attackerPause: pauseSignature });
-  await saveTransactionEvidence();
 });
 
 test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes', {
   timeout: 150_000, skip: mode !== 'u64-max'
-}, async () => {
+}, async (t) => {
+  t.after(async () => saveTransactionEvidence());
   assert.ok((await connection.getAccountInfo(programId))?.executable, 'real deployed SBPF required');
   await recordUpgradeAuthority();
   assert.equal(await connection.getAccountInfo(config), null, 'must use fresh isolated validator');
@@ -871,7 +1101,7 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   assert.equal((await getAccount(connection, source)).amount, 0n);
   assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
   await rejectsInstruction(() => Promise.resolve(createMintToInstruction(mint, source, admin.publicKey, 1n)),
-    [admin], 'mint supply increment beyond u64 max must fail');
+    [admin], 'mint supply increment beyond u64 max must fail', { program: 'token', code: 14 }); // Overflow
   assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), U64_MAX.toString());
   const refundIx = await program.methods.refund().accountsStrict({
@@ -884,11 +1114,10 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
   assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
   await rejectsInstruction(() => Promise.resolve(refundIx), [admin],
-    'repeated full-u64 refund must not underflow total_active');
+    'repeated full-u64 refund must not underflow total_active', { program: 'bridge', code: 6007 });
   assert.equal((await getAccount(connection, vault)).amount, 0n);
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
   await connection.confirmTransaction(refundSignature, 'finalized');
   await capturePublicAccountFixture('sprint1-u64-refunded', [receipt, config, vault, mint],
     { deposit: depositSignature, refund: refundSignature });
-  await saveTransactionEvidence();
 });

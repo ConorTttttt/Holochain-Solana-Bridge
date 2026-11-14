@@ -1,14 +1,17 @@
 {
-  "status": "P0 RED — current specialist sources reconciled into an unverified non-economic integration candidate. Combined acceptance NOT established.",
+  "status": "P0 RED — pre-review SOL #38 integration trial; SEC sign-off / Agent 2 adoption PENDING. Exact-head CI not yet established.",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
     "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
   },
   "sources": {
     "SOL": {
-      "branch": "agent/sol/7-anchor-build",
-      "sha": "6fb7529619050a7c251acc055d7cb6f4b8e69b35",
-      "pr": 35
+      "branch": "claude/solana-independent-fix",
+      "sha": "cca4e9a94b5147efa82ac0106f1f97f75a42251f",
+      "pr": 38,
+      "adoptionTarget": "agent/sol/7-anchor-build",
+      "adoptionPr": 35,
+      "adoptionStatus": "PENDING_AGENT2_SOURCE_OWNERSHIP_AND_SEC_REVIEW"
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
@@ -38,7 +41,9 @@
     ],
     "SOL": [
       "tests/solana/integration.test.mjs",
-      "tests/solana/verify-witness-bundle.mjs"
+      "tests/solana/localnet-build.sh",
+      "tests/solana/verify-witness-bundle.mjs",
+      "tests/solana/verify-witness-tamper.mjs"
     ],
     "OBS": [
       "observer/package.json",
@@ -69,8 +74,8 @@
     "tests/solana/package-lock.json": "24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6",
     "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
-  "sourceLockReview": "Four previous reviewed SHA-256 lock digests retained unchanged; the candidate guard verifies each committed file and all source-owned blob identities before consuming same-run evidence.",
-  "testPolicy": "24 required offline cross-lane suites incl SEC checkpoint/numeric/ledger tamper and SOL signer SDK; real OBS SDK; generated Anchor SBPF/IDL; 3 separate live-validator modes and retained-ledger restart; SOL source-owned genuine base64 tx and immutable source/IDL/ELF witness bundle; mandatory complete base64 block+OBS replay; RAVE Rust; quarantine-only shadow. No missing/skip allowed. Dedicated real localnet signed deposit -> OBS receipt -> durable ledger close/restart/duplicate/fork -> shadow active/refund/contradiction is a required subtest; no conductor call.",
+  "sourceLockReview": "Preserved four old reviewed lock SHA256 values unchanged; verify SHA and check graph in CI. No cargo regeneration/upgrade. Independent source review still required.",
+  "testPolicy": "Required real 54 finalized signed-wire witnesses across lifecycle 45 (17+28), init-capture 4 (2+2), u64-max 5 (3+2); cryptographic Ed25519/deployed ELF equality; seven real archive tamper negatives per mode both producer and consumer; four original source graph locks; real Observer replay, durable ledger crash/restart/idempotence/contradiction, quarantined active/refund shadow and real RAVE conductor. All at same SHA. No skipped mandatory tests.",
   "previousFailingExecution": {
     "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
     "ciRun": 43520698081,
@@ -95,7 +100,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "2026-11-14 source PR35 exact head 6fb7529 workflow 43534619890 FAILED Custom 6004; RAVE PR34 exact head 17a3623 workflow 43537089670 passed all 5 jobs including disposable conductor. Combined candidate runs pending.",
+  "latestExecutionStatus": "Standalone SOL source cca4e9a run 43577100529 PASS with 54 finalized records/3 modes/7 tamper mutations each. No new candidate workflows run yet; no integrated claim.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -117,7 +122,7 @@
     }
   ],
   "conductorStatus": "REAL DISPOSABLE Holochain 0.7.1 local conductor install/restart and matching app/cell identity VERIFIED at RAVE 17a3623 / Actions 43537089670; NO approved zome call or source-to-WASM equivalence, no B2/C authorization.",
-  "rawWireStatus": "SOL PR35 now has source-owned original JSON and base64 getTransaction + JSON and full base64 getBlock and an upgraded witness verifier; real SOL test still fails at Custom 6004 before all scenario archives; no signed-wire B1 replay proof.",
+  "rawWireStatus": "Standalone SOL genuine signed/finalized JSON+base64 and full getBlock archive passed source verifier; integrated actual OBS/ledger/restart remains unproven until exact-head run.",
   "skillSource": {
     "branch": "main",
     "commit": "e1651fec77f1ed5c5f8e760e486c8757adc5e69c",
@@ -212,24 +217,24 @@
     "withdrawalAuthorized": false
   },
   "candidate": {
-    "branch": "integration/s0/2026-11-14-agent1-candidate",
-    "integrationPr": 37,
+    "branch": "integration/s0/2026-11-14-sol38-review-pending",
+    "integrationPr": "NEW_DRAFT_REQUIRED",
     "sourceCiPr": 32,
     "status": "UNVERIFIED_NO_GREEN_CLAIM",
-    "basisCommit": "aa2502da3f9bcd0cdd07763725ad6618a8006919",
+    "basisCommit": "6a500811eb8b7b08865a4ae0acce327cbdbae002",
     "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
     "creationDateUtc": "2026-11-14",
-    "immutableIdentity": "Git commit SHA; do not overwrite or force-push the candidate ref",
-    "execution": "CI workflow results for this exact commit are mandatory"
+    "immutableIdentity": "Freeze at actual new Git SHA; do not force-push or overwrite after creation",
+    "execution": "Shared CI, integration SOL/OBS, and RAVE five jobs all required at EXACT new SHA"
   },
   "fileProvenance": {
     "tests/solana/integration.test.mjs": {
       "lane": "SOL",
-      "sha": "beac9d89539a1440a8fa4fb8bbed4634f5ef7588"
+      "sha": "1b33504c8f9d143ec2db254f80732ae110bf38af"
     },
     "tests/solana/verify-witness-bundle.mjs": {
       "lane": "SOL",
-      "sha": "cb86e34643affea81617ade6e7982fd59cacc1da"
+      "sha": "2f0be01b37912a13f179b822542712f4212b16f9"
     },
     "observer/package.json": {
       "lane": "OBS",
@@ -274,6 +279,14 @@
     "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md": {
       "lane": "SEC",
       "sha": "e878be1fce8481c242f7659f34e04a3498806bae"
+    },
+    "tests/solana/localnet-build.sh": {
+      "lane": "SOL",
+      "sha": "450a0e6074fdae684ef1063bedfc7ac9bf275e4d"
+    },
+    "tests/solana/verify-witness-tamper.mjs": {
+      "lane": "SOL",
+      "sha": "be52a648d27668b108473ae2e438cb2d0938ee5c"
     }
   },
   "integrationOnlyProvenance": {
@@ -286,19 +299,36 @@
       "reason": "CI flips decodable wire byte for signature-negative test; SEC source still mutates trailing compact count"
     },
     ".github/workflows/rave-unyt-release.yml": {
-      "reason": "RAVE-owned workflow body from exact RAVE head; integration-owned push-trigger expansion only"
+      "reason": "RAVE-owned workflow content from prior reviewed source, CI-only new immutable staging branch push trigger; no specialist branch edited"
     }
   },
   "currentAcceptance": {
-    "A": "BLOCKED — exact-candidate shared and lifecycle workflows not yet passed; SOL 6004 on specialist head",
-    "B1": "BLOCKED — full original signed-wire / complete-block / restart replay archives missing",
-    "B2": "BLOCKED — RAVE real conductor installed/restarted with 5/5 jobs, but source-equivalent zome call/integration absent",
-    "C": "PROHIBITED — economic authorization never granted"
+    "A": "BLOCKED — standalone SOL #38 PASS, new combined exact-SHA CI pending",
+    "B1": "BLOCKED — actual SOL archive has not passed independent OBS durable-ledger replay at new integration SHA",
+    "B2": "BLOCKED — older candidate passed disposable conductor 5/5; no approved source-equivalent zome call or integration binding",
+    "C": "NO-GO — crediting, withdrawals and independent economic finality disabled"
   },
   "nonEconomicPolicy": {
     "creditEligible": false,
     "independentConsensusVerified": false,
     "spendableBaseUnits": "0",
     "withdrawalAuthorized": false
+  },
+  "anchorCliSourcePin": {
+    "repository": "https://github.com/otter-sec/anchor",
+    "tag": "v1.2.2",
+    "annotatedTagObject": "7f9c7c83b5652e92ec6d509e02c0ad4554b6624c",
+    "resolvedCommit": "8d9d1488d9b8af41b266d7513eea2e668adf15a2",
+    "policy": "Pinned CI use of previously installed fork by exact commit; provenance/canonical-source equivalence NOT reviewed or approved"
+  },
+  "preReviewGate": {
+    "status": "PENDING_INDEPENDENT_SEC_REVIEW_AND_AGENT2_ADOPTION",
+    "pr38": 38,
+    "secPr": 33,
+    "solPr": 35,
+    "standaloneRun": 43577100529,
+    "standaloneEvidenceArtifact": 14106778660,
+    "standaloneEvidenceDigest": "sha256:aa4cbdf19979816f48c1b2a2327bd09bc578953f5b5794bb8863672b41da7600",
+    "noEconomicClaims": true
   }
 }
