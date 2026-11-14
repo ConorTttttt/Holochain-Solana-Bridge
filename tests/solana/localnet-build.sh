@@ -80,6 +80,8 @@ for scenario in lifecycle init-capture u64-max; do
     --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
   # An all-skipped suite or missing RPC witness is NOT an on-chain PASS.
   node tests/solana/verify-witness-bundle.mjs "$scenario"
+  # The verifier must also REJECT tampered/incomplete copies of this archive.
+  node tests/solana/verify-witness-tamper.mjs "$scenario"
 done
 # Separate two-process retained-ledger restart: it deploys the same compiled
 # ELF into a brand new disposable ledger, leaves a positive liability, kills
