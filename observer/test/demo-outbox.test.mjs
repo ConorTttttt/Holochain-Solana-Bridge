@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DepositLedger} from '../src/ledger.mjs';
 import {DemoOutbox,ROLLBACK_HOLD,canonicalJSON,domainDigest,DENIALS} from '../src/demo-outbox.mjs';
+process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE='1'; // test process only; never production origin
 const genesisHash='1'.repeat(32),program='1'.repeat(32),mint='1'.repeat(32);
 const holochainScope='07'.repeat(32),receiptAddress='1'.repeat(32),depositor='1'.repeat(32);
 const signature='1'.repeat(64);
@@ -32,7 +33,7 @@ function make(t){
     finalizedSlot:17,observationSlot:18,receiptSnapshot:snap,refundedAtObservation:false,
     transactionVerified:true,verifiedByRpcClaim:true,...DENIALS};
   ledger.commit({checkpoint:17,evidence:[evidence]});
-  const queue=(e=evidence,trans=tx)=>outbox.queueVerified({ledger,evidence:e,rpcTransaction:trans,codeVersion:'obs-review-2931c5fc'});
+  const queue=(e=evidence,trans=tx)=>outbox.queueSyntheticFixture({ledger,evidence:e,rpcTransaction:trans,codeVersion:'obs-review-2931c5fc'});
   return {dir,path,ledger,outbox,evidence,tx,queue};
 }
 function remote(){
@@ -51,11 +52,11 @@ test('01 canonical JSON is deterministic across key insertion order',()=>{
 });
 test('02 queue requires exact live durable source ledger; no caller JSON-only promotion',t=>{
   const {outbox,evidence,tx,queue}=make(t);
-  assert.throws(()=>outbox.queueVerified({ledger:JSON.parse('{}'),evidence,rpcTransaction:tx,codeVersion:'X'}),/LIVE_SOURCE_LEDGER_REQUIRED/);
+  assert.throws(()=>outbox.queueSyntheticFixture({ledger:JSON.parse('{}'),evidence,rpcTransaction:tx,codeVersion:'X'}),/LIVE_SOURCE_LEDGER_REQUIRED/);
   assert.equal(queue(),'pending');
   assert.equal(outbox.status.rollbackSecurityHold,ROLLBACK_HOLD);
   const row=Object.values(outbox.state.rows)[0];
-  assert.equal(row.observation.proof.evidenceOrigin,'observer_reviewed_outbox');
+  assert.equal(row.observation.proof.evidenceOrigin,'test_only_fixture');
   assert.equal(row.observation.proof.historyComplete,false);
   assert.deepEqual(Object.fromEntries(Object.entries(DENIALS).map(([k])=>[k,row.observation[k]])),DENIALS);
 });
