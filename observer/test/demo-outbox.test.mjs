@@ -508,3 +508,25 @@ test('43 arbitrary RPC fetcher stays refused outside Node test runner even if op
     else process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY=prior;
   }
 });
+
+test('44 rehashed nested economic denials never pass a reviewed v2 witness',t=>{
+  // Synthetic internal-contract test. This is NOT genuine signed-wire replay,
+  // Holochain delivery, independent consensus or capability authorization.
+  const original=syntheticV2(t);
+  assert.equal(verifyReviewedWitnessV2(original),true);
+  for(const [field,forged] of [
+    ['creditEligible',true],
+    ['independentConsensusVerified',true],
+    ['spendableBaseUnits','1'],
+    ['withdrawalAuthorized',true],
+  ]){
+    const w=structuredClone(original);
+    w.source.verifiedEvidence[field]=forged;
+    // Simulate an adversary who recomputes an unkeyed checksum so the
+    // digest check passes; reject on the nested economic boundary instead.
+    const {witnessDigest:ignored,...unsigned}=w;
+    w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,unsigned);
+    assert.throws(()=>verifyReviewedWitnessV2(w),
+      new RegExp('OBS_V2_REFUSED:NESTED_ECONOMIC_DENIAL_'+field));
+  }
+});
