@@ -1,0 +1,304 @@
+{
+  "status": "P0 RED — current specialist sources reconciled into an unverified non-economic integration candidate. Combined acceptance NOT established.",
+  "base": {
+    "branch": "agent/ci/11-build-pipeline",
+    "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
+  },
+  "sources": {
+    "SOL": {
+      "branch": "agent/sol/7-anchor-build",
+      "sha": "6fb7529619050a7c251acc055d7cb6f4b8e69b35",
+      "pr": 35
+    },
+    "OBS": {
+      "branch": "agent/obs/8-observer-validation",
+      "sha": "94361778d08a3cfd5358d5d3de1af5a1c0318835",
+      "pr": 36
+    },
+    "RAVE": {
+      "branch": "agent/rave/9-rave-validation",
+      "sha": "17a3623917311fd3ccbe338293f1cd8ce4cb3c7c",
+      "pr": 34
+    },
+    "SEC": {
+      "branch": "agent/sec/10-threat-model",
+      "sha": "a42096495934f42c86f09c36fa0bdc9b48f362e9",
+      "pr": 33
+    }
+  },
+  "parentIntegrationCommit": "aa2502da3f9bcd0cdd07763725ad6618a8006919",
+  "sourceUpdatePaths": {
+    "CI": [
+      "scripts/ci/verify-integration-provenance.mjs",
+      "scripts/ci/run-cross-lane-tests.mjs",
+      ".github/workflows/integration-snapshot.yml",
+      ".github/workflows/rave-unyt-release.yml",
+      "ci-integration-snapshot.json",
+      "scripts/ci/MILESTONE_REPORT_2026-11-14.md"
+    ],
+    "SOL": [
+      "tests/solana/integration.test.mjs",
+      "tests/solana/verify-witness-bundle.mjs"
+    ],
+    "OBS": [
+      "observer/package.json",
+      "observer/src/indexer.mjs",
+      "observer/scripts/replay-validator-witness.mjs",
+      "observer/test/validator-witness.test.mjs",
+      "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md"
+    ],
+    "RAVE": [
+      "tests/holochain/sandbox/inspect-verified-unyt.sh",
+      "tests/holochain/sandbox/probe-verified-unyt-conductor.sh",
+      "holochain/research/HOLONIX_071_ROOT_CAUSE_AND_CONDUCTOR_GATE.md",
+      "holochain/research/UNYT_0117_ACTUAL_BUNDLE_INVENTORY.md",
+      "holochain/research/UNYT_0117_REAL_CONDUCTOR_PROOF.md"
+    ],
+    "SEC": [
+      "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md"
+    ]
+  },
+  "method": "Preserved executed P0 failure cd4ab8dd; CI-only workflow upload allowlist and cross-job provenance checks; updated CI readiness, with unchanged specialist implementation/source pins. New integration commit requires independent full exact-head workflow success.",
+  "exceptions": [
+    "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
+    "No binary/IDL hashes reused across disposable program IDs"
+  ],
+  "reviewedLockSHA256": {
+    "Cargo.lock": "9700366dc3e0219ef167bf2a0669db87b32e0d2cbb259e1fa8661d24bf0a24f5",
+    "observer/package-lock.json": "87578ffa1a3f0d1f0102f58ac649e25cd2a9d2902889bc946213fb2f136f0f62",
+    "tests/solana/package-lock.json": "24ad69597db242528c87a98d8bc2299574e09eb52e77e026281db01e1c9889c6",
+    "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
+  },
+  "sourceLockReview": "Four previous reviewed SHA-256 lock digests retained unchanged; the candidate guard verifies each committed file and all source-owned blob identities before consuming same-run evidence.",
+  "testPolicy": "24 required offline cross-lane suites incl SEC checkpoint/numeric/ledger tamper and SOL signer SDK; real OBS SDK; generated Anchor SBPF/IDL; 3 separate live-validator modes and retained-ledger restart; SOL source-owned genuine base64 tx and immutable source/IDL/ELF witness bundle; mandatory complete base64 block+OBS replay; RAVE Rust; quarantine-only shadow. No missing/skip allowed. Dedicated real localnet signed deposit -> OBS receipt -> durable ledger close/restart/duplicate/fork -> shadow active/refund/contradiction is a required subtest; no conductor call.",
+  "previousFailingExecution": {
+    "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
+    "ciRun": 43520698081,
+    "validatorRaveRun": 43520697998,
+    "observer": {
+      "tests": 48,
+      "pass": 47,
+      "fail": 1,
+      "skip": 0
+    },
+    "offline": {
+      "tests": 125,
+      "pass": 124,
+      "fail": 1,
+      "skip": 0
+    },
+    "raveRust": {
+      "tests": 12,
+      "pass": 12,
+      "fail": 0,
+      "skip": 0
+    },
+    "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
+  },
+  "latestExecutionStatus": "2026-11-14 source PR35 exact head 6fb7529 workflow 43534619890 FAILED Custom 6004; RAVE PR34 exact head 17a3623 workflow 43537089670 passed all 5 jobs including disposable conductor. Combined candidate runs pending.",
+  "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
+  "created": "2026-11-13",
+  "integrationOnlyPatches": [
+    {
+      "path": "observer/test/indexer.test.mjs",
+      "reason": "Keep stricter fail-closed correct second-signer regex until OBS source backport"
+    },
+    {
+      "path": "security/test/transaction-provenance-adversarial.test.mjs",
+      "reason": "Keep decodable Ed25519 tamper fixture until SEC source backport"
+    },
+    {
+      "path": ".github/workflows/rave-unyt-release.yml",
+      "reason": "CI-only trigger expansion to run RAVE five-stage proof at the exact integration branch SHA"
+    },
+    {
+      "path": "observer/ci/s0-signed-wire-evidence.mjs",
+      "reason": "CI-owned original signed-wire replay; not part of OBS default test discovery"
+    }
+  ],
+  "conductorStatus": "REAL DISPOSABLE Holochain 0.7.1 local conductor install/restart and matching app/cell identity VERIFIED at RAVE 17a3623 / Actions 43537089670; NO approved zome call or source-to-WASM equivalence, no B2/C authorization.",
+  "rawWireStatus": "SOL PR35 now has source-owned original JSON and base64 getTransaction + JSON and full base64 getBlock and an upgraded witness verifier; real SOL test still fails at Custom 6004 before all scenario archives; no signed-wire B1 replay proof.",
+  "skillSource": {
+    "branch": "main",
+    "commit": "e1651fec77f1ed5c5f8e760e486c8757adc5e69c",
+    "tree": "5cbe75c81229590d303c531a9f41674a92f344ed",
+    "paths": [
+      ".github/skills/solana-dev/",
+      ".github/skills/holochain/"
+    ],
+    "policy": "Reference-only; no toolchain upgrade. Holochain 0.7 API examples not equivalent to a deployed Unyt DNA."
+  },
+  "ciBaseMerged": {
+    "branch": "agent/ci/11-build-pipeline",
+    "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
+  },
+  "executedIntermediate": {
+    "commit": "19bf4878cf6f9351b22f3a91bdc0c01a8914b9df",
+    "sharedRun": 43527503901,
+    "integrationRun": 43527503883,
+    "observer": {
+      "total": 55,
+      "pass": 54,
+      "fail": 1,
+      "skip": 0
+    },
+    "summary": "Intermediate SHA immutable; fixing test regex only; jobs not all completed.",
+    "p0SolanaFailure": {
+      "run": 43527503883,
+      "subtest": "independent wallet accounting, concurrent deposits, rollback and authority attacks",
+      "error": "InstructionError Custom 6004 MintFreezable",
+      "status": "source owner investigation required"
+    },
+    "p0SecurityFailure": {
+      "run": 43527503883,
+      "file": "security/test/transaction-provenance-adversarial.test.mjs",
+      "error": "mutated instruction count causes Codec u8 empty array instead of signature check",
+      "status": "integration-only test fixture corrected pending SEC source backport"
+    }
+  },
+  "lastVerifiedExecution": {
+    "integrationSha": "cd4ab8dd61ec7353b330ba4a55f1d0ac5f5a9bf0",
+    "sharedActionsRun": 43529253015,
+    "sharedActionsConclusion": "success",
+    "sharedPassingJobs": 6,
+    "integrationActionsRun": 43529253005,
+    "integrationActionsConclusion": "failure",
+    "integrationJobs": {
+      "solanaLifecycle": "failure Custom 6004 at integration.test.mjs:592",
+      "sdkFixtures": "failure missing three genuine transaction archives",
+      "publishedRaveRust": "success 12/12"
+    },
+    "partialLocalnetEvidenceArtifact": 14087460958,
+    "artifactFileCount": 24,
+    "disposableProgramId": "B8WpDXUeH96FiWYmhqwpF3Hf4MKNagM5XpZJtaVuPvF",
+    "idlSha256": "ea6f78383e6fa9148a560f628fb7648bacede90388a4951c1f158f71c2b2cf83",
+    "elfSha256": "8162421ae2dd56927510d381bbe6c70ce760750e6d53ce2f02683ef106439928",
+    "errorAttribution": "MintFreezable is IDL enum code 6004, but the failing transaction/signature/issuer has not been captured. No SOL fix claimed.",
+    "blockers": [
+      "lifecycle multiwallet subtest threw before archive writer",
+      "isolated init-capture and u64-max modes never ran",
+      "retained-ledger restart not reached",
+      "signed wire replay/shadow end-to-end tests have no mandatory transaction archive"
+    ]
+  },
+  "integrationOnlyCiRemediation": {
+    "date": "2026-11-14",
+    "status": "unverified until exact-head workflows complete",
+    "workflow": ".github/workflows/integration-snapshot.yml",
+    "requirements": [
+      "consumer re-runs SOL verifier on all original downloaded local-validator archives",
+      "verification binds each mode to checked-out source SHA, compiled ELF and generated IDL plus genesis/program",
+      "source owner must publish genuine signed base64 getTransaction and full base64 getBlock RPC, execution meta and account bytes",
+      "missing source evidence fails closed; no fixture fabrication"
+    ],
+    "newlyUploadedPublicSnapshotPaths": [
+      "target/localnet-evidence/sprint1-two-wallets-live.json",
+      "target/localnet-evidence/sprint1-initializer-capture.json",
+      "target/localnet-evidence/sprint1-u64-refunded.json"
+    ],
+    "pendingSourceBackports": [
+      "SOL original full base64 block capture / witness regex and failure transaction logs",
+      "OBS signer restart test diagnostic correction",
+      "SEC valid-message Ed25519 tamper test"
+    ],
+    "publicDiagnosticUpload": "target/localnet-evidence/unexpected-onchain-*.json (source-owned public-only unexpected failure evidence, no signing keys; usable on next integrated SOL source)",
+    "requiredVerifiedSpecialistChanges": "SOL a6316b78 remains pinned, while newer SOL 6fb75296 diagnostic source is awaiting standalone validator CI; OBS 0a3db58d and SEC a4209649 not yet incorporated or verified"
+  },
+  "shadowMilestone": {
+    "status": "NOT DEMONSTRATED at real signed-wire + durable-ledger + refund handoff",
+    "adapter": "JavaScript shadow-only verifier, not genuine Unyt conductor",
+    "holochainDependency": "Authentic Unyt conductor, compatible deployed DNA/zomes, independent consensus/finality verification and multi-agent reconciliation still required",
+    "creditEligible": false,
+    "withdrawalAuthorized": false
+  },
+  "candidate": {
+    "branch": "integration/s0/2026-11-14-agent1-candidate",
+    "integrationPr": 37,
+    "sourceCiPr": 32,
+    "status": "UNVERIFIED_NO_GREEN_CLAIM",
+    "basisCommit": "aa2502da3f9bcd0cdd07763725ad6618a8006919",
+    "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
+    "creationDateUtc": "2026-11-14",
+    "immutableIdentity": "Git commit SHA; do not overwrite or force-push the candidate ref",
+    "execution": "CI workflow results for this exact commit are mandatory"
+  },
+  "fileProvenance": {
+    "tests/solana/integration.test.mjs": {
+      "lane": "SOL",
+      "sha": "beac9d89539a1440a8fa4fb8bbed4634f5ef7588"
+    },
+    "tests/solana/verify-witness-bundle.mjs": {
+      "lane": "SOL",
+      "sha": "cb86e34643affea81617ade6e7982fd59cacc1da"
+    },
+    "observer/package.json": {
+      "lane": "OBS",
+      "sha": "a3ac2adacc46c96462a875c8a72f7c256a69ed6c"
+    },
+    "observer/src/indexer.mjs": {
+      "lane": "OBS",
+      "sha": "03bb55c5ad8309f05d29b4d6dcda0ddacc6d0be7"
+    },
+    "observer/scripts/replay-validator-witness.mjs": {
+      "lane": "OBS",
+      "sha": "b04cdb678c93ca0c0b44d43616c3186be0b12ad2"
+    },
+    "observer/test/validator-witness.test.mjs": {
+      "lane": "OBS",
+      "sha": "37b6917518f3eeaf25b5fdff0dea2903f3d365d3"
+    },
+    "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "50088a4998eb34718053d6240bec7e08cc021443"
+    },
+    "tests/holochain/sandbox/inspect-verified-unyt.sh": {
+      "lane": "RAVE",
+      "sha": "33f81b5d941ba94d7e2a6ab052358d4ee455efc1"
+    },
+    "tests/holochain/sandbox/probe-verified-unyt-conductor.sh": {
+      "lane": "RAVE",
+      "sha": "02a893a949d9e74fce2a18154389755a5dfa046c"
+    },
+    "holochain/research/HOLONIX_071_ROOT_CAUSE_AND_CONDUCTOR_GATE.md": {
+      "lane": "RAVE",
+      "sha": "faf7367f80d04cf0f1a2228d8da4e166342d1033"
+    },
+    "holochain/research/UNYT_0117_ACTUAL_BUNDLE_INVENTORY.md": {
+      "lane": "RAVE",
+      "sha": "4fe13618dba6b725913e856867f05b8f9137e269"
+    },
+    "holochain/research/UNYT_0117_REAL_CONDUCTOR_PROOF.md": {
+      "lane": "RAVE",
+      "sha": "5f521035cbd706ccb568ada4a403bca57d28d7fc"
+    },
+    "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md": {
+      "lane": "SEC",
+      "sha": "e878be1fce8481c242f7659f34e04a3498806bae"
+    }
+  },
+  "integrationOnlyProvenance": {
+    "observer/test/indexer.test.mjs": {
+      "blobSha": "ab467f9d2c236f88417e174798ac5c1f4a04f310",
+      "reason": "CI corrected second required signer diagnostic regex; OBS newest source still expects only invalid Ed25519"
+    },
+    "security/test/transaction-provenance-adversarial.test.mjs": {
+      "blobSha": "f16e46136a0c8b40d685c105a402c28037ce06e9",
+      "reason": "CI flips decodable wire byte for signature-negative test; SEC source still mutates trailing compact count"
+    },
+    ".github/workflows/rave-unyt-release.yml": {
+      "reason": "RAVE-owned workflow body from exact RAVE head; integration-owned push-trigger expansion only"
+    }
+  },
+  "currentAcceptance": {
+    "A": "BLOCKED — exact-candidate shared and lifecycle workflows not yet passed; SOL 6004 on specialist head",
+    "B1": "BLOCKED — full original signed-wire / complete-block / restart replay archives missing",
+    "B2": "BLOCKED — RAVE real conductor installed/restarted with 5/5 jobs, but source-equivalent zome call/integration absent",
+    "C": "PROHIBITED — economic authorization never granted"
+  },
+  "nonEconomicPolicy": {
+    "creditEligible": false,
+    "independentConsensusVerified": false,
+    "spendableBaseUnits": "0",
+    "withdrawalAuthorized": false
+  }
+}
