@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {A4_BINDING_DOMAIN,canonicalTypedV2,reviewBindingDigestPrimitive,
   verifyBindingDigestReviewOnly,assertUniqueRawJsonObjectMembers} from '../src/v2-binding-review.mjs';
 
@@ -81,5 +82,37 @@ test('v2 raw original sidecar: duplicate keys at any depth refuse before JSON.pa
   for(const malformed of ['{"result":}', '{"result":true} trailing']){
     assert.throws(()=>assertUniqueRawJsonObjectMembers(malformed),
       /OBS_V2_ABI_REVIEW_REFUSED:RAW_JSON_/);
+  }
+});
+
+
+test('pinned independent v2 primitive canonical positive/negative digest vectors',()=>{
+  // Synthetic primitive only: all six values are structurally incomplete and
+  // NEVER an admitted source or a Holochain signing capability.
+  const fixture=JSON.parse(readFileSync(new URL(
+    '../fixtures/v2-binding-primitive-vectors.json',import.meta.url),'utf8'));
+  assert.equal(fixture.realKitSourceWitness,false);
+  assert.equal(fixture.signedHolochainTransportApproved,false);
+  const mutations={
+    positive_digest_primitive_not_admission:x=>x,
+    negative_nonce_mutation:x=>{x.source.depositNonce='42018'},
+    negative_wire_hash_mutation:x=>{x.witness.originalSignedWireSha256='f'.repeat(64)},
+    negative_raw_sidecar_byte_change:x=>{x.proof.originalFourAccountRpcUtf8+=' '},
+    negative_cellid_mutation:x=>{x.destination.cellId[0]='OTHER_DNA'},
+    negative_credit_eligibility_escalation:x=>{x.creditEligible=true},
+  };
+  assert.deepEqual(fixture.vectors.map(v=>v.name),Object.keys(mutations));
+  for(const vector of fixture.vectors){
+    const changed=structuredClone(unsigned);
+    mutations[vector.name](changed);
+    const bytes=Buffer.from(canonicalTypedV2(changed),'utf8');
+    assert.equal(bytes.length,vector.canonicalByteLength,vector.name);
+    assert.equal(SHA(bytes),vector.canonicalUnsignedSha256,vector.name);
+    assert.equal(reviewBindingDigestPrimitive(changed),vector.bindingDigest,vector.name);
+    assert.equal(vector.expectedReviewOnlyAdmission,
+      'REFUSED_INCOMPLETE_SYNTHETIC_RECORD');
+    assert.throws(()=>verifyBindingDigestReviewOnly({
+      ...changed,bindingDigest:vector.bindingDigest,
+    }),/OBS_V2_ABI_REVIEW_REFUSED:/,vector.name);
   }
 });
