@@ -11,7 +11,7 @@ for lock in Cargo.lock ham-adapter/Cargo.lock; do
     echo "BLOCKED: $lock missing; generate using Rust 1.95.0, review and commit before --locked build" >&2
     exit 3
   fi
-  if ! git ls-files --error-unmatch "holochain/demo/$lock" >/dev/null 2>&1; then
+  if ! git ls-files --error-unmatch "$lock" >/dev/null 2>&1; then
     echo "BLOCKED: $lock is not tracked in immutable repository source" >&2
     exit 3
   fi
