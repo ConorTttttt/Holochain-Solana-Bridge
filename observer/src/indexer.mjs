@@ -122,7 +122,8 @@ export async function fetchFinalizedTransaction({rpcUrl,signature,genesisHash,fe
     sameSolanaExecutionMeta(found.meta,tx.meta),
     'getTransaction contradicts containing finalized getBlock');
   return {rpcTransaction:tx,blockhash:block.blockhash,source:new URL(rpcUrl).host,
-    finalizedClaim:true, creditEligible:false};
+    finalizedClaim:true, creditEligible:false,
+    independentConsensusVerified:false,spendableBaseUnits:'0',withdrawalAuthorized:false};
 }
 /**
  * Scan inclusive finalized slots and commit entire slot's deposits + checkpoint
@@ -141,7 +142,8 @@ export async function indexFinalizedRange({
   try {
     const start=ledger.checkpoint+1;
     if(toSlot<start) return {checkpoint:ledger.checkpoint,processed:Object.keys(ledger.processed).length,
-      alreadyIndexed:true,creditEligible:false};
+      alreadyIndexed:true,creditEligible:false,independentConsensusVerified:false,
+      spendableBaseUnits:'0',withdrawalAuthorized:false};
     for(const url of rpcUrls) {
       need(await rpcRequest(url,'getGenesisHash',[],fetchFn)===genesisHash,'provider genesis mismatch');
       const available=safeSlot(await rpcRequest(url,'getFirstAvailableBlock',[],fetchFn));
@@ -199,6 +201,8 @@ export async function indexFinalizedRange({
       ledger.commit({checkpoint:last});
     }
     return {checkpoint:ledger.checkpoint,processed:Object.keys(ledger.processed).length,
-      alreadyIndexed:false,creditEligible:false,evidenceTrust:'two_matching_rpc_provider_claims'};
+      alreadyIndexed:false,creditEligible:false,independentConsensusVerified:false,
+      spendableBaseUnits:'0',withdrawalAuthorized:false,
+      evidenceTrust:'two_matching_rpc_provider_claims'};
   } finally { ledger.close(); }
 }
