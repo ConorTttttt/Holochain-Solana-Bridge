@@ -457,3 +457,19 @@ test('41 reviewed producer requires a pinned 40-character source commit even wit
     destination,expected,codeVersion:'arbitrary-imported-json',
   }),/PINNED_CODE_VERSION/);
 });
+
+test('42 fixed cross-language canonicalization primitive: exact wire bytes and v2 domain digest',()=>{
+  // This is deliberately NOT a fully reviewed Solana witness. It freezes the
+  // digest primitive independently of the positive Kit/validator replay.
+  const canonical="{\"creditEligible\":false,\"destination\":{\"agentKey\":\"test-agent\",\"dnaHash\":\"test-dna\"},\"independentConsensusVerified\":false,\"kind\":\"solana-observation-demo-v2\",\"proof\":{\"historyComplete\":false,\"originalSignedWireBase64\":\"AQID\"},\"schemaVersion\":\"2\",\"source\":{\"depositNonce\":\"42017\",\"recipientCore\":\"abababababababababababababababababababababababababababababababab\"},\"spendableBaseUnits\":\"0\",\"withdrawalAuthorized\":false}";
+  const unsigned=JSON.parse(canonical);
+  assert.equal(canonicalJSON(unsigned),canonical);
+  assert.equal(Buffer.from('AQID','base64').toString('hex'),'010203');
+  assert.equal(hash(Buffer.from('AQID','base64')),
+    '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81');
+  assert.equal(domainDigest(REVIEWED_V2_DOMAIN,unsigned),'739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91');
+  const changed=structuredClone(unsigned);
+  changed.source.depositNonce='42018';
+  assert.notEqual(domainDigest(REVIEWED_V2_DOMAIN,changed),'739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91');
+  assert.notEqual(domainDigest('HSC/different-domain',unsigned),'739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91');
+});
