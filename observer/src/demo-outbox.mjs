@@ -187,6 +187,12 @@ function checkRow(row,expected,destination){
   }),'WORK_FINGERPRINT');
   need(row.state!=='acked'||typeof row.actionHash==='string'&&row.actionHash.length>0,'ACK_WITHOUT_ACTION');
   if(row.state!=='acked')need(row.actionHash===null,'UNACKED_HAS_ACTION');
+  need(row.returnedActionHash===undefined||row.returnedActionHash===null||
+    typeof row.returnedActionHash==='string'&&row.returnedActionHash.length>0&&
+    row.returnedActionHash.length<256,'RETURNED_ACTION_FORMAT');
+  if(row.state==='pending')need(row.returnedActionHash==null,'PENDING_HAS_REMOTE_ACTION');
+  if(row.state==='acked'&&row.returnedActionHash!=null)
+    need(row.returnedActionHash===row.actionHash,'RETURNED_ACTION_CONFLICT');
 }
 function verifyRemote(remote,row){
   exact(remote,['actionHash','observation',...BASE],'REMOTE_RECORD');deny(remote,'REMOTE_RECORD');
@@ -291,7 +297,7 @@ export class DemoOutbox {
     need(!Object.values(this.state.rows).some(x=>x.observation.source.occurrenceId===evidence.occurrenceId),
       'OCCURRENCE_REPLAY');
     this.state.rows[evidence.id]={state:'pending',observation,components,destination:this.destination,
-      fingerprint,actionHash:null};
+      fingerprint,actionHash:null,returnedActionHash:null};
     this.persist();return 'pending';
   }
   async #identity(client){
@@ -306,8 +312,10 @@ export class DemoOutbox {
   }
   #ack(row,remote){
     const actionHash=verifyRemote(remote,row);
+    need(row.returnedActionHash==null||row.returnedActionHash===actionHash,
+      'RETURNED_ACTION_CONFLICT');
     need(!Object.values(this.state.rows).some(other=>
-      other!==row&&other.state==='acked'&&other.actionHash===actionHash),
+      other!==row&&(other.actionHash===actionHash||other.returnedActionHash===actionHash)),
       'REUSED_SIGNED_ACTION_HASH');
     const priorState=row.state,priorActionHash=row.actionHash;
     row.state='acked';row.actionHash=actionHash;
@@ -324,6 +332,8 @@ export class DemoOutbox {
   async #reconcile(id,client){
     const row=this.state.rows[id];need(row,'UNKNOWN_SOURCE');
     if(row.state==='acked')return 'acked';
+    // Explicit HOLD is terminal without an operator-reviewed conflict resolution.
+    if(row.state==='hold')return 'hold';
     try{
       const remote=await this.#read(client,row);
       if(remote)return this.#ack(row,remote);
@@ -352,6 +362,13 @@ export class DemoOutbox {
       if(crashAt==='after_uncertain')throw Error('SIMULATED_PROCESS_CRASH');
       const response=await client.write(structuredClone(row.observation),structuredClone(this.destination));
       if(crashAt==='after_signed_write')throw Error('SIMULATED_PROCESS_CRASH');
+      // A known response hash must survive lost readback, timeout and restart.
+      // A contradicting later record may NEVER replace this response silently.
+      if(response?.actionHash!==undefined){
+        need(typeof response.actionHash==='string'&&response.actionHash.length>0&&
+          response.actionHash.length<256,'RETURNED_ACTION_FORMAT');
+        row.returnedActionHash=response.actionHash;this.persist();
+      }
       const readback=await this.#read(client,row);
       need(readback,'MISSING_SIGNED_READBACK');
       const actionHash=verifyRemote(readback,row);
