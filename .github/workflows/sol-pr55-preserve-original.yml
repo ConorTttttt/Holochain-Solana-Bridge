@@ -1,0 +1,106 @@
+name: Preserve exact original PR55 Solana evidence ZIP (non-economic)
+
+on:
+  push:
+    branches:
+      - 'agent/sol/12-19-original-evidence-preservation-20261114'
+    paths:
+      - '.github/workflows/sol-pr55-preserve-original.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  preserve-original-archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout dedicated A2 preservation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: agent/sol/12-19-original-evidence-preservation-20261114
+
+      - name: Retrieve original GitHub-created bytes and refuse substitutions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ConorTttttt/Holochain-Solana-Bridge'
+          test "$GITHUB_REF_NAME" = 'agent/sol/12-19-original-evidence-preservation-20261114'
+          target='security/evidence/solana-pr55-original-43604140724'
+          mkdir -p "$target"
+          zip="$target/artifact-14118166967-original.zip"
+          if [ -e "$zip" ]; then
+            echo 'Original mirror exists already: refusing overwrite' >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --location --retry 3 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/14118166967/zip" \
+            --output "$zip"
+          printf '%s  %s\n' 33a56159b1ab680cbfc36bffb365a1195a54fbddafb89082d8efcee012c2a018 "$zip" | sha256sum --check -
+
+      - name: Independent original ZIP inventory / ProgramData / source verification
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile,hashlib,json,base64,os
+          path='security/evidence/solana-pr55-original-43604140724/artifact-14118166967-original.zip'
+          assert os.stat(path).st_size==968887
+          with zipfile.ZipFile(path) as z:
+              names=z.namelist()
+              assert len(names)==283 and len(set(names))==283
+              assert all(not n.startswith('/') and '..' not in n.split('/') and not n.endswith('/') for n in names)
+              sha=lambda b:hashlib.sha256(b).hexdigest()
+              rows=z.read('localnet-evidence/evidence-manifest.sha256').decode().splitlines()
+              assert len(rows)==280
+              for row in rows:
+                  h,name=row.split('  ',1)
+                  assert name.startswith('./')
+                  target='localnet-evidence/'+name[2:]
+                  assert target in names and sha(z.read(target))==h,target
+              all_manifest=''.join(sha(z.read(n))+'  '+n+'\n' for n in sorted(names)).encode()
+              assert sha(all_manifest)=='44416df6a8ddc9a51a362f2a5bc0f3453b28b37ce4688279919f1f615d1d1646'
+              source=json.loads(z.read('localnet-evidence/demo-source-domain.json'))
+              assert source['sourceCommitSha']=='c071e4c98e7b2dd04a18374f3792c0a90ce4b284'
+              assert source['scopeHex']==source['initializedScopeHex']
+              assert sha(z.read('idl/deposit_prototype.json'))==source['idlSha256']
+              elf=z.read('deploy/deposit_prototype.so')
+              assert sha(elf)==source['elfSha256']
+              accounts=json.loads(z.read('localnet-evidence/demo-domain-deployment-program-accounts.rpc.json'))['result']['value']
+              pd=base64.b64decode(accounts[1]['data'][0])
+              assert int.from_bytes(pd[:4],'little')==3
+              assert int.from_bytes(pd[4:12],'little')==0
+              assert pd[45:]==elf
+              for k in ('creditEligible','independentConsensusVerified','withdrawalAuthorized'):
+                  assert source[k] is False
+              assert source['spendableBaseUnits']=='0' and source['historyComplete'] is False
+              for k in ('initialize','deposit','refund'):
+                  tx=source['transactions'][k]
+                  signed=json.loads(z.read('localnet-evidence/sprint1-demo-domain-transactions.json'))
+                  original=next(t for t in signed['transactions'] if t.get('operationLabel')=='bridge.'+k and t.get('signedWireBase64'))
+                  assert original['signature']==tx['signature'] and original['slot']==tx['slot']
+                  rpc=json.loads(z.read('localnet-evidence/'+tx['getTransactionBase64RawFile']))['result']
+                  assert rpc['transaction'][0]==original['signedWireBase64']
+                  block=json.loads(z.read('localnet-evidence/'+tx['getBlockBase64RawFile']))['result']
+                  assert any(isinstance(item['transaction'],list) and item['transaction'][0]==original['signedWireBase64'] for item in block['transactions'])
+          print('VERIFIED: original ZIP, 280/280 manifest, 283 sorted files, source SHA, IDL, ELF, ProgramData, signed bytes in original transaction/block, all economic denials')
+          PY
+
+      - name: Commit immutable original ZIP bytes only to dedicated A2 branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = 'agent/sol/12-19-original-evidence-preservation-20261114'
+          target='security/evidence/solana-pr55-original-43604140724/artifact-14118166967-original.zip'
+          git add -- "$target"
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'evidence(sol): preserve exact original PR55 signed localnet archive bytes'
+          git push origin HEAD:refs/heads/agent/sol/12-19-original-evidence-preservation-20261114
+          echo "ORIGINAL_SOL55_GIT_MIRROR_CREATED sha256=33a56159b1ab680cbfc36bffb365a1195a54fbddafb89082d8efcee012c2a018"
