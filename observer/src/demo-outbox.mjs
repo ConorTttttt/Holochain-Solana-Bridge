@@ -45,7 +45,7 @@ function rpcMetaCanonicalJSON(value,path=[]){
   if(typeof value==='number'){
     if(Number.isSafeInteger(value)&&!Object.is(value,-0))return JSON.stringify(value);
     const displayOnly=path.length>=2&&path.at(-1)==='uiAmount'&&path.at(-2)==='uiTokenAmount';
-    need(displayOnly&&Number.isFinite(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER,
+    need(displayOnly&&!Object.is(value,-0)&&Number.isFinite(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER,
       'NON_CANONICAL_RPC_NUMERIC');
     return JSON.stringify(value);
   }
