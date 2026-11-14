@@ -486,7 +486,9 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     number: ++operationNumber, label, status: 'preparing',
     feePayer: signers[0].publicKey.toBase58(),
     signers: signers.map(s => s.publicKey.toBase58()),
-    instructions: [{ index: 0, programId: ix.programId.toBase58(),
+    // Instruction-builder intent is NOT preserved as privilege bits on wire.
+    // Keep it separately from the effective permissions signed in the message.
+    requestedInstructions: [{ index: 0, programId: ix.programId.toBase58(),
       dataBase64: Buffer.from(ix.data).toString('base64'),
       accounts: ix.keys.map((key, index) => ({ index, pubkey: key.pubkey.toBase58(),
         isSigner: key.isSigner, isWritable: key.isWritable })) }],
@@ -498,6 +500,37 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     const tx = new Transaction({ feePayer: signers[0].publicKey, recentBlockhash: blockhash.blockhash }).add(ix);
     tx.sign(...signers);
     const wire = tx.serialize();
+    // web3.js compiles a message-wide union of account permissions. In
+    // particular the fee payer is writable even if the sole instruction asks
+    // for a readonly signer (e.g. set_paused's wrong-admin negative case).
+    // Derive the effective view from the compiled signed message; the
+    // independent verifier must derive and check it again from wire bytes.
+    const compiledMessage = tx.compileMessage();
+    assert.equal(compiledMessage.instructions.length, record.requestedInstructions.length,
+      'compiled instruction count changed');
+    const header = compiledMessage.header;
+    const nKeys = compiledMessage.accountKeys.length;
+    const effectiveFlags = (index) => ({
+      isSigner: index < header.numRequiredSignatures,
+      isWritable: index < header.numRequiredSignatures
+        ? index < header.numRequiredSignatures - header.numReadonlySignedAccounts
+        : index < nKeys - header.numReadonlyUnsignedAccounts,
+    });
+    record.instructions = compiledMessage.instructions.map((compiledIx, index) => {
+      const requested = record.requestedInstructions[index];
+      assert.equal(compiledMessage.accountKeys[compiledIx.programIdIndex].toBase58(),
+        requested.programId, 'compiled instruction program differs from builder');
+      assert.equal(compiledIx.accounts.length, requested.accounts.length,
+        'compiled instruction account count differs from builder');
+      const accounts = compiledIx.accounts.map((keyIndex, position) => {
+        const address = compiledMessage.accountKeys[keyIndex].toBase58();
+        assert.equal(address, requested.accounts[position].pubkey,
+          'compiled instruction account order differs from builder');
+        return { index: position, pubkey: address, ...effectiveFlags(keyIndex) };
+      });
+      return { index, programId: requested.programId,
+        dataBase64: requested.dataBase64, accounts };
+    });
     record.signedWireBase64 = wire.toString('base64');
     record.status = 'signed'; persistOperations();
     let signature;
@@ -538,7 +571,13 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
       operationLabel: label, feePayer: record.feePayer,
       instructionProgramId: ix.programId.toBase58(), emittingProgramId: record.emittingProgramId,
       signerPubkeys: record.signers, instructions: record.instructions,
+      // Effective flags are authenticated by the signed message.
       instructionAccounts: record.instructions[0].accounts.map(key => ({
+        address: key.pubkey, signer: key.isSigner, writable: key.isWritable })),
+      // Requested flags are separately provenance-bound to the generated IDL;
+      // they are not claimed to be separately recoverable from signed bytes.
+      requestedInstructions: record.requestedInstructions,
+      requestedInstructionAccounts: record.requestedInstructions[0].accounts.map(key => ({
         address: key.pubkey, signer: key.isSigner, writable: key.isWritable })),
       recentBlockhash: included.transaction.message.recentBlockhash,
       signedWireBase64: record.signedWireBase64,
