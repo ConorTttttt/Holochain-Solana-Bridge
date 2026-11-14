@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {A4_BINDING_DOMAIN,canonicalTypedV2,reviewBindingDigestPrimitive,
-  verifyBindingDigestReviewOnly,assertUniqueRawJsonObjectMembers} from '../src/v2-binding-review.mjs';
+  verifyBindingDigestReviewOnly,assertUniqueRawJsonObjectMembers,
+  MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES,MAX_TYPED_BINDING_CANONICAL_UTF8_BYTES} from '../src/v2-binding-review.mjs';
 
 const DENIALS={creditEligible:false,independentConsensusVerified:false,
   spendableBaseUnits:'0',withdrawalAuthorized:false};
@@ -114,5 +115,43 @@ test('pinned independent v2 primitive canonical positive/negative digest vectors
     assert.throws(()=>verifyBindingDigestReviewOnly({
       ...changed,bindingDigest:vector.bindingDigest,
     }),/OBS_V2_ABI_REVIEW_REFUSED:/,vector.name);
+  }
+});
+
+test('A3/A4 raw proof preimages are bounded by actual UTF-8 bytes, not JS code units',()=>{
+  assert.equal(MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES,32*1024*1024);
+  assert.equal(MAX_TYPED_BINDING_CANONICAL_UTF8_BYTES,96*1024*1024);
+  // A non-ASCII character uses more UTF-8 bytes than JS code units. Testing
+  // against raw.length would accidentally accept this oversized sidecar.
+  const overLimit='\u0800'.repeat(Math.floor(MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES/3)+1);
+  assert.ok(overLimit.length<MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES);
+  assert.ok(Buffer.byteLength(overLimit,'utf8')>MAX_RAW_RPC_OR_WITNESS_UTF8_BYTES);
+  assert.throws(()=>assertUniqueRawJsonObjectMembers(overLimit),
+    /OBS_V2_ABI_REVIEW_REFUSED:RAW_JSON_UNAVAILABLE_OR_TOO_LARGE/);
+});
+test('A4 review-only canonical binding changes for every source and destination authority field',()=>{
+  // These are non-admitting digest *primitives*. The positive full record
+  // must come from same-SHA Kit queueVerified + original raw RPC + real CellId;
+  // no synthetic vector is allowed to become an authenticated source.
+  const variants={
+    source:x=>{x.source.genesisHash='DIFFERENT_GENESIS'},
+    nonce:x=>{x.source.depositNonce='42018'},
+    recipient:x=>{x.source.recipientCore='cd'.repeat(32)},
+    amount:x=>{x.source.amountBaseUnits='250001'},
+    originalSignedWire:x=>{x.proof.originalObserverWitnessCanonicalJson+=' '},
+    containingBlock:x=>{x.witness.containingBlockSha256='b'.repeat(64)},
+    rpcMetadata:x=>{x.witness.rpcExecutionMetadataSha256='c'.repeat(64)},
+    deploymentEpoch:x=>{x.source.deploymentEpochId='DIFFERENT_VERIFIED_EPOCH'},
+    fullCellId:x=>{x.destination.cellId[1]='DIFFERENT_AGENT'},
+    signer:x=>{x.destination.cellAgentPubkey='DIFFERENT_SIGNER'},
+  };
+  const starting=reviewBindingDigestPrimitive(unsigned);
+  for(const [name,mutate] of Object.entries(variants)){
+    const changed=structuredClone(unsigned);
+    mutate(changed);
+    const rehashed=reviewBindingDigestPrimitive(changed);
+    assert.notEqual(rehashed,starting,name);
+    assert.throws(()=>verifyBindingDigestReviewOnly({...changed,bindingDigest:rehashed}),
+      /OBS_V2_ABI_REVIEW_REFUSED:/,name);
   }
 });
