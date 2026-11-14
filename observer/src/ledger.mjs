@@ -42,6 +42,8 @@ function validateRecoveredEntries(state) {
       item.spendableBaseUnits==='0' && item.withdrawalAuthorized===false &&
       item.historyCoveredByTwoRpcClaims===true &&
       item.id===id && item.receiptAddress===row.evidence.receiptAddress &&
+      row.evidence.refundedAtObservation===false &&
+      row.evidence.receiptSnapshot?.refunded===false &&
       item.depositOccurrenceId===row.occurrenceId &&
       item.depositTransactionHash===row.transactionHash &&
       item.amountBaseUnits===row.amountBaseUnits &&
