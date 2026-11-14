@@ -32,7 +32,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-for cmd in hc holochain sha256sum timeout grep sed sleep; do
+for cmd in hc holochain sha256sum timeout grep sed sleep jq; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "BLOCKED_UNYT_CONDUCTOR: missing $cmd" >&2
     exit 2
@@ -86,12 +86,32 @@ if [[ -z "$PORT" ]] || [[ ! -s "$OUT/logs/installed-apps-after-restart.log" ]]; 
   echo 'BLOCKED_UNYT_CONDUCTOR: no successful read-only admin list-apps after restart' >&2
   exit 2
 fi
-if ! grep -Fq 'unyt-v0117-audit' "$OUT/logs/installed-apps-after-restart.log"; then
-  echo 'BLOCKED_UNYT_CONDUCTOR: app missing from post-restart admin list' >&2
+# Assert exact installed identity and enabled state rather than just matching text.
+# The expected DNA hash is the Holochain 0.7.1 hash of the exact public
+# alliance.dna present in the independently verified v0.117.0 release.
+EXPECTED_DNA='uhC0k1RtXY23HgGGKZdpNkF9Q_w8jwv57nviRQISGc4Ykw5SKGTDZ'
+APP_INFO="$OUT/logs/installed-apps-after-restart.log"
+APP_AGENT="$(jq -er --arg dna "$EXPECTED_DNA" '
+  .[] |
+  select(.installed_app_id == "unyt-v0117-audit" and
+         .status.type == "enabled" and
+         (.cell_info.alliance | length) == 1 and
+         .cell_info.alliance[0].type == "provisioned" and
+         .cell_info.alliance[0].value.cell_id.dna_hash == $dna and
+         .cell_info.alliance[0].value.cell_id.agent_pub_key == .agent_pub_key) |
+  .agent_pub_key
+' "$APP_INFO")" || {
+  echo 'BLOCKED_UNYT_CONDUCTOR: missing/mismatched enabled app, role or DNA identity' >&2
   exit 2
-fi
+}
 if ! hc client call --port "$PORT" list-cells > "$OUT/logs/cells-after-restart.log" 2>&1; then
   echo 'BLOCKED_UNYT_CONDUCTOR: post-restart read-only list-cells failed' >&2
+  exit 2
+fi
+if ! jq -e --arg dna "$EXPECTED_DNA" --arg agent "$APP_AGENT" '
+  any(.[]; .dna_hash == $dna and .agent_pub_key == $agent)
+' "$OUT/logs/cells-after-restart.log" >/dev/null; then
+  echo 'BLOCKED_UNYT_CONDUCTOR: installed cell identity not preserved after restart' >&2
   exit 2
 fi
 printf '%s\n' 'CONDUCTOR_INSTALL_RESTART_PASS: signed v0.117.0 public release in disposable Holochain 0.7.1 sandbox; admin list-apps/list-cells succeeded; no zome calls or economic validation' \
