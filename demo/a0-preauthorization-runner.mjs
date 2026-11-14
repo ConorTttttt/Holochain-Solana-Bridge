@@ -148,8 +148,55 @@ function run(){
     const {bytes,checksum,item}=artifactFromReplay();
     const verified=verifyExecutedSourceArtifact(item,sha,bytes,checksum);
     report.execution.evidence=verified;
+    // Preserve A4's authentic archived template mismatch. This checked-in
+    // template is NOT retroactively relabelled as the new disposable source.
+    const sourceDomain={...verified,mint:item.originalSolanaDomain.mint};
+    report.checkedInA4TemplateSourceBinding=assessDnaSourceBinding(
+      readFileSync('holochain/demo/dna.yaml','utf8'),sourceDomain);
+    // Separately inspect the true same-execution DNA BUILD INPUT. Passing this
+    // byte/hash/source check proves NO compiled DNA or installed runtime.
+    const projected='ci-artifacts/a0-execution-bound-dna.yaml';
+    const projectedBytes=readFileSync(projected);
+    const projectedLine=readFileSync(projected+'.sha256','utf8').trim();
+    const projectedMatch=/^([a-f0-9]{64})\s{2}(\S+)$/.exec(projectedLine);
+    assert.ok(projectedMatch && projectedMatch[2]===basename(projected),
+      'SOURCE_BOUND_DNA_MANIFEST_INVALID');
+    assert.equal(sha256(projectedBytes),projectedMatch[1],
+      'SOURCE_BOUND_DNA_BYTES_DIGEST_MISMATCH');
+    const projectionPath=projected.replace(/\.yaml$/,'.report.json');
+    const projectionBytes=readFileSync(projectionPath);
+    const projectionLine=readFileSync(projectionPath+'.sha256','utf8').trim();
+    const projectionMatch=/^([a-f0-9]{64})\s{2}(\S+)$/.exec(projectionLine);
+    assert.ok(projectionMatch && projectionMatch[2]===basename(projectionPath),
+      'SOURCE_BOUND_DNA_REPORT_MANIFEST_INVALID');
+    assert.equal(sha256(projectionBytes),projectionMatch[1],
+      'SOURCE_BOUND_DNA_REPORT_BYTES_DIGEST_MISMATCH');
+    const projection=JSON.parse(projectionBytes);
+    assert.equal(projection.schema,'hsc-a1-execution-bound-dna-v1');
+    assert.equal(projection.producerSourceCommitSha,sha,'SOURCE_BOUND_PRODUCER_SHA');
+    assert.equal(projection.consumerCodeCommitSha,sha,'SOURCE_BOUND_CONSUMER_SHA');
+    assert.equal(projection.replayArtifactSha256,checksum,'SOURCE_BOUND_REPLAY_HASH');
+    assert.equal(projection.originalSignedDepositWireSha256,
+      verified.originalSignedWireSha256,'SOURCE_BOUND_ORIGINAL_SIGNED_WIRE_HASH');
+    assert.equal(projection.reviewedWitnessDigest,verified.witnessDigest,
+      'SOURCE_BOUND_WITNESS_DIGEST');
+    assert.equal(projection.generatedYamlSha256,projectedMatch[1],
+      'SOURCE_BOUND_GENERATED_YAML_DIGEST_MISMATCH');
+    checkDenials(projection,'source-bound-build-input');
+    assert.equal(projection.compiled,false,'BUILD_INPUT_PRETENDS_COMPILED');
+    assert.equal(projection.installed,false,'BUILD_INPUT_PRETENDS_INSTALLED');
+    assert.equal(projection.independentApproval,false,'BUILD_INPUT_PRETENDS_APPROVAL');
+    assert.equal(projection.actionHash,null,'BUILD_INPUT_PRETENDS_ACTION_HASH');
     report.sourceDnaDomainBinding=assessDnaSourceBinding(
-      readFileSync('holochain/demo/dna.yaml','utf8'),{...verified,mint:item.originalSolanaDomain.mint});
+      projectedBytes.toString('utf8'),sourceDomain);
+    assert.equal(report.sourceDnaDomainBinding.state,
+      'SOURCE_PROPERTIES_MATCH_ONLY_NO_RUNTIME_CLAIM','SOURCE_BOUND_DNA_MISMATCH');
+    report.executionBoundDnaBuildInput={
+      yamlSha256:projectedMatch[1],reportSha256:projectionMatch[1],
+      originalManifestSha256:projection.originalManifestSha256,
+      producerSourceCommitSha:projection.producerSourceCommitSha,
+      consumerCodeCommitSha:projection.consumerCodeCommitSha,
+      installed:false,approved:false};
     report.stages.source_verified={state:'EXECUTED_SAME_SHA_ORIGINAL_SIGNED_SOURCE_KIT',
       originalSignedWireSha256:verified.originalSignedWireSha256,
       sourceCommit:sha,historyComplete:false,independentConsensusVerified:false};
