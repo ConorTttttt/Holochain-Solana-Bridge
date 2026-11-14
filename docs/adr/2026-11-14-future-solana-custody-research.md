@@ -13,7 +13,7 @@
 3. deBridge [`DlnSource.sol`](https://github.com/debridge-finance/dln-contracts/blob/main/contracts/DLN/DlnSource.sol) distinguishes `Created`, `ClaimedUnlock` and `ClaimedCancel`; claims depend on authenticated cross-chain sender and source/destination chain checks. Its [`DlnDestination.sol`](https://github.com/debridge-finance/dln-contracts/blob/main/contracts/DLN/DlnDestination.sol) makes fulfillment and cancellation mutually exclusive when the take-side order is `NotSet`; cancellation requires order authority and conditional beneficiary checks. **Inference:** a cross-chain cancel is an authenticated protocol transition, not a depositor refund button. This code is BUSL-1.1; this ADR copies no code.
 4. Unyt's [signer-service design](https://github.com/unytco/raindex-orders/blob/main/docs/signer-service.md) independently rechecks origin/destination authorization, nonce and claim order per signer; transport/orchestration is not itself payout approval.
 
-The research brief [`holochain_solana_bridge_external_research_2026-11-14.md`](../../holochain_solana_bridge_external_research_2026-11-14.md) is an *external research source*, not proof these patterns are implemented or verified here. Existing repository primitives remain refundable and first-initializer-capturable.
+The separately uploaded project research brief `holochain_solana_bridge_external_research_2026-11-14.md` is an *external research source*, not proof these patterns are implemented or verified here. Existing repository primitives remain refundable and first-initializer-capturable.
 
 ## Goals and non-goals
 
