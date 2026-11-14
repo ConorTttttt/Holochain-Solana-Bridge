@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Transaction } from '@solana/web3.js';
 import { decodeConfig, decodeReceipt, decodeTokenAccount } from '../../observer/src/decode.mjs';
-import { assertDemoDomainShape } from './demo-scope.mjs';
+import { assertDemoDomainShape, ECONOMIC_DENIAL } from './demo-scope.mjs';
 
 const dir = process.env.DEMO_WITNESS_DIR ?? 'target/localnet-evidence';
 const readJson = (name) => JSON.parse(readFileSync(join(dir, name), 'utf8'));
@@ -30,6 +30,10 @@ assert.equal(d.postSyncSourceSha256, digest(join(dir, 'tracked-post-sync.sha256'
 const bundle = readJson(d.witnessBundle);
 assert.equal(bundle.complete, true, 'source domain contains incomplete witness archive');
 assert.equal(bundle.mode, d.mode);
+for (const [k, v] of Object.entries(ECONOMIC_DENIAL)) {
+  assert.ok(Object.hasOwn(bundle, k), 'missing denial in original bundle: ' + k);
+  assert.equal(bundle[k], v, 'changed denial in original bundle: ' + k);
+}
 for (const k of ['genesisHash', 'programId', 'sourceCommitSha', 'idlSha256',
   'elfSha256', 'postSyncSourceSha256']) {
   assert.equal(bundle[k], d[k], 'original wire archive differs from domain: ' + k);
@@ -100,6 +104,10 @@ function verifySnapshot(name, expectedRefunded) {
   const snap = readJson(name);
   assert.equal(snap.kind, 'localnet-finalized-rpc-account-snapshot-not-consensus-proof');
   assert.equal(snap.genesisHash, d.genesisHash);
+  for (const [k, v] of Object.entries(ECONOMIC_DENIAL)) {
+    assert.ok(Object.hasOwn(snap, k), name + ': missing denial ' + k);
+    assert.equal(snap[k], v, name + ': changed denial ' + k);
+  }
   for (const k of ['programId', 'sourceCommitSha', 'idlSha256',
     'elfSha256', 'postSyncSourceSha256']) assert.equal(snap[k], d[k], name + ': ' + k);
   assert.deepEqual(snap.accounts.map(a => a.address),
