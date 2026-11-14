@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
@@ -15,6 +15,7 @@ import { fetchFinalizedTransaction } from '../src/indexer.mjs';
 import { sameSolanaExecutionMeta } from '../../scripts/ci/s0-solana-execution-meta.mjs';
 import { verifyWireSignatures, verifyDepositCandidates, attachReceiptObservation } from '../src/transaction.mjs';
 import { DepositLedger } from '../src/ledger.mjs';
+import { makeAuditOnlyEnvelope } from '../../demo/observation-contract.mjs';
 import { verifySnapshot } from '../src/verify.mjs';
 import { reviewShadow } from '../../holochain/shadow-review.mjs';
 import { issueHolochainCredit, authorizeSolanaWithdrawal } from '../../holochain/evidence-gate.mjs';
@@ -150,6 +151,29 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
             assert.equal(evidence.transactionVerified,true);
             assert.equal(evidence.creditEligible,false);
             assert.equal(evidence.independentConsensusVerified,false);
+            // Genuine signed-wire OBS evidence -> SOURCE-ONLY audit envelope.
+            // This is not a signed Holochain write; Agent 4 must supply and
+            // independently test own-DNA Lair record_observation/readback.
+            const prepared=makeAuditOnlyEnvelope({
+              evidence,rpcTransaction:result.rpcTransaction,
+              expected:{genesisHash:index.genesisHash,program:index.programId,
+                mint:expected.mint,holochainScope:expected.scope},
+            });
+            assert.equal(prepared.kind,'solana-observation-demo-v1');
+            assert.equal(prepared.historyIndexed,false);
+            assert.equal(prepared.destination.state,'not_bound_or_written');
+            assert.equal(prepared.destination.actionHash,null);
+            for(const part of [prepared,prepared.source,prepared.witness,prepared.destination]){
+              assert.equal(part.creditEligible,false);
+              assert.equal(part.independentConsensusVerified,false);
+              assert.equal(part.spendableBaseUnits,'0');
+              assert.equal(part.withdrawalAuthorized,false);
+            }
+            mkdirSync('ci-artifacts',{recursive:true});
+            writeFileSync('ci-artifacts/demo-source-only-observation.json',
+              JSON.stringify(prepared,null,2)+'\\n',{flag:'w',mode:0o600});
+            console.log('SOURCE_ONLY_DEMO_PREPARED_NO_HOLOCHAIN_WRITE',
+              prepared.id,prepared.source.signature);
             const dir=mkdtempSync(join(tmpdir(),'real-localnet-shadow-'));
             const ledgerPath=join(dir,'finalized-ledger.json');
             const ledgerOptions={genesisHash:index.genesisHash,program:index.programId,
