@@ -161,11 +161,14 @@ async function rawPublicRpc(method, params) {
   return { raw, parsed };
 }
 function savePublicRpc(name, response) {
-  assert.match(name, /^[a-zA-Z0-9-]+\.rpc\.json$/, 'unsafe public RPC fixture filename');
-  const directory = new URL('../../target/localnet-evidence/', import.meta.url);
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  writeFileSync(new URL(name, directory), response.raw + '\n', { mode: 0o600 });
-  return name;
+  // Distinct isolated validators can reuse the same slot number. Do not
+  // overwrite lifecycle blocks with init-capture/u64-max blocks in the final
+  // combined CI artifact: filenames and manifests are scenario-scoped.
+  const scopedName = mode + '-' + name;
+  assert.match(scopedName, /^[a-zA-Z0-9-]+\.rpc\.json$/, 'unsafe public RPC fixture filename');
+  mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+  writeFileSync(new URL(scopedName, evidenceDirectory), response.raw + '\n', { mode: 0o600 });
+  return scopedName;
 }
 async function saveTransactionEvidence() {
   // Every signed success and failure is re-fetched at FINALIZED commitment.
