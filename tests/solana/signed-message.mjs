@@ -3,6 +3,7 @@
 // ALT resolution requires independently witnessed table state, which this
 // localnet evidence format does not yet archive. Fail closed on ALT lookups.
 import { createPublicKey, verify as edVerify } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const ED_KEY_DER = Buffer.from('302a300506032b6570032100', 'hex');
@@ -144,7 +145,7 @@ export function decode58(string) {
   return result;
 }
 function same(actual, expected, code, context) {
-  requireEvidence(JSON.stringify(actual) === JSON.stringify(expected), code,
+  requireEvidence(isDeepStrictEqual(actual, expected), code,
     context + ': ' + JSON.stringify(actual) + ' != ' + JSON.stringify(expected));
 }
 export function assertRpcMessage(decoded, parsed, blockEntry, label = 'RPC') {
@@ -166,9 +167,12 @@ export function assertRpcMessage(decoded, parsed, blockEntry, label = 'RPC') {
   }
   if (decoded.version === 0) {
     same(msg.addressTableLookups ?? [], [], 'ALT_UNVERIFIED', label + ' lookups');
-    same(parsed.meta?.loadedAddresses ?? { writable: [], readonly: [] },
-      { writable: [], readonly: [] }, 'ALT_UNVERIFIED', label + ' loaded addresses');
+  } else {
+    same(msg.addressTableLookups ?? [], [], 'ALT_UNVERIFIED', label + ' legacy lookups');
   }
+  // Neither legacy nor no-ALT v0 may acquire unauthenticated loaded keys.
+  same(parsed.meta?.loadedAddresses ?? { writable: [], readonly: [] },
+    { writable: [], readonly: [] }, 'ALT_UNVERIFIED', label + ' loaded addresses');
   // The containing full JSON block must agree with the separate finalized RPC.
   requireEvidence(blockEntry?.transaction, 'RPC_BLOCK_MISSING', label);
   same(blockEntry.transaction, tx, 'RPC_BLOCK_MESSAGE', label);
