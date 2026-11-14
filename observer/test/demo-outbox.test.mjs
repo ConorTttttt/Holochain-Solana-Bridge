@@ -530,3 +530,20 @@ test('44 rehashed nested economic denials never pass a reviewed v2 witness',t=>{
       new RegExp('OBS_V2_REFUSED:NESTED_ECONOMIC_DENIAL_'+field));
   }
 });
+
+test('45 rehashed reviewed-proof kind and verification claims must stay pinned',t=>{
+  const original=syntheticV2(t);
+  assert.equal(verifyReviewedWitnessV2(original),true);
+  for(const [field,forged] of [
+    ['evidenceKind','solana-refund-evidence-v1'],
+    ['verifiedByRpcClaim',false],
+    ['transactionVerified',false],
+  ]){
+    const w=structuredClone(original);
+    w.proof[field]=forged;
+    const {witnessDigest:ignored,...unsigned}=w;
+    w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,unsigned);
+    assert.throws(()=>verifyReviewedWitnessV2(w),
+      /OBS_V2_REFUSED:REVIEWED_PROOF_CONTRACT/);
+  }
+});
