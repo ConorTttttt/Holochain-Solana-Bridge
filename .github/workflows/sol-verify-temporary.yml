@@ -7,6 +7,7 @@ on:
     branches:
       - 'agent/sol/7-anchor-build'
       - 'claude/solana-independent-fix'
+      - 'agent/sol/sec38-hardening-20261114'
     paths:
       - '.github/workflows/sol-verify-temporary.yml'
       - 'rust-toolchain.toml'
@@ -38,19 +39,30 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup default 1.95.0
           rustc -V
-      - name: Install exact Solana CLI 4.1.2
+      - name: Install Solana CLI 4.1.2 and archive downloaded installer SHA-256
         run: |
-          sh -c "$(curl -fsSL https://release.anza.xyz/v4.1.2/install)"
+          mkdir -p target/localnet-evidence
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            https://release.anza.xyz/v4.1.2/install -o /tmp/solana-4.1.2-install.sh
+          sha256sum /tmp/solana-4.1.2-install.sh \
+            > target/localnet-evidence/solana-installer-sha256.txt
+          sh /tmp/solana-4.1.2-install.sh
+          rm /tmp/solana-4.1.2-install.sh
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-      - name: Install exact Anchor CLI 1.2.2
+      - name: Install Anchor CLI from reviewed signed v1.2.2 commit
         run: |
-          cargo install --git https://github.com/otter-sec/anchor --tag v1.2.2 anchor-cli --locked
+          # Signed annotated v1.2.2 tag object: 7f9c7c83b5652e92ec6d509e02c0ad4554b6624c
+          # GitHub-verified annotated tag target: 8d9d1488d9b8af41b266d7513eea2e668adf15a2
+          cargo install --git https://github.com/otter-sec/anchor \
+            --rev 8d9d1488d9b8af41b266d7513eea2e668adf15a2 anchor-cli --locked
           anchor --version
+          sha256sum "$(command -v anchor)" \
+            > target/localnet-evidence/anchor-executable-sha256.txt
       - name: Compile Rust host and run real SBPF/validator test lifecycle
         run: |
           mkdir -p target/localnet-evidence
           set -o pipefail
-          cargo check --workspace --all-targets 2>&1 | tee target/localnet-evidence/cargo-check.log
+          cargo check --locked --workspace --all-targets 2>&1 | tee target/localnet-evidence/cargo-check.log
           bash tests/solana/localnet-build.sh 2>&1 | tee target/localnet-evidence/localnet-build.log
       - name: Collect status, hashes and tool versions without keys
         if: always()
@@ -63,6 +75,16 @@ jobs:
             (anchor --version || true)
             (node --version || true)
           } > target/localnet-evidence/versions.log 2>&1
+          {
+            for tool in solana solana-test-validator anchor node; do
+              if command -v "$tool" >/dev/null; then
+                sha256sum "$(command -v "$tool")"
+              fi
+            done
+            if command -v rustup >/dev/null; then
+              sha256sum "$(rustup which rustc)" "$(rustup which cargo)"
+            fi
+          } > target/localnet-evidence/toolchain-executables-sha256.txt
           git rev-parse HEAD > target/localnet-evidence/source-commit.txt
           if [ -s target/idl/deposit_prototype.json ]; then
             sha256sum target/idl/deposit_prototype.json >> target/localnet-evidence/artifacts-sha256.txt
