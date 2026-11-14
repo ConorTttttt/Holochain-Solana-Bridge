@@ -66,6 +66,15 @@ pub enum EntryTypes {
     AuditObservation(AuditObservation),
 }
 
+// A typed link enum is needed by HDI's FlatOp generic conversion. The single
+// reserved tag is deliberately never emitted: all create/delete link DHT
+// operations are refused by validate(), and the coordinator exposes no links.
+#[derive(Serialize, Deserialize)]
+#[hdk_link_types]
+pub enum LinkTypes {
+    Forbidden,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Domain {
@@ -156,7 +165,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         | Op::RegisterCreateLink(_) | Op::RegisterDeleteLink(_)) {
         return Ok(ValidateCallbackResult::Invalid("audit DNA is append-only".into()));
     }
-    match op.flattened()? {
+    match op.flattened::<EntryTypes, LinkTypes>()? {
         FlatOp::StoreEntry(OpEntry::CreateEntry { app_entry: EntryTypes::AuditObservation(item), .. }) => {
             Ok(match check(&item) {
                 Ok(()) => ValidateCallbackResult::Valid,
