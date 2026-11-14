@@ -37,13 +37,22 @@ const openRpc = (name) => {
 const bundle = readJson(join(dir, 'sprint1-' + mode + '-transactions.json'));
 assert.equal(bundle.mode, mode);
 checkBinding(bundle, mode);
+assert.equal(bundle.complete, true, mode + ': partial/failed witness archive is never a PASS');
+assert.ok(Array.isArray(bundle.transactions), mode + ': transaction index is missing');
+const recordedSignatures = new Set(bundle.transactions
+  .filter((record) => typeof record.signature === 'string')
+  .map((record) => record.signature));
+assert.ok(recordedSignatures.size > 0, mode + ': no recorded signed transactions');
 assert.ok(Array.isArray(bundle.finalized) && bundle.finalized.length > 0,
   mode + ': no finalized transaction witnesses');
+assert.equal(bundle.finalized.length, recordedSignatures.size,
+  mode + ': finalized manifest does not cover EVERY recorded signed transaction');
 const signatures = new Set();
 let accepted = 0;
 let rejected = 0;
 for (const witness of bundle.finalized) {
   assert.match(witness.signature, /^[1-9A-HJ-NP-Za-km-z]+$/);
+  assert.ok(recordedSignatures.has(witness.signature), 'unknown finalized transaction signature');
   assert.ok(!signatures.has(witness.signature), 'duplicate signature evidence');
   signatures.add(witness.signature);
   const parsed = openRpc(witness.getTransactionRawFile);
