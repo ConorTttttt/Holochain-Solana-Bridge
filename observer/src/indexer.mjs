@@ -21,6 +21,17 @@ function canonical(x) {
   return x;
 }
 const sameJSON = (a,b) => JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
+/**
+ * RPC getBlock(rewards:false) supplies meta.rewards=null while getTransaction
+ * can supply meta.rewards=[]. These mean the same *empty rewards* response.
+ * Do not normalize omitted fields, nonempty rewards, or any execution metadata.
+ */
+export function sameSolanaExecutionMeta(a,b) {
+  const normalize = meta => meta && typeof meta === 'object' && !Array.isArray(meta)
+    ? {...meta, rewards:meta.rewards === null ? [] : meta.rewards}
+    : meta;
+  return sameJSON(normalize(a),normalize(b));
+}
 
 /** Raw JSON-RPC with explicit error and missing-result checks; credentials never logged. */
 export async function rpcRequest(url, method, params, fetchFn=fetch) {
@@ -107,8 +118,8 @@ export async function fetchFinalizedTransaction({rpcUrl,signature,genesisHash,fe
   const identical=block.transactions.filter((_,index)=>blockSignatures[index]===signature);
   need(identical.length===1,'transaction absent/duplicated within claimed finalized block');
   const found={...identical[0],slot:tx.slot};
-  need(sameJSON({version:found.version,transaction:found.transaction,meta:found.meta},
-    {version:tx.version,transaction:tx.transaction,meta:tx.meta}),
+  need(found.version === tx.version && sameJSON(found.transaction,tx.transaction) &&
+    sameSolanaExecutionMeta(found.meta,tx.meta),
     'getTransaction contradicts containing finalized getBlock');
   return {rpcTransaction:tx,blockhash:block.blockhash,source:new URL(rpcUrl).host,
     finalizedClaim:true, creditEligible:false};
