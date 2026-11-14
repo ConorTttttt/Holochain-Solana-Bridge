@@ -33,6 +33,13 @@ const sha256=(x)=>createHash('sha256').update(x).digest('hex');
 export const domainDigest=(domain,data)=>sha256(Buffer.concat([Buffer.from(domain,'utf8'),Buffer.from([0]),Buffer.from(encode(data),'utf8')]));
 const hex64=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const positive=x=>typeof x==='string'&&/^[1-9][0-9]*$/.test(x)&&BigInt(x)<(1n<<64n);
+const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function b58Length(value,bytes){
+  if(typeof value!=='string'||!value||[...value].some(ch=>!B58.includes(ch)))return false;
+  let n=0n;for(const ch of value)n=n*58n+BigInt(B58.indexOf(ch));
+  const decoded=(n===0n?0:Math.ceil(n.toString(16).length/2))+(value.match(/^1+/)?.[0].length||0);
+  return decoded===bytes;
+}
 function deny(x,label){for(const [k,v] of Object.entries(DENIALS))need(x?.[k]===v,label+'_ECONOMIC_DENIAL');}
 function scalar(x,label){need(typeof x==='string'&&x.length>0&&x.length<256,label+'_MISSING');return x;}
 function wireBytes(tx){
@@ -61,7 +68,11 @@ function checkObservation(v,expected){
     s.occurrenceId===`${s.genesisHash}:${s.program}:${s.signature}:outer:${s.instructionIndex}`,'SOURCE_ID');
   need(Number.isSafeInteger(s.finalizedSlot)&&s.finalizedSlot>0&&
     Number.isInteger(s.instructionIndex)&&s.instructionIndex>=0&&s.instructionIndex<=0xffffffff,'INSTRUCTION');
-  need(positive(s.amountBaseUnits)&&hex64(s.witnessDigest),'AMOUNT_OR_WITNESS');
+  need(positive(s.amountBaseUnits)&&hex64(s.witnessDigest)&&hex64(s.holochainScope),
+    'AMOUNT_OR_WITNESS');
+  for(const field of ['genesisHash','program','mint','receiptAddress','depositor'])
+    need(b58Length(s[field],32),'INVALID_PUBKEY_'+field);
+  need(b58Length(s.signature,64),'INVALID_SIGNATURE_SHAPE');
   need(typeof s.codeVersion==='string'&&s.codeVersion.length>0&&s.codeVersion.length<=96,'CODE_VERSION');
 }
 function scopeOf(destination){
@@ -149,7 +160,7 @@ function checkRow(row,expected,destination){
   if(row.state!=='acked')need(row.actionHash===null,'UNACKED_HAS_ACTION');
 }
 function verifyRemote(remote,row){
-  need(obj(remote),'REMOTE_RECORD');deny(remote,'REMOTE_RECORD');
+  exact(remote,['actionHash','observation',...BASE],'REMOTE_RECORD');deny(remote,'REMOTE_RECORD');
   need(typeof remote.actionHash==='string'&&remote.actionHash.length>0&&
     remote.actionHash.length<256,'ACTION_HASH');
   need(canonicalJSON(remote.observation)===canonicalJSON(row.observation),'CONFLICTING_REMOTE_OBSERVATION');
@@ -215,7 +226,10 @@ export class DemoOutbox {
   }
   #ack(row,remote){
     const actionHash=verifyRemote(remote,row);
-    row.state='acked';row.actionHash=actionHash;this.persist();return 'acked';
+    const priorState=row.state,priorActionHash=row.actionHash;
+    row.state='acked';row.actionHash=actionHash;
+    try{this.persist();return 'acked';}
+    catch(e){row.state=priorState;row.actionHash=priorActionHash;throw e;}
   }
   /** On uncertain recovery, READ exact DNA/agent/source ID. Never blind retry. */
   async reconcile(id,client){
