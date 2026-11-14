@@ -15,6 +15,7 @@ import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
 import { recoverIncludedRejection, assertRecoveredIncludedRejection } from './confirmation-recovery.mjs';
+import { deriveDemoScope, assertDemoDomainShape, DEMO_SCOPE_TAG, DEMO_SCHEMA, ECONOMIC_DENIAL } from './demo-scope.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
 const connection = new Connection(RPC, 'confirmed');
@@ -61,7 +62,7 @@ const nonce = new BN('42017');
 const amount = 250_000n;
 const U64_MAX = (1n << 64n) - 1n;
 const mode = process.env.BRIDGE_TEST_MODE ?? 'lifecycle';
-assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown isolated test mode');
+assert.ok(['lifecycle', 'init-capture', 'u64-max', 'demo-domain'].includes(mode), 'unknown isolated test mode');
 const transactionEvidence = [];
 const operationJournal = [];
 let operationNumber = 0;
@@ -69,7 +70,7 @@ const evidenceDirectory = new URL('../../target/localnet-evidence/', import.meta
 function persistOperations() {
   mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
   writeFileSync(new URL('sprint1-' + mode + '-operations.json', evidenceDirectory),
-    JSON.stringify({ mode, ...artifactBinding, operations: operationJournal }, null, 2) + '\n',
+    JSON.stringify({ mode, ...artifactBinding, ...ECONOMIC_DENIAL, operations: operationJournal }, null, 2) + '\n',
     { mode: 0o600 });
 }
 function errorEmitter(logs) {
@@ -328,7 +329,7 @@ async function saveTransactionEvidence() {
       JSON.stringify({
         kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
         mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
-        ...artifactBinding, complete: finalized.length === signatures.size,
+        ...artifactBinding, ...ECONOMIC_DENIAL, complete: finalized.length === signatures.size,
         transactions: transactionEvidence, finalized,
       }, null, 2) + '\n', { mode: 0o600 });
   }
@@ -346,6 +347,7 @@ async function capturePublicAccountFixture(label, keys, signatures) {
   const fixture = {
     kind: 'localnet-finalized-rpc-account-snapshot-not-consensus-proof',
     label,
+    ...ECONOMIC_DENIAL,
     genesisHash: await connection.getGenesisHash(),
     programId: programId.toBase58(),
     ...artifactBinding,
@@ -1191,4 +1193,153 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   await connection.confirmTransaction(refundSignature, 'finalized');
   await capturePublicAccountFixture('sprint1-u64-refunded', [receipt, config, vault, mint],
     { deposit: depositSignature, refund: refundSignature });
+});
+
+
+test('isolated source-bound disposable audit demo: real initialize, deposit, refund', {
+  timeout: 240_000, skip: mode !== 'demo-domain'
+}, async (t) => {
+  let domain = null;
+  t.after(async () => {
+    // A failed/incomplete witness archive must never create an accepted
+    // source-domain handoff, even when the on-chain receipt exists.
+    await saveTransactionEvidence();
+    assert.ok(domain, 'demo was not completed; do not produce a handoff');
+    const bundle = JSON.parse(readFileSync(
+      new URL('../../target/localnet-evidence/sprint1-demo-domain-transactions.json', import.meta.url)));
+    assert.equal(bundle.complete, true, 'finalized evidence incomplete');
+    assert.equal(bundle.genesisHash, domain.genesisHash, 'archive genesis changed');
+    assert.equal(bundle.programId, domain.programId, 'archive program changed');
+    const originalWitness = (signature) => {
+      const witness = bundle.finalized.find(w => w.signature === signature);
+      assert.ok(witness, 'missing original finalized witness: ' + signature);
+      assert.ok(bundle.transactions.some(entry =>
+        entry.signature === signature && typeof entry.signedWireBase64 === 'string'),
+      'missing original signed submitted wire: ' + signature);
+      return {
+        signature, slot: witness.slot,
+        getTransactionRawFile: witness.getTransactionRawFile,
+        getTransactionBase64RawFile: witness.getTransactionBase64RawFile,
+        getBlockRawFile: witness.getBlockRawFile,
+        getBlockBase64RawFile: witness.getBlockBase64RawFile,
+      };
+    };
+    const manifest = {
+      schema: DEMO_SCHEMA,
+      kind: 'disposable-localnet-source-audit-NOT-consensus-proof',
+      mode: 'demo-domain', ...domain, ...artifactBinding,
+      scopeDerivationTag: DEMO_SCOPE_TAG,
+      witnessBundle: 'sprint1-demo-domain-transactions.json',
+      transactions: {
+        initialize: originalWitness(domain.initSignature),
+        deposit: originalWitness(domain.depositSignature),
+        refund: originalWitness(domain.refundSignature),
+      },
+      snapshots: {
+        active: 'demo-domain-active-receipt.json',
+        refunded: 'demo-domain-refunded-receipt.json',
+      },
+      historyComplete: false,
+      economicAuthorization: 'DENIED',
+      ...ECONOMIC_DENIAL,
+    };
+    delete manifest.initSignature;
+    delete manifest.depositSignature;
+    delete manifest.refundSignature;
+    assertDemoDomainShape(manifest);
+    writeFileSync(new URL('../../target/localnet-evidence/demo-source-domain.json', import.meta.url),
+      JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  });
+
+  assert.ok((await connection.getAccountInfo(programId))?.executable, 'deployed SBPF required');
+  assert.equal(await connection.getAccountInfo(config), null, 'fresh, isolated validator required');
+  await recordUpgradeAuthority();
+  const admin = Keypair.generate();
+  await fund(admin);
+  const mint = await createMint(connection, admin, admin.publicKey, null, 6,
+    undefined, { commitment: 'confirmed' }, TOKEN_PROGRAM_ID);
+  await recordMintAuthorities('demo-domain', mint);
+  const genesisHash = await connection.getGenesisHash();
+  const derived = deriveDemoScope({
+    genesisHash, programId: programId.toBase58(), mint: mint.toBase58(),
+  });
+  assert.notEqual(derived.toString('hex'), Buffer.from(scope).toString('hex'),
+    'must never reuse historic fixed lifecycle scope');
+  const demoScope = [...derived];
+  const demoRecipient = [...createHash('sha256')
+    .update('HSC/demo-localnet-recipient/v1\0').update(derived).digest()];
+  const [vault] = vaultFor(mint);
+  const source = await createAccount(connection, admin, mint, admin.publicKey);
+  const destination = await createAccount(connection, admin, mint, admin.publicKey,
+    Keypair.generate());
+  const demoNonce = new BN('42017'), demoAmount = 250_000n;
+  const [receipt, receiptBump] = receiptFor(admin.publicKey, demoNonce);
+  await mintTo(connection, admin, mint, source, admin, 1_000_000n);
+  const initIx = await program.methods.initialize(demoScope).accountsStrict({
+    admin: admin.publicKey, config, mint, vault, tokenProgram: TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+  }).instruction();
+  const initSignature = await send(initIx, [admin]);
+  await connection.confirmTransaction(initSignature, 'finalized');
+  const rawConfig = await connection.getAccountInfo(config, 'finalized');
+  assert.ok(rawConfig, 'actual initialized config missing');
+  same(rawConfig.owner, programId);
+  const decoded = decodeConfig(Buffer.from(rawConfig.data));
+  assert.equal(decoded.mint, mint.toBase58());
+  assert.equal(decoded.scope, derived.toString('hex'), 'original initialized scope differs');
+  const initialized = await program.account.bridgeConfig.fetch(config);
+  same(initialized.admin, admin.publicKey);
+  same(initialized.mint, mint);
+  assert.deepEqual([...initialized.scope], demoScope);
+  const depositIx = await program.methods.deposit(demoNonce, demoRecipient,
+    new BN(demoAmount.toString())).accountsStrict({
+    depositor: admin.publicKey, config, mint, source, vault, receipt,
+    tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+  }).instruction();
+  const depositSignature = await send(depositIx, [admin]);
+  await connection.confirmTransaction(depositSignature, 'finalized');
+  const active = await program.account.depositReceipt.fetch(receipt);
+  same(active.depositor, admin.publicKey);
+  same(active.mint, mint); same(active.vault, vault); same(active.config, config);
+  assert.deepEqual([...active.scope], demoScope);
+  assert.deepEqual([...active.recipientCore], demoRecipient);
+  assert.equal(active.nonce.toString(), demoNonce.toString());
+  assert.equal(active.amount.toString(), demoAmount.toString());
+  assert.equal(active.refunded, false);
+  assert.equal(active.bump, receiptBump);
+  assert.equal((await getAccount(connection, vault)).amount, demoAmount);
+  await capturePublicAccountFixture('demo-domain-active-receipt',
+    [receipt, config, vault, mint], { initialize: initSignature, deposit: depositSignature });
+
+  // Fail-closed adverse control, with its original rejected signed wire
+  // retained. Does not change existing scenario/fixture negative cases.
+  await rejectsInstruction(() => Promise.resolve(depositIx), [admin],
+    'demo-domain duplicate receipt nonce must fail', { program: 'system', code: 0 });
+  assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, false);
+
+  const refundIx = await program.methods.refund().accountsStrict({
+    depositor: admin.publicKey, config, mint, vault, receipt,
+    destination, tokenProgram: TOKEN_PROGRAM_ID,
+  }).instruction();
+  const refundSignature = await send(refundIx, [admin]);
+  await connection.confirmTransaction(refundSignature, 'finalized');
+  const refunded = await program.account.depositReceipt.fetch(receipt);
+  assert.equal(refunded.refunded, true);
+  assert.deepEqual([...refunded.scope], demoScope);
+  assert.equal((await getAccount(connection, vault)).amount, 0n);
+  assert.equal((await getAccount(connection, destination)).amount, demoAmount);
+  assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
+  await capturePublicAccountFixture('demo-domain-refunded-receipt',
+    [receipt, config, vault, mint], {
+      initialize: initSignature, deposit: depositSignature, refund: refundSignature,
+    });
+  domain = {
+    genesisHash, programId: programId.toBase58(), mint: mint.toBase58(),
+    config: config.toBase58(), vault: vault.toBase58(), receipt: receipt.toBase58(),
+    depositor: admin.publicKey.toBase58(), scopeHex: derived.toString('hex'),
+    initializedScopeHex: decoded.scope,
+    recipientCoreHex: Buffer.from(demoRecipient).toString('hex'),
+    nonce: demoNonce.toString(), amountBaseUnits: demoAmount.toString(),
+    initSignature, depositSignature, refundSignature,
+  };
 });

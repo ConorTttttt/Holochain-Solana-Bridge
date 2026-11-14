@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const mode = process.argv[2];
-assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown witness mode');
+assert.ok(['lifecycle', 'init-capture', 'u64-max', 'demo-domain'].includes(mode), 'unknown witness mode');
 const source = 'target/localnet-evidence';
 const bundleName = 'sprint1-' + mode + '-transactions.json';
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));

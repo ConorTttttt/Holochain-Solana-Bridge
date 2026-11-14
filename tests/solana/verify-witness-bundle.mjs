@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const mode = process.argv[2];
-assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown witness mode');
+assert.ok(['lifecycle', 'init-capture', 'u64-max', 'demo-domain'].includes(mode), 'unknown witness mode');
 // WITNESS_DIR exists only so the tamper test can point at a mutated COPY.
 const dir = process.env.WITNESS_DIR ?? 'target/localnet-evidence';
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -170,6 +170,7 @@ const fixtures = {
     'two-refunded-receipts', 'sprint1-two-wallets-live'],
   'init-capture': ['sprint1-initializer-capture'],
   'u64-max': ['sprint1-u64-refunded'],
+  'demo-domain': ['demo-domain-active-receipt', 'demo-domain-refunded-receipt'],
 };
 for (const name of fixtures[mode]) {
   const snapshot = readJson(join(dir, name + '.json'));
