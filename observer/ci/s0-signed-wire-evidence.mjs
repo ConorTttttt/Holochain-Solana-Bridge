@@ -334,7 +334,9 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                     w=>{w.proof.containingBlock.blockhash='altered-blockhash'},
                     w=>{w.proof.rpcTransaction.meta.fee+=1},
                     w=>{w.proof.latestReconciledReceiptSnapshot.refunded=true},
-                    w=>{w.source.codeVersion='f'.repeat(40)},
+                    // Changing to another *valid* SHA-40 only becomes a
+                    // refusal at queueVerified's out-of-band commit pin.
+                    w=>{w.source.codeVersion='not-an-immutable-sha'},
                     w=>{w.destination.appId='published-Unyt-app'},
                   ];
                   for(const mutate of structuralMutants){
