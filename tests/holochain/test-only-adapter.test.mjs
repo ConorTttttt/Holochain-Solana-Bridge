@@ -16,7 +16,8 @@ const observation = Object.freeze({ kind: 'solana-receipt-observation-v1',
   activeLiabilitiesBaseUnits: '300', configBump: 254, receiptBump: 253,
   commitmentRequested: 'finalized', transactionVerified: false,
   evidenceTrust: 'untrusted_rpc_snapshot', refunded: false,
-  state: 'active_refundable', creditEligible: false });
+  state: 'active_refundable', creditEligible: false,
+  independentConsensusVerified: false, spendableBaseUnits: '0', withdrawalAuthorized: false });
 
 const ingest = (changes = {}, target = binding) => createTestOnlyAdapter(target).ingest({ ...observation, ...changes });
 const inert = record => {
