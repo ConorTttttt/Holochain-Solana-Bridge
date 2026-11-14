@@ -75,7 +75,7 @@ function fixture(version, signerCount) {
     ],
     emittingProgramId: null
   };
-  return { wire, message, decoded, record, rpc,
+  return { wire, message, fixtureSigners: signers, decoded, record, rpc,
     witness: { signature: record.signature, messageRecentBlockhash: base58(hash) } };
 }
 function rejected(code, fn) {
@@ -139,12 +139,16 @@ test('synthetic signed-message tamper and attribution tamper reject by class', (
   });
 });
 test('ALT lookup data cannot be accepted merely by supplying RPC account labels', () => {
-  const { wire } = fixture(0, 1);
-  // Versioned message ends with a compact 0 lookups marker.
+  const { message, fixtureSigners } = fixture(0, 1);
+  // Sign the ALTERED message with a real fixture key, so ALT_UNVERIFIED
+  // cannot be masked by an invalid Ed25519 signature.
   const lookupTable = key('lookup table').raw;
-  const withAlt = Buffer.concat([
-    wire.subarray(0, wire.length - 1), vec(1), lookupTable, vec(1),
+  const altMessage = Buffer.concat([
+    message.subarray(0, message.length - 1), vec(1), lookupTable, vec(1),
     Buffer.from([0]), vec(0)
+  ]);
+  const withAlt = Buffer.concat([
+    vec(1), sign(null, altMessage, fixtureSigners[0].privateKey), altMessage
   ]);
   rejected('ALT_UNVERIFIED', () => decodeSignedWire(withAlt));
 });
