@@ -15,6 +15,76 @@ const need=(ok,code)=>{if(!ok)throw Error('OBS_V2_REFUSED:'+code)};
 const hex64=x=>typeof x==='string'&&/^[0-9a-f]{64}$/.test(x);
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const eq=(a,b)=>canonicalJSON(a)===canonicalJSON(b);
+// These checks certify INTERNAL consistency only. A digest can be recomputed
+// by an attacker: neither this verifier nor a local SHA-256 is a signature,
+// independent Solana consensus proof, or authorization to make an A4 write.
+function sameExecutionMeta(a,b){
+  if(!a||!b||typeof a!=='object'||typeof b!=='object'||
+    !Object.hasOwn(a,'rewards')||!Object.hasOwn(b,'rewards'))return false;
+  const normalized=x=>({
+    ...x,rewards:Array.isArray(x.rewards)&&x.rewards.length===0?null:x.rewards,
+  });
+  return eq(normalized(a),normalized(b));
+}
+function checkInternalBindings(w){
+  const s=w.source,p=w.proof,e=s?.verifiedEvidence;
+  need(e?.kind==='solana-deposit-evidence-v1' &&
+    e.transactionVerified===true&&e.verifiedByRpcClaim===true&&
+    e.refundedAtObservation===false,'INTERNAL_SOURCE_VERIFICATION_FLAGS');
+  need(s.kind===e.kind&&s.sourceEventType==='deposit'&&
+    /^[0-9a-f]{40}$/.test(s.codeVersion) &&
+    /^(0|[1-9][0-9]*)$/.test(s.depositNonce) &&
+    /^[1-9][0-9]*$/.test(s.amountBaseUnits) &&
+    BigInt(s.amountBaseUnits)<(1n<<64n),'SOURCE_TYPES');
+  for(const k of ['id','occurrenceId','program','mint','holochainScope',
+    'receiptAddress','depositor','recipientCore','depositNonce','signature',
+    'blockhash','finalizedSlot','instructionPath','amountBaseUnits'])
+    need(s[k]===e[k],'SOURCE_EVIDENCE_'+k);
+  need(s.genesisHash===e.receiptSnapshot?.genesisHash &&
+    s.id===s.genesisHash+':'+s.program+':'+s.receiptAddress &&
+    /^outer:(0|[1-9][0-9]*)$/.test(s.instructionPath) &&
+    s.occurrenceId===s.genesisHash+':'+s.program+':'+s.signature+':'+s.instructionPath,
+    'SOURCE_IDENTITIES');
+  need(Number.isSafeInteger(s.finalizedSlot)&&s.finalizedSlot>0 &&
+    p.rpcTransaction?.slot===s.finalizedSlot &&
+    p.rpcTransaction?.version===e.transactionVersion &&
+    p.rpcTransaction?.meta?.err===null,'ORIGINAL_TRANSACTION_IDENTITY');
+  const block=p.containingBlock;
+  need(block?.blockhash===s.blockhash &&
+    Array.isArray(block.transactions)&&block.transactions.length>0,
+    'ORIGINAL_CONTAINING_BLOCK');
+  const matches=block.transactions.filter(x=>
+    eq(x?.transaction,p.rpcTransaction.transaction));
+  need(matches.length===1 &&
+    sameExecutionMeta(matches[0].meta,p.rpcTransaction.meta),
+    'ORIGINAL_BLOCK_ENTRY_METADATA');
+  const original=p.originalReceiptSnapshot,later=p.latestReconciledReceiptSnapshot;
+  need(original?.kind==='solana-receipt-observation-v1'&&
+    later?.kind==='solana-receipt-observation-v1' &&
+    original.refunded===false&&later.refunded===false &&
+    original.transactionVerified===false &&
+    later.transactionVerified===false &&
+    Number.isSafeInteger(original.finalizedSlot) &&
+    Number.isSafeInteger(later.finalizedSlot) &&
+    original.finalizedSlot>=s.finalizedSlot &&
+    later.finalizedSlot>=original.finalizedSlot,
+    'RECEIPT_SNAPSHOT_ORDER');
+  for(const snapshot of [original,later]){
+    for(const [k,v] of Object.entries(DENIALS))
+      need(snapshot[k]===v,'SNAPSHOT_ECONOMIC_DENIAL');
+    need(snapshot.genesisHash===s.genesisHash,'SNAPSHOT_GENESIS');
+    for(const k of ['id','program','mint','holochainScope','receiptAddress',
+      'depositor','recipientCore','depositNonce','amountBaseUnits',
+      'configAddress','vaultAddress'])
+      need(snapshot[k]===e[k],'SNAPSHOT_IDENTITY_'+k);
+  }
+  const d=w.destination;
+  need(d&&Object.keys(d).sort().join(',')===
+    ['agentKey','appId','dnaHash','role','zome'].join(',') &&
+    d.role==='audit'&&d.zome==='solana_audit' &&
+    ['dnaHash','agentKey','appId'].every(k=>typeof d[k]==='string'&&d[k].length>0) &&
+    !/unyt/i.test(d.appId),'AUDIT_ONLY_DESTINATION');
+}
 function rawWire(tx){
   need(Array.isArray(tx?.transaction)&&tx.transaction.length===2&&tx.transaction[1]==='base64',
     'SIGNED_WIRE_REQUIRED');
@@ -52,7 +122,7 @@ export function buildReviewedWitnessV2({evidence,rpcTransaction,containingBlock,
   for(const k of ['genesisHash','program','mint','holochainScope'])
     need(evidence[k]===expected[k] || k==='genesisHash'&&
       evidence.receiptSnapshot?.genesisHash===expected[k],'SOURCE_SCOPE_'+k);
-  need(typeof codeVersion==='string'&&/^[0-9A-Za-z._/-]{1,96}$/.test(codeVersion),
+  need(typeof codeVersion==='string'&&/^[0-9a-f]{40}$/.test(codeVersion),
     'PINNED_CODE_VERSION');
   need(destination?.role==='audit'&&destination?.zome==='solana_audit' &&
     typeof destination.dnaHash==='string'&&typeof destination.agentKey==='string' &&
@@ -92,7 +162,9 @@ export function buildReviewedWitnessV2({evidence,rpcTransaction,containingBlock,
     destination:structuredClone(destination),
   };
   const witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,unsigned);
-  return {...unsigned,witnessDigest};
+  const witness={...unsigned,witnessDigest};
+  verifyReviewedWitnessV2(witness);
+  return witness;
 }
 export function verifyReviewedWitnessV2(w){
   need(w?.kind===REVIEWED_V2_KIND&&w.schemaVersion==='2'&&hex64(w.witnessDigest),
@@ -107,6 +179,7 @@ export function verifyReviewedWitnessV2(w){
     w.proof?.historyIndexed===false &&w.proof?.refundDurablyCommitted===false &&
     eq(w.proof.originalReceiptSnapshot,w.source.verifiedEvidence.receiptSnapshot),
     'REVIEWED_PROOF_CONTRACT');
+  checkInternalBindings(w);
   need(sha(rawWire(w.proof.rpcTransaction))===w.proof.originalSignedWireSha256 &&
     w.proof.originalSignedWireBase64===w.proof.rpcTransaction.transaction[0] &&
     w.proof.originalSignedWireSha256===w.source.verifiedEvidence.transactionHash &&
