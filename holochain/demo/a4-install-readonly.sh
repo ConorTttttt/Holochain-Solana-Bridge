@@ -17,8 +17,8 @@ cleanup() {
   if [[ -n "$PID" ]]; then kill -INT "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; fi
   for f in "$OUT"/*.log; do
     [[ -f "$f" ]] || continue
-    sed -Ei -e 's@(socket\\?k=)[^[:space:]"\\\\]+@\\1[REDACTED]@g' \\
-      -e 's@((token|passphrase|password|secret)[[:space:]]*[:=][[:space:]]*)[^[:space:]",}]+@\\1[REDACTED]@Ig' "$f"
+    sed -Ei -e 's@(socket\?k=)[^[:space:]"\\\]+@\1[REDACTED]@g' \
+      -e 's@((token|passphrase|password|secret)[[:space:]]*[:=][[:space:]]*)[^[:space:]",}]+@\1[REDACTED]@Ig' "$f"
   done
   rm -rf -- "$ROOT"
 }
@@ -33,8 +33,8 @@ chmod 600 "$ROOT/lair-passphrase"
 cd "$ROOT"
 # Deliberately OMIT --in-process-lair. A separate Lair process must be reachable
 # using the node conductor config, and HAM must sign a read-only get_contract.
-printf '%s' "$PASSPHRASE" | timeout --signal=INT 300s hc sandbox --piped generate \\
-  --app-id "$APP" --root "$ROOT" --directories agent-a \\
+printf '%s' "$PASSPHRASE" | timeout --signal=INT 300s hc sandbox --piped generate \
+  --app-id "$APP" --root "$ROOT" --directories agent-a \
   "$HAPP" network mem > "$OUT/install.log" 2>&1 || {
     echo 'A4_EXTERNAL_LAIR_SANDBOX_INSTALL_FAILED' >&2; exit 3;
   }
@@ -47,7 +47,7 @@ PID=$!
 PORT=''
 for _ in $(seq 1 75); do
   kill -0 "$PID" 2>/dev/null || { echo 'A4_CONDUCTOR_TERMINATED' >&2; exit 3; }
-  PORT="$(hc sandbox admin-ports 2>/dev/null | sed -nE 's/^[[:space:]]*\\[[[:space:]]*([0-9]+)[[:space:]]*\\][[:space:]]*$/\\1/p' || true)"
+  PORT="$(hc sandbox admin-ports 2>/dev/null | sed -nE 's/^[[:space:]]*\[[[:space:]]*([0-9]+)[[:space:]]*\][[:space:]]*$/\1/p' || true)"
   if [[ -n "$PORT" ]] && hc client call --port "$PORT" list-apps > "$OUT/list-apps.log" 2>&1; then break; fi
   sleep 2
 done
@@ -85,7 +85,7 @@ negative() {
   local output='' code=0
   output="$(env "$@" "$EXE" preflight 2>&1)" || code=$?
   [[ "$code" != 0 && "$output" == *"$error"* ]] || { echo "A4_NEGATIVE_FAILED:$label" >&2; exit 3; }
-  printf '%s\\n' "NEGATIVE_PASS:$label:$error" >> "$OUT/refusal-classes.log"
+  printf '%s\n' "NEGATIVE_PASS:$label:$error" >> "$OUT/refusal-classes.log"
 }
 negative published_app PUBLISHED_UNYT_APP_REFUSED DEMO_APP_ID='UNYT-published-not-ours'
 negative wrong_agent DEMO_DNA_OR_SIGNER_MISMATCH DEMO_EXPECTED_AGENT='uhCAkWrongAgent'
@@ -103,4 +103,4 @@ identity={'installedAppId':app,'role':'audit','dnaHash':dna,'cellId':[dna,agent]
           'noMutationAttempted':True,'source':'archived SOL-55; not same-run source'}
 with open(filename,'w') as f:json.dump(identity,f,sort_keys=True,indent=2)
 PY
-printf '%s\\n' 'A4_EXTERNAL_LAIR_READONLY_PASS no mutating zome, grant or economics'
+printf '%s\n' 'A4_EXTERNAL_LAIR_READONLY_PASS no mutating zome, grant or economics'
