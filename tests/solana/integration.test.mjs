@@ -34,8 +34,14 @@ async function recordUpgradeAuthority() {
   assert.equal(data.readUInt32LE(0), 3, 'unexpected ProgramData state');
   assert.ok(data[12] === 0 || data[12] === 1, 'noncanonical upgrade authority option');
   const upgradeAuthority = data[12] === 1 ? new PublicKey(data.subarray(13, 45)).toBase58() : null;
+  // Raw program + ProgramData bytes let the verifier prove the DEPLOYED ELF
+  // is byte-identical to the hashed target/deploy artifact.
+  const deployment = await rawPublicRpc('getMultipleAccounts', [
+    [programId.toBase58(), programDataAddress.toBase58()],
+    { commitment: 'confirmed', encoding: 'base64' }]);
+  const deploymentRawFile = savePublicRpc('deployment-program-accounts.rpc.json', deployment);
   transactionEvidence.push({ label: 'observed-deployment-upgrade-authority-not-governed',
-    programDataAddress: programDataAddress.toBase58(), upgradeAuthority });
+    programDataAddress: programDataAddress.toBase58(), upgradeAuthority, deploymentRawFile });
 }
 async function recordMintAuthorities(label, mintAddress) {
   const mint = await getMint(connection, mintAddress, 'confirmed', TOKEN_PROGRAM_ID);
@@ -189,13 +195,16 @@ async function saveTransactionEvidence() {
     // the InstructionError of an EXPECTED failed transaction. A negative
     // on-chain test must not be mistaken for an archive failure. Read actual
     // validator signature status without reclassifying meta.err as an exception.
+    // Deadline, not a 10 s attempt count: a transaction confirmed just before
+    // this hook can legitimately need ~32+ slots to root on test-validator.
     let status = null;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    const finalizeDeadline = Date.now() + 90_000;
+    while (Date.now() < finalizeDeadline) {
       const statuses = await connection.getSignatureStatuses([signature],
         { searchTransactionHistory: true });
       const candidate = statuses.value[0];
       if (candidate?.confirmationStatus === 'finalized') { status = candidate; break; }
-      await new Promise(resolve => setTimeout(resolve, 250));
+      await new Promise(resolve => setTimeout(resolve, 400));
     }
     assert.ok(status, 'missing finalized signature status: ' + signature);
     let tx;
@@ -238,6 +247,11 @@ async function saveTransactionEvidence() {
     assert.equal(typeof encodedTransaction, 'string');
     const signedBytes = Buffer.from(encodedTransaction, 'base64');
     assert.equal(signedBytes.toString('base64'), encodedTransaction, 'noncanonical base64 signed bytes');
+    if (typeof expected.signedWireBase64 === 'string') {
+      // The finalized ledger must contain EXACTLY the bytes this test signed.
+      assert.equal(encodedTransaction, expected.signedWireBase64,
+        'finalized transaction bytes differ from originally submitted wire bytes: ' + signature);
+    }
     const decodedSigned = VersionedTransaction.deserialize(signedBytes);
     assert.equal(decodedSigned.signatures.length, rawTx.transaction.signatures.length,
       'signed byte count disagrees with parsed RPC signatures');
@@ -521,6 +535,7 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
       instructionAccounts: record.instructions[0].accounts.map(key => ({
         address: key.pubkey, signer: key.isSigner, writable: key.isWritable })),
       recentBlockhash: included.transaction.message.recentBlockhash,
+      signedWireBase64: record.signedWireBase64,
       error: included.meta.err, logs: included.meta.logMessages,
     };
     // This is before assertions in callers: preserve both halves of any race.
@@ -537,10 +552,28 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     throw error;
   }
 }
-async function rejectsInstruction(buildIx, signers, message) {
+// Expected rejections MUST name the program and custom error that rejects
+// them. A bare `meta.err !== null` check let several adversarial tests pass
+// for an unrelated reason (e.g. receipt PDA already in use), never reaching
+// the constraint they claimed to test.
+const EXPECT_PROGRAM = {
+  bridge: () => programId.toBase58(),
+  system: () => SystemProgram.programId.toBase58(),
+  token: () => TOKEN_PROGRAM_ID.toBase58(),
+};
+function assertRejectedBy(result, expected, message) {
+  assert.ok(expected && EXPECT_PROGRAM[expected.program] && Number.isInteger(expected.code),
+    message + ': expected rejection must name program and custom code');
+  assert.deepEqual(result.error, { InstructionError: [0, { Custom: expected.code }] },
+    message + ': rejected with the wrong error ' + JSON.stringify(result.error));
+  assert.equal(result.emittingProgramId, EXPECT_PROGRAM[expected.program](),
+    message + ': rejected by the wrong program ' + result.emittingProgramId);
+}
+async function rejectsInstruction(buildIx, signers, message, expected) {
   const ix = await buildIx(); // must encode successfully
   const result = await submitOnChain(ix, signers, message);
   assert.notEqual(result.error, null, message + ': unexpectedly succeeded');
+  assertRejectedBy(result, expected, message);
   transactionEvidence.push({ label: message, ...result });
   await assertCustodyConservation('rejected transaction ' + message, result.slot);
   return result;
@@ -579,7 +612,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
 
   await t.test('freeze-enabled mint is rejected with atomic rollback', async () => {
     const frozenMint = await createMint(connection, owner, owner.publicKey, owner.publicKey, 6);
-    await rejectsInstruction(() => initIx(frozenMint, vaultFor(frozenMint)[0]), [owner], 'freeze-enabled init must fail');
+    await rejectsInstruction(() => initIx(frozenMint, vaultFor(frozenMint)[0]), [owner], 'freeze-enabled init must fail',
+      { program: 'bridge', code: 6004 }); // MintFreezable
     assert.equal(await connection.getAccountInfo(config), null);
   });
 
@@ -596,7 +630,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     same(v.mint, mint);
     assert.equal(v.delegate, null);
     assert.equal(v.closeAuthority, null);
-    await rejectsInstruction(() => initIx(mint, vault), [owner], 'second initialize must fail');
+    await rejectsInstruction(() => initIx(mint, vault), [owner], 'second initialize must fail',
+      { program: 'system', code: 0 }); // config PDA already in use
   });
 
   const [receipt, receiptBump] = receiptFor(owner.publicKey, nonce);
@@ -643,10 +678,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   }
 
   // Rejected transactions must leave all tracked state byte-for-byte intact.
-  async function rejectsUnchanged(buildIx, signers, label) {
+  async function rejectsUnchanged(buildIx, signers, label, expected) {
     const tracked = [config, vault, receipt];
     const before = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
-    await rejectsInstruction(buildIx, signers, label);
+    await rejectsInstruction(buildIx, signers, label, expected);
     const after = await connection.getMultipleAccountsInfo(tracked, 'confirmed');
     for (let i = 0; i < tracked.length; i++) {
       assert.deepEqual(after[i]?.data, before[i]?.data, label + ': account data changed');
@@ -689,9 +724,18 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   });
 
   await t.test('duplicate nonce, wrong signer, wrong mint and wrong source fail atomically', async () => {
-    await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail');
-    await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail');
-    await rejectsUnchanged(() => depositIx({ from: strangerSource }), [owner], 'wrong source owner must fail');
+    await rejectsUnchanged(() => depositIx(), [owner], 'duplicate receipt nonce must fail',
+      { program: 'system', code: 0 }); // receipt PDA already in use
+    await rejectsUnchanged(() => depositIx({ signer: attacker.publicKey }), [attacker], 'wrong signer/PDA must fail',
+      { program: 'bridge', code: 2006 }); // ConstraintSeeds on receipt
+    // An UNUSED nonce is required: Anchor creates `init` accounts while
+    // deserializing, before has_one/token constraints on other accounts are
+    // checked, so reusing nonce 42017 failed at the System Program instead.
+    const constraintNonce = new BN('42023');
+    const [constraintReceipt] = receiptFor(owner.publicKey, constraintNonce);
+    const fresh = { n: constraintNonce, receiptKey: constraintReceipt };
+    await rejectsUnchanged(() => depositIx({ ...fresh, from: strangerSource }), [owner],
+      'wrong source owner must fail', { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on source
     // The attacker correctly signs as both transaction payer and the named
     // depositor, but cannot use the OWNER's SPL source account.
     // Anchor's token::authority constraint must reject the INCLUDED signed
@@ -701,24 +745,37 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await rejectsUnchanged(() => depositIx({
       signer: attacker.publicKey, from: source, n: attackerNonce,
       receiptKey: attackerReceipt, amt: 1n,
-    }), [attacker], 'fully signed wrong-owner SPL source must fail on-chain');
+    }), [attacker], 'fully signed wrong-owner SPL source must fail on-chain',
+    { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on source
     assert.equal(await connection.getAccountInfo(attackerReceipt), null,
       'wrong-owner token transfer must not initialize an attacker receipt');
     const otherMint = await createMint(connection, owner, owner.publicKey, null, 6);
-    await rejectsUnchanged(() => depositIx({ mintKey: otherMint }), [owner], 'wrong mint must fail');
-    await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail');
-    await rejectsUnchanged(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail');
-    await rejectsUnchanged(() => depositIx({ vaultKey: source }), [owner], 'substituted vault must fail');
+    await rejectsUnchanged(() => depositIx({ ...fresh, mintKey: otherMint }), [owner], 'wrong mint must fail',
+      { program: 'bridge', code: 2001 }); // config has_one = mint
+    await rejectsUnchanged(() => refundIx({ signer: attacker.publicKey }), [attacker], 'wrong refund signer must fail',
+      { program: 'bridge', code: 2006 }); // ConstraintSeeds on receipt
+    await rejectsUnchanged(() => refundIx({ to: strangerSource }), [owner], 'wrong refund destination must fail',
+      { program: 'bridge', code: 2015 }); // ConstraintTokenOwner on destination
+    // Realistic decoy: same mint AND token authority = config PDA, so the
+    // token::mint/token::authority constraints pass; only the vault PDA seeds
+    // constraint can reject it. Passing `source` as the vault (as before) is
+    // caught by the unrelated duplicate-mutable-account check instead.
+    const decoyVault = await createAccount(connection, owner, mint, config, Keypair.generate());
+    await rejectsUnchanged(() => depositIx({ ...fresh, vaultKey: decoyVault }), [owner],
+      'substituted config-owned decoy vault must fail', { program: 'bridge', code: 2006 }); // ConstraintSeeds on vault
+    assert.equal(await connection.getAccountInfo(constraintReceipt), null,
+      'rejected constraint tests must not create a receipt');
     const boundNonce = new BN('42019');
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: 0n }),
-      [owner], 'zero amount must fail');
+      [owner], 'zero amount must fail', { program: 'bridge', code: 6001 });
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], core: Array(32).fill(0) }),
-      [owner], 'zero recipient core must fail');
+      [owner], 'zero recipient core must fail', { program: 'bridge', code: 6002 });
     await rejectsUnchanged(
       () => depositIx({ n: boundNonce, receiptKey: receiptFor(owner.publicKey, boundNonce)[0], amt: (1n << 64n) - 1n }),
-      [owner], 'u64 maximum beyond funded balance must fail');
+      [owner], 'u64 maximum beyond funded balance must fail',
+      { program: 'token', code: 1 }); // SPL insufficient funds
     assert.equal(await connection.getAccountInfo(receiptFor(owner.publicKey, boundNonce)[0]), null,
       'failed boundary transfers must not create a receipt');
 
@@ -731,12 +788,12 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
   await t.test('only admin pauses; deposits halt; refund works and is once-only', async () => {
     const pauseIx = (adminKey, paused) => program.methods.setPaused(paused)
       .accountsStrict({ admin: adminKey, config }).instruction();
-    await rejectsUnchanged(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail');
+    await rejectsUnchanged(() => pauseIx(attacker.publicKey, true), [attacker], 'wrong admin must fail', { program: 'bridge', code: 2001 });
     await send(await pauseIx(owner.publicKey, true), [owner]);
     const newNonce = new BN('42018');
     await rejectsUnchanged(
       () => depositIx({ n: newNonce, receiptKey: receiptFor(owner.publicKey, newNonce)[0] }),
-      [owner], 'paused deposit must fail');
+      [owner], 'paused deposit must fail', { program: 'bridge', code: 6000 });
     refundSignature = await send(await refundIx(), [owner]);
     await connection.confirmTransaction(refundSignature, 'finalized');
     assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
@@ -746,9 +803,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await assertRawState(0n, 0n, [{ key: receipt, n: nonce, value: amount, refunded: true, bump: receiptBump }]);
     await capturePublicAccountFixture('refunded-receipt', [receipt, config, vault, mint],
       { deposit: depositSignature, refund: refundSignature });
-    await rejectsUnchanged(() => refundIx(), [owner], 'second refund must fail');
+    await rejectsUnchanged(() => refundIx(), [owner], 'second refund must fail', { program: 'bridge', code: 6007 });
     await send(await pauseIx(owner.publicKey, false), [owner]);
-    await rejectsUnchanged(() => depositIx(), [owner], 'nonce remains consumed after refund');
+    await rejectsUnchanged(() => depositIx(), [owner], 'nonce remains consumed after refund',
+      { program: 'system', code: 0 });
     const maxNonce = new BN('18446744073709551615');
     const [maxReceipt, maxBump] = receiptFor(owner.publicKey, maxNonce);
     await send(await depositIx({ n: maxNonce, receiptKey: maxReceipt, amt: 1n }), [owner]);
@@ -781,7 +839,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       { key: receiptA, n: nA, value: 15_000n, refunded: true, bump: bumpA },
       { key: receiptB, n: nB, value: 9_000n, refunded: false, bump: bumpB },
     ]);
-    await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail');
+    await rejectsUnchanged(() => refundIx({ receiptKey: receiptA }), [owner], 'double refund must fail', { program: 'bridge', code: 6007 });
     const finalRefundSig = await send(await refundIx({ receiptKey: receiptB }), [owner]);
     await connection.confirmTransaction(finalRefundSig, 'finalized');
     await assertRawState(0n, 0n, [
@@ -857,10 +915,10 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       assert.equal((await getAccount(connection, source)).amount, sourceBalance, label + ': owner source');
       assert.equal((await getAccount(connection, strangerSource)).amount, strangerBalance, label + ': second source');
     }
-    async function rejectedWithoutChanges(label, instruction, signers, extra = []) {
+    async function rejectedWithoutChanges(label, instruction, signers, extra = [], expected) {
       const keys = [config, vault, source, strangerSource, ...extra];
       const before = await connection.getMultipleAccountsInfo(keys, 'confirmed');
-      await rejectsInstruction(() => Promise.resolve(instruction), signers, label);
+      await rejectsInstruction(() => Promise.resolve(instruction), signers, label, expected);
       const after = await connection.getMultipleAccountsInfo(keys, 'confirmed');
       for (let i = 0; i < keys.length; i++) {
         assert.deepEqual(after[i]?.data, before[i]?.data, label + ': changed account data');
@@ -894,27 +952,29 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     const failedNonce = new BN('60003'), [failedReceipt] = receiptFor(owner.publicKey, failedNonce);
     await rejectedWithoutChanges('failed SPL transfer rolls back receipt init',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, amt: sourceBalance + 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'token', code: 1 });
+    // Same account passed as source and vault: Anchor's duplicate-mutable check.
     await rejectedWithoutChanges('incorrect vault account rejected',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, vaultKey: source, amt: 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'bridge', code: 2040 }); // ConstraintDuplicateMutableAccount
     await rejectedWithoutChanges('token-program substitution rejected',
       await depositIx({ n: failedNonce, receiptKey: failedReceipt, tokenProg: SystemProgram.programId, amt: 1n }),
-      [owner], [failedReceipt]);
+      [owner], [failedReceipt], { program: 'bridge', code: 3008 }); // InvalidProgramId
     await rejectedWithoutChanges('unauthorized admin configuration update',
       await program.methods.setPaused(true).accountsStrict({ admin: attacker.publicKey, config }).instruction(),
-      [attacker], [r1, r2]);
+      [attacker], [r1, r2], { program: 'bridge', code: 2001 });
     await rejectedWithoutChanges('unauthorized mintTo rejected',
-      createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint]);
+      createMintToInstruction(mint, strangerSource, attacker.publicKey, 1n), [attacker], [mint],
+      { program: 'token', code: 4 }); // OwnerMismatch
     await rejectedWithoutChanges('mint authority reassignment by non-authority rejected',
       createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.MintTokens, attacker.publicKey),
-      [attacker], [mint]);
+      [attacker], [mint], { program: 'token', code: 4 }); // OwnerMismatch
     await rejectedWithoutChanges('freeze authority cannot be reinstated after mint has none',
       createSetAuthorityInstruction(mint, attacker.publicKey, AuthorityType.FreezeAccount, attacker.publicKey),
-      [attacker], [mint]);
+      [attacker], [mint], { program: 'token', code: 16 }); // MintCannotFreeze
     await rejectedWithoutChanges('unauthorized vault authority rotation rejected',
       createSetAuthorityInstruction(vault, attacker.publicKey, AuthorityType.AccountOwner, attacker.publicKey),
-      [attacker], [vault]);
+      [attacker], [vault], { program: 'token', code: 4 }); // OwnerMismatch
     await reconcile('after attempted CPI rollback and authority substitution');
 
     const partSignature = await send(await refundIx({ receiptKey: r1 }), [owner]);
@@ -939,6 +999,8 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
       'same nonce race must have exactly one success');
     assert.equal(sameNonceRace.filter((x) => x.error !== null).length, 1,
       'duplicate nonce must be rejected by the validator');
+    assertRejectedBy(sameNonceRace.find((x) => x.error !== null), { program: 'system', code: 0 },
+      'same-nonce race loser'); // receipt PDA already in use
     sameNonceRace.forEach((outcome, i) =>
       transactionEvidence.push({ label: 'same-wallet-duplicate-nonce-race-' + i, ...outcome }));
     const wonAmount = sameNonceRace[0].error === null ? 73n : 74n;
@@ -946,7 +1008,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     sourceBalance -= wonAmount;
     await reconcile('exactly one racing nonce receipt remains active');
     await rejectedWithoutChanges('reusing racing receipt rejected',
-      await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 1n }), [owner], [raceReceipt]);
+      await depositIx({ n: raceNonce, receiptKey: raceReceipt, amt: 1n }), [owner], [raceReceipt], { program: 'system', code: 0 });
     const raceRefundSignature = await send(await refundIx({ receiptKey: raceReceipt }), [owner]);
     transactionEvidence.push({ label: 'race-winner-refund', signature: raceRefundSignature, error: null });
     tracked.find((x) => x.n.eq(raceNonce)).refunded = true;
@@ -984,12 +1046,12 @@ test('isolated first-initializer capture attack (not safe for public deployment)
     tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
   }).instruction();
   await rejectsInstruction(() => Promise.resolve(operatorInitIx), [operator],
-    'authorized operator cannot initialize after attacker captured singleton');
+    'authorized operator cannot initialize after attacker captured singleton', { program: 'system', code: 0 });
   const operatorPauseIx = await program.methods.setPaused(true).accountsStrict({
     admin: operator.publicKey, config,
   }).instruction();
   await rejectsInstruction(() => Promise.resolve(operatorPauseIx), [operator],
-    'operator cannot pause attacker-controlled config');
+    'operator cannot pause attacker-controlled config', { program: 'bridge', code: 2001 });
   const attackerPause = await program.methods.setPaused(true).accountsStrict({
     admin: attacker.publicKey, config,
   }).instruction();
@@ -1039,7 +1101,7 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   assert.equal((await getAccount(connection, source)).amount, 0n);
   assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
   await rejectsInstruction(() => Promise.resolve(createMintToInstruction(mint, source, admin.publicKey, 1n)),
-    [admin], 'mint supply increment beyond u64 max must fail');
+    [admin], 'mint supply increment beyond u64 max must fail', { program: 'token', code: 14 }); // Overflow
   assert.equal((await getAccount(connection, vault)).amount, U64_MAX);
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), U64_MAX.toString());
   const refundIx = await program.methods.refund().accountsStrict({
@@ -1052,7 +1114,7 @@ test('isolated maximum u64 deposit, nonce and refund with exact on-chain bytes',
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
   assert.equal((await program.account.depositReceipt.fetch(receipt)).refunded, true);
   await rejectsInstruction(() => Promise.resolve(refundIx), [admin],
-    'repeated full-u64 refund must not underflow total_active');
+    'repeated full-u64 refund must not underflow total_active', { program: 'bridge', code: 6007 });
   assert.equal((await getAccount(connection, vault)).amount, 0n);
   assert.equal((await program.account.bridgeConfig.fetch(config)).totalActive.toString(), '0');
   await connection.confirmTransaction(refundSignature, 'finalized');

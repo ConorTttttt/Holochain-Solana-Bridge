@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - 'agent/sol/7-anchor-build'
+      - 'claude/solana-independent-fix'
     paths:
       - '.github/workflows/sol-verify-temporary.yml'
       - 'rust-toolchain.toml'
@@ -62,6 +63,7 @@ jobs:
             (anchor --version || true)
             (node --version || true)
           } > target/localnet-evidence/versions.log 2>&1
+          git rev-parse HEAD > target/localnet-evidence/source-commit.txt
           if [ -s target/idl/deposit_prototype.json ]; then
             sha256sum target/idl/deposit_prototype.json >> target/localnet-evidence/artifacts-sha256.txt
           else
@@ -72,6 +74,9 @@ jobs:
           else
             echo 'SBPF binary not generated' > target/localnet-evidence/sbpf-status.txt
           fi
+          # Hash manifest of every public evidence file (keys never enter this dir).
+          (cd target/localnet-evidence && find . -type f ! -name evidence-manifest.sha256 -print0 \
+            | sort -z | xargs -0 sha256sum) > target/localnet-evidence/evidence-manifest.sha256
       - name: Upload public-only logs and generated IDL; never keypairs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
