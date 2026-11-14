@@ -28,6 +28,7 @@ test('SEC-LEDGER: replay, conflicting identity, fork and independent journal bou
     occurrenceId:'genesis:program:sig-A:outer:0',
     transactionHash:'a'.repeat(64),amountBaseUnits:'9007199254740993',
     creditEligible:false,transactionVerified:true,independentConsensusVerified:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false,
   });
   let primary;
   try {
