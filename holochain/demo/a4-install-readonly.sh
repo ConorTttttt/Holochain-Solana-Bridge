@@ -17,8 +17,10 @@ cleanup() {
   if [[ -n "$PID" ]]; then kill -INT "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true; fi
   for f in "$OUT"/*.log; do
     [[ -f "$f" ]] || continue
-    sed -Ei -e 's@(socket\?k=)[^[:space:]"\\\]+@\1[REDACTED]@g' \
-      -e 's@((token|passphrase|password|secret)[[:space:]]*[:=][[:space:]]*)[^[:space:]",}]+@\1[REDACTED]@Ig' "$f"
+    # Never upload raw socket tokens, local passphrases, or sensitive keystore URLs.
+    sed -Ei \
+      -e 's@socket[^[:space:]]*k=[^[:space:]]+@socket?[REDACTED]@g' \
+      -e 's@([Tt]oken|[Pp]assphrase|[Pp]assword|[Ss]ecret)[[:space:]]*[:=][[:space:]]*[^[:space:]",}]+@\1=[REDACTED]@g' "$f" || true
   done
   rm -rf -- "$ROOT"
 }
