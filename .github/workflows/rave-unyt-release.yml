@@ -70,7 +70,7 @@ jobs:
         with:
           extra_nix_config: |
             substituters = https://cache.nixos.org https://holochain-ci.cachix.org
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbTjFOtA/0l6G5tXcKLQ3Y9vvs= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
       - name: Inspect with commit-pinned Holonix main-0.7 environment
         run: |
           set -euo pipefail
