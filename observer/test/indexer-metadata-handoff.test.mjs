@@ -68,7 +68,7 @@ for(const [label,mutate,pattern] of [
   ['failed execution mutation',(tx,block)=>{block.transactions[0].meta.err={InstructionError:[0,'InvalidArgument']}},/contradicts/],
   ['token delta mutation',(tx,block)=>{block.transactions[0].meta.preBalances[0]+=1},/contradicts/],
   ['version mutation',(tx,block)=>{block.transactions[0].version=0},/contradicts|version/],
-  ['signed wire mutation',(tx,block)=>{block.transactions[0].transaction[0]=Buffer.from('forged').toString('base64')},/signature|wire|transaction|decode/i],
+  ['signed wire mutation',(tx,block)=>{const b=Buffer.from(block.transactions[0].transaction[0],'base64');b[b.length-2]^=1;block.transactions[0].transaction[0]=b.toString('base64')},/invalid Ed25519 transaction signature/],
 ]){
   test('production fetch rejects '+label,async()=>{
     const {tx,fetchFn}=fixture({mutate});
