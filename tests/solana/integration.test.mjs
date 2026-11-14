@@ -93,7 +93,7 @@ async function traceSdk(label, callback, accountToTrace = null) {
     record.status = 'threw';
     record.error = String(error?.message ?? error);
     record.rawError = error && typeof error === 'object'
-      ? JSON.stringify(error, Object.getOwnPropertyNames(error)) : String(error);
+      ? JSON.stringify(error) : String(error);
     record.signature = error?.signature ?? null;
     record.logs = error?.logs ?? null;
     if (record.signature) {
@@ -120,8 +120,10 @@ async function traceSdk(label, callback, accountToTrace = null) {
             signature: row.signature, slot: row.slot, error: row.err,
             metaErr: tx?.meta?.err ?? null, logs: tx?.meta?.logMessages ?? null,
             emittingProgramId: errorEmitter(tx?.meta?.logMessages),
-            instructionProgramIds: tx?.transaction?.message?.instructions?.map(
-              ix => ix.programId.toBase58()) ?? [],
+            instructionProgramIds: tx?.transaction?.message?.instructions?.map(ix =>
+              ix.programId?.toBase58() ??
+              tx.transaction.message.accountKeys?.[ix.programIdIndex]?.toBase58() ??
+              tx.transaction.message.staticAccountKeys?.[ix.programIdIndex]?.toBase58() ?? null) ?? [],
           });
         }
       } catch (lookupError) { record.historyLookupError = String(lookupError); }
@@ -171,15 +173,19 @@ async function saveTransactionEvidence() {
   // signatures, message versions, instruction accounts and execution metadata.
   // This LOCALNET evidence does not establish independent Solana finality.
   const finalized = [];
+  let activeSignature = null;
+  let archiveStage = 'initializing';
   const signatures = new Map();
   for (const entry of transactionEvidence) {
     if (entry.signature && !signatures.has(entry.signature)) signatures.set(entry.signature, entry);
   }
   try {
   for (const [signature, expected] of signatures) {
+    activeSignature = signature; archiveStage = 'confirming-finality';
     const confirmation = await connection.confirmTransaction(signature, 'finalized');
     assert.ok(confirmation.value, 'missing finalized status: ' + signature);
     let tx;
+    archiveStage = 'fetching-finalized-transaction';
     for (let attempt = 0; attempt < 20; attempt++) {
       tx = await connection.getTransaction(signature, {
         commitment: 'finalized', maxSupportedTransactionVersion: 1,
@@ -192,6 +198,7 @@ async function saveTransactionEvidence() {
       'finalized transaction/status disagreement: ' + signature);
     if ('error' in expected) assert.deepEqual(tx.meta.err, expected.error,
       'confirmed/finalized execution disagreement: ' + signature);
+    archiveStage = 'raw-json-getTransaction';
     const transactionResponse = await rawPublicRpc('getTransaction', [signature, {
       commitment: 'finalized', encoding: 'json', maxSupportedTransactionVersion: 1,
     }]);
@@ -202,6 +209,7 @@ async function saveTransactionEvidence() {
     // JSON encoding exposes parsed instructions but does not retain the
     // signed transaction bytes. Obtain a second raw base64 RPC response so
     // Observer can independently decode the original on-wire signatures.
+    archiveStage = 'raw-base64-getTransaction';
     const signedResponse = await rawPublicRpc('getTransaction', [signature, {
       commitment: 'finalized', encoding: 'base64', maxSupportedTransactionVersion: 1,
     }]);
@@ -222,12 +230,14 @@ async function saveTransactionEvidence() {
     assert.ok(decodedSigned.signatures.length > 0 &&
       decodedSigned.signatures.every((bytes) => bytes.some((byte) => byte !== 0)),
       'missing signature bytes in finalized transaction');
+    archiveStage = 'raw-json-getBlock';
     const blockResponse = await rawPublicRpc('getBlock', [tx.slot, {
       commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
       rewards: false, maxSupportedTransactionVersion: 1,
     }]);
     // Preserve the COMPLETE signed base64 containing block, in addition
     // to the decoded JSON, for independently verifiable replay.
+    archiveStage = 'raw-base64-getBlock';
     const signedBlockResponse = await rawPublicRpc('getBlock', [tx.slot, {
       commitment: 'finalized', encoding: 'base64', transactionDetails: 'full',
       rewards: false, maxSupportedTransactionVersion: 1,
@@ -250,6 +260,7 @@ async function saveTransactionEvidence() {
     const signedTxFile = savePublicRpc('getTransaction-base64-' + signature + '.rpc.json', signedResponse);
     const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
     const signedBlockFile = savePublicRpc('getBlock-base64-' + tx.slot + '.rpc.json', signedBlockResponse);
+    archiveStage = 'recording-finalized-witness';
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
       previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
@@ -262,6 +273,19 @@ async function saveTransactionEvidence() {
       getBlockRawFile: blockFile, getBlockBase64RawFile: signedBlockFile,
     });
   }
+  } catch (error) {
+    const failure = {
+      kind: 'WITNESS-ARCHIVE-FAILURE-NOT-VERIFIED', mode, ...artifactBinding,
+      signature: activeSignature, stage: archiveStage,
+      finalizedCount: finalized.length, expectedCount: signatures.size,
+      message: String(error?.message ?? error),
+      stack: error?.stack ?? null,
+    };
+    mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(new URL('sprint1-' + mode + '-archive-error.json', evidenceDirectory),
+      JSON.stringify(failure, null, 2) + '\n', { mode: 0o600 });
+    console.error('WITNESS_ARCHIVE_FAILURE ' + JSON.stringify(failure));
+    throw error;
   } finally {
     mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
     writeFileSync(new URL('sprint1-' + mode + '-transactions.json', evidenceDirectory),
