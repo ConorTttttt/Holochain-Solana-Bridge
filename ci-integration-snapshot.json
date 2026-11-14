@@ -222,7 +222,9 @@
       "SOL original full base64 block capture / witness regex and failure transaction logs",
       "OBS signer restart test diagnostic correction",
       "SEC valid-message Ed25519 tamper test"
-    ]
+    ],
+    "publicDiagnosticUpload": "target/localnet-evidence/unexpected-onchain-*.json (source-owned public-only unexpected failure evidence, no signing keys; usable on next integrated SOL source)",
+    "requiredVerifiedSpecialistChanges": "SOL a6316b78 remains pinned, while newer SOL 6fb75296 diagnostic source is awaiting standalone validator CI; OBS 0a3db58d and SEC a4209649 not yet incorporated or verified"
   },
   "shadowMilestone": {
     "status": "NOT DEMONSTRATED at real signed-wire + durable-ledger + refund handoff",
