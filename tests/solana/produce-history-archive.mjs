@@ -300,6 +300,31 @@ async function archiveHistory() {
   if (archive.providers[0].getBlock.length !== producedByProvider[0]?.length ||
       archive.providers[1].getBlock.length !== producedByProvider[1]?.length)
     errors.push({ classification: 'FULL_BLOCK_COVERAGE_MISSING' });
+  // The OBS verifier will re-check this independently. The producer must
+  // already label two-provider block divergence and parent-chain breaks as
+  // explicit gaps; a successful fetch alone is NOT historical agreement.
+  const bySlot = archive.providers.map(p => new Map(p.getBlock.map(b => [b.slot, b])));
+  for (const s of producedByProvider[0] ?? []) {
+    const left = bySlot[0].get(s), right = bySlot[1].get(s);
+    if (left && right && JSON.stringify(left.result) !== JSON.stringify(right.result))
+      errors.push({ classification: 'PROVIDER_BLOCK_CONFLICT', slot: s });
+  }
+  for (const provider of archive.providers) {
+    let previous = null;
+    for (const entry of provider.getBlock) {
+      const block = entry.result;
+      if (!Number.isSafeInteger(block.parentSlot) || block.parentSlot >= entry.slot ||
+          typeof block.blockhash !== 'string' ||
+          typeof block.previousBlockhash !== 'string')
+        errors.push({ classification: 'INVALID_BLOCK_PARENT',
+          providerId: provider.providerId, slot: entry.slot });
+      if (previous && (block.parentSlot !== previous.slot ||
+          block.previousBlockhash !== previous.result.blockhash))
+        errors.push({ classification: 'PROVIDER_PARENT_CHAIN_BREAK',
+          providerId: provider.providerId, slot: entry.slot });
+      previous = entry;
+    }
+  }
   // Only ORIGINAL submitted bytes supplied by producer; never relabel RPC
   // getBlock bytes as original submitted wires.
   const wires = originalSubmittedWires(readOptionalJson('witness-bundle'));
