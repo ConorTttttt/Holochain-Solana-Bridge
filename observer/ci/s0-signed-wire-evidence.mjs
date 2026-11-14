@@ -219,6 +219,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                   mint:expected.mint,holochainScope:expected.scope,
                   idlSha256:(await import('node:crypto')).createHash('sha256')
                     .update(ciIdlText).digest('hex'),
+                  sourceCommitSha:index.sourceCommitSha,
                 };
                 const target={dnaHash:'NOT_DEPLOYED_DEMO_DNA',
                   agentKey:'NOT_DEPLOYED_DEMO_AGENT',
@@ -250,7 +251,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                 const queueArgs={ledger:restart,rpcUrls:[
                   'http://127.0.0.1:8899','http://127.0.0.1:9900'],
                   signature:item.signature,receiptAddress:receipt.address,
-                  expected,idlText:ciIdlText,codeVersion:'original-observer-ci',
+                  expected,idlText:ciIdlText,codeVersion:index.sourceCommitSha,
                   fetchFn:archivedRpc};
                 const savedOptIn=process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
                 process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY='1';
@@ -265,6 +266,74 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                   assert.equal(row.reviewedWitnessV2.source.blockhash,item.blockhash);
                   assert.equal(row.reviewedWitnessV2.proof.historyComplete,false);
                   assert.ok(verifyReviewedWitnessV2(row.reviewedWitnessV2));
+                  const originalV2File='ci-artifacts/observer-reviewed-v2-original-signed-localnet.json';
+                  mkdirSync('ci-artifacts',{recursive:true});
+                  const originalV2Bytes=Buffer.from(JSON.stringify({
+                    immutableSourceCommitSha:index.sourceCommitSha,
+                    originalLocalnetSource:'real SOL local-validator signed wire archived by same CI run',
+                    witness:row.reviewedWitnessV2,
+                    // No signed Holochain record exists at this stage.
+                    destinationReadback:{state:'not_approved_or_written',actionHash:null},
+                  },null,2)+'\n');
+                  writeFileSync(originalV2File,originalV2Bytes,{mode:0o600});
+                  const originalV2Sha=(await import('node:crypto')).createHash('sha256')
+                    .update(originalV2Bytes).digest('hex');
+                  writeFileSync(originalV2File+'.sha256',originalV2Sha+'  '+
+                    'observer-reviewed-v2-original-signed-localnet.json\n');
+                  console.log('ORIGINAL_KIT_V2_SOURCE_ARTIFACT_SHA256',originalV2Sha);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,idlText:ciIdlText+' '}),
+                    /PINNED_IDL_BYTES_REQUIRED/);
+                  const adversarialRpcCases=[
+                    {
+                      label:'signed-wire-message-tamper',
+                      mutate:(url,method,json)=>{
+                        if(method==='getTransaction'){
+                          const b=Buffer.from(json.result.transaction[0],'base64');
+                          b[b.length-2]^=1;
+                          json.result.transaction[0]=b.toString('base64');
+                        }
+                      },
+                    },
+                    {
+                      label:'execution-fee-metadata-tamper',
+                      mutate:(url,method,json)=>{
+                        if(method==='getTransaction')json.result.meta.fee+=1;
+                      },
+                    },
+                    {
+                      label:'second-endpoint-genesis-mismatch',
+                      mutate:(url,method,json)=>{
+                        if(url.includes('9900')&&method==='getGenesisHash')
+                          json.result='different-reported-genesis';
+                      },
+                    },
+                    {
+                      label:'later-receipt-account-owner-substitution',
+                      mutate:(url,method,json)=>{
+                        if(url.includes('9900')&&method==='getMultipleAccounts')
+                          json.result.value[0].owner='11111111111111111111111111111111';
+                      },
+                    },
+                  ];
+                  for(const item of adversarialRpcCases){
+                    let modified=false;
+                    const negativeRpc=async(url,init)=>{
+                      const original=await archivedRpc(url,init);
+                      const body=structuredClone(await original.json());
+                      const method=JSON.parse(init.body).method;
+                      const previous=JSON.stringify(body);
+                      item.mutate(url,method,body);
+                      modified ||= previous!==JSON.stringify(body);
+                      return {ok:true,json:async()=>body};
+                    };
+                    await assert.rejects(candidateV2Outbox.queueVerified({
+                      ...queueArgs,fetchFn:negativeRpc}),
+                      /contradicts|mismatch|noncanonical|invalid|signature|owner|genesis|receipt/i,
+                      item.label);
+                    assert.equal(modified,true,'negative must mutate original '+item.label);
+                  }
+                  assert.equal(candidateV2Outbox.status.rows[evidence.id].state,'pending');
                   for(const shortcut of ['transactionVerified','historyComplete',
                     'historyCoveredByTwoRpcClaims','witnessDigest']){
                     await assert.rejects(

@@ -234,6 +234,10 @@ export class DemoOutbox {
     need(typeof idlText==='string'&&hex64(this.expected.idlSha256)&&
       sha256(Buffer.from(idlText,'utf8'))===this.expected.idlSha256,
       'PINNED_IDL_BYTES_REQUIRED');
+    need(typeof this.expected.sourceCommitSha==='string'&&
+      /^[0-9a-f]{40}$/.test(this.expected.sourceCommitSha)&&
+      codeVersion===this.expected.sourceCommitSha,
+      'SOURCE_COMMIT_BINDING');
     const idl=JSON.parse(idlText);
     need(Array.isArray(rpcUrls)&&rpcUrls.length===2&&
       rpcUrls.every(x=>typeof x==='string'&&/^https?:\/\//.test(x))&&rpcUrls[0]!==rpcUrls[1],
@@ -302,7 +306,13 @@ export class DemoOutbox {
       'OCCURRENCE_REPLAY');
     this.state.rows[evidence.id]={state:'pending',observation,components,destination:this.destination,
       ...(reviewedWitnessV2?{reviewedWitnessV2}:{}),fingerprint,actionHash:null};
-    this.persist();return 'pending';
+    try{this.persist();}
+    catch(e){
+      // Never leave an unflushed in-memory row eligible for signed delivery.
+      delete this.state.rows[evidence.id];
+      throw e;
+    }
+    return 'pending';
   }
   async #identity(client){
     need(client&&typeof client.preflight==='function'&&typeof client.read==='function',
@@ -355,12 +365,12 @@ export class DemoOutbox {
   }
   async #deliver(id,client,{crashAt}={}){
     const row=this.state.rows[id];need(row,'UNKNOWN_SOURCE');
-    if(row.state==='acked')return 'acked';
     // No A4/SEC-approved v2 DNA ABI, Lair-signed ActionHash or authenticated
     // typed source/cell readback exists yet. Never send source-rich reviewed
     // evidence to the lossy A4 v1 adapter or treat its mock ACK as sufficient.
     need(row.observation.proof.evidenceOrigin!=='observer_reviewed_outbox',
       'REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED');
+    if(row.state==='acked')return 'acked';
     need(row.observation.proof.evidenceOrigin!=='test_only_fixture'||
       process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE==='1','SYNTHETIC_DELIVERY_DISABLED');
     if(row.state!=='pending')return this.#reconcile(id,client);

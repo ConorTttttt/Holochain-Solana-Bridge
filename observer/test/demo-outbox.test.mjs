@@ -156,7 +156,7 @@ test('18 signed write response mismatched readback ActionHash stays uncertain',a
 test('19 arbitrary JSON cannot claim reviewed provenance via production queue API',async t=>{
   const {outbox,ledger,evidence,tx}=make(t);
   await assert.rejects(outbox.queueVerified({ledger,evidence,rpcTransaction:tx,
-    codeVersion:'caller-says-reviewed'}),/TWO_RPC_URLS_REQUIRED/);
+    codeVersion:'caller-says-reviewed'}),/UNTRUSTED_AUTH_SHORTCUT/);
   assert.deepEqual(outbox.status.rows,{});
 });
 test('20 synthetic fixtures require explicit test-only opt-in and cannot become reviewed',t=>{
@@ -331,4 +331,60 @@ test('32 concurrent process lock is exclusive; no automatic stale lock theft',t=
   const {path,outbox}=make(t);
   assert.throws(()=>new DemoOutbox(path,{expected,destination}),/EEXIST/);
   assert.equal(outbox.status.rollbackSecurityHold,ROLLBACK_HOLD);
+});
+
+test('33 reopening persisted uncertain before a write never retries or ACKs',async t=>{
+  const {outbox,path,queue,evidence}=make(t);
+  queue();const client=remote();
+  assert.equal(await outbox.deliver(evidence.id,client,{crashAt:'after_uncertain'}),'uncertain');
+  assert.equal(client.writes,0);
+  outbox.close();
+  const again=new DemoOutbox(path,{expected,destination});
+  assert.equal(again.status.rows[evidence.id].state,'uncertain');
+  assert.equal(await again.deliver(evidence.id,client),'hold');
+  assert.equal(client.writes,0);
+  again.close();
+});
+test('34 reopening after ambiguous signed write ACKs matching readback without another write',async t=>{
+  const {outbox,path,queue,evidence}=make(t);
+  queue();const client=remote();
+  assert.equal(await outbox.deliver(evidence.id,client,{crashAt:'after_signed_write'}),'uncertain');
+  assert.equal(client.writes,1);
+  outbox.close();
+  const again=new DemoOutbox(path,{expected,destination});
+  assert.equal(await again.reconcile(evidence.id,client),'acked');
+  assert.equal(client.writes,1);
+  again.close();
+});
+test('35 pending fsync failure cannot leave a deliverable volatile row',async t=>{
+  const {outbox,ledger,evidence,tx,path}=make(t);
+  const original=outbox.persist.bind(outbox);
+  outbox.persist=()=>{throw Error('SIMULATED_JOURNAL_FSYNC_FAILURE')};
+  assert.throws(()=>outbox.queueSyntheticFixture({ledger,evidence,rpcTransaction:tx,
+    codeVersion:'synthetic-test'}),/SIMULATED_JOURNAL_FSYNC_FAILURE/);
+  assert.deepEqual(outbox.status.rows,{});
+  assert.equal(existsSync(path),false);
+  outbox.persist=original;
+  assert.equal(outbox.queueSyntheticFixture({ledger,evidence,rpcTransaction:tx,
+    codeVersion:'synthetic-test'}),'pending');
+});
+test('36 uncertain fsync failure blocks network call, not silently acknowledged',async t=>{
+  const {outbox,queue,evidence,path}=make(t);
+  queue();const client=remote();
+  const original=outbox.persist.bind(outbox);
+  outbox.persist=()=>{throw Error('SIMULATED_PRE_WRITE_FSYNC_FAILURE')};
+  await assert.rejects(outbox.deliver(evidence.id,client),
+    /SIMULATED_PRE_WRITE_FSYNC_FAILURE/);
+  assert.equal(client.writes,0);
+  assert.equal(JSON.parse(readFileSync(path,'utf8')).rows[evidence.id].state,'pending');
+  outbox.persist=original;
+});
+test('37 original RPC metadata canonical digest retains finite display uiAmount',()=>{
+  const meta={preTokenBalances:[{uiTokenAmount:{amount:'250000',decimals:6,uiAmount:0.25}}],
+    postTokenBalances:[],rewards:null};
+  assert.equal(domainDigest('HSC/test/uiAmount',meta),
+    domainDigest('HSC/test/uiAmount',{rewards:null,postTokenBalances:[],
+      preTokenBalances:[{uiTokenAmount:{decimals:6,uiAmount:0.25,amount:'250000'}}]}));
+  assert.throws(()=>canonicalJSON({wrong:Infinity}),/NON_CANONICAL_NUMBER/);
+  assert.throws(()=>canonicalJSON({wrong:9007199254740992}),/NON_CANONICAL_NUMBER/);
 });
