@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import BN from 'bn.js';
 import { Program } from '@anchor-lang/core';
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, VersionedTransaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
@@ -152,7 +152,20 @@ async function saveTransactionEvidence() {
       commitment: 'finalized', encoding: 'json', transactionDetails: 'full',
       rewards: false, maxSupportedTransactionVersion: 0,
     }]);
+    // Preserve the COMPLETE signed base64 containing block, in addition
+    // to the decoded JSON, for independently verifiable replay.
+    const signedBlockResponse = await rawPublicRpc('getBlock', [tx.slot, {
+      commitment: 'finalized', encoding: 'base64', transactionDetails: 'full',
+      rewards: false, maxSupportedTransactionVersion: 0,
+    }]);
+    assert.ok(Array.isArray(signedBlockResponse.parsed.result?.transactions) &&
+      signedBlockResponse.parsed.result.transactions.length > 0 &&
+      signedBlockResponse.parsed.result.transactions.every(item =>
+        Array.isArray(item.transaction) && item.transaction[1] === 'base64'),
+      'incomplete base64 finalized block');
     const block = blockResponse.parsed.result;
+    assert.equal(signedBlockResponse.parsed.result.blockhash, block.blockhash,
+      'base64/json containing block mismatch');
     assert.ok(block.blockhash, 'finalized local-validator block unavailable: ' + signature);
     const included = block.transactions.find((item) =>
       item.transaction?.signatures?.includes(signature));
@@ -162,6 +175,7 @@ async function saveTransactionEvidence() {
     const txFile = savePublicRpc('getTransaction-' + signature + '.rpc.json', transactionResponse);
     const signedTxFile = savePublicRpc('getTransaction-base64-' + signature + '.rpc.json', signedResponse);
     const blockFile = savePublicRpc('getBlock-' + tx.slot + '.rpc.json', blockResponse);
+    const signedBlockFile = savePublicRpc('getBlock-base64-' + tx.slot + '.rpc.json', signedBlockResponse);
     finalized.push({
       signature, slot: tx.slot, blockhash: block.blockhash,
       previousBlockhash: block.previousBlockhash, parentSlot: block.parentSlot,
@@ -171,7 +185,7 @@ async function saveTransactionEvidence() {
         preTokenBalances: rawTx.meta.preTokenBalances,
         postTokenBalances: rawTx.meta.postTokenBalances },
       getTransactionRawFile: txFile, getTransactionBase64RawFile: signedTxFile,
-      getBlockRawFile: blockFile,
+      getBlockRawFile: blockFile, getBlockBase64RawFile: signedBlockFile,
     });
   }
   const directory = new URL('../../target/localnet-evidence/', import.meta.url);
@@ -284,20 +298,48 @@ async function assertCustodyConservation(label, minContextSlot) {
   // Donated surplus is permitted; only spendable custody >= obligations is required.
 }
 async function send(ix, signers) {
-  const signature = await sendAndConfirmTransaction(connection, new Transaction().add(ix), signers, { commitment: 'confirmed' });
-  let included;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    included = await connection.getTransaction(signature, { commitment: 'confirmed', maxSupportedTransactionVersion: 0 });
-    if (included?.meta) break;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+  // Record pre-execution account bytes so a genuine unexpected on-chain
+  // rejection can be traced back to the actual instruction and state.
+  // Never capture keypair secrets, secret keys, seed phrases or wallet files.
+  const relevantKeys = ix.keys.filter((key) =>
+    !key.pubkey.equals(TOKEN_PROGRAM_ID) && !key.pubkey.equals(SystemProgram.programId));
+  const before = await connection.getMultipleAccountsInfo(relevantKeys.map((key) => key.pubkey), 'confirmed');
+  const outcome = await submitOnChain(ix, signers);
+  transactionEvidence.push({
+    label: outcome.error === null ? 'confirmed-on-chain-success' : 'UNEXPECTED-ON-CHAIN-REJECTION',
+    ...outcome,
+  });
+  if (outcome.error !== null) {
+    const after = await connection.getMultipleAccountsInfo(relevantKeys.map((key) => key.pubkey), 'confirmed');
+    const snapshot = (items) => relevantKeys.map((key, index) => ({
+      address: key.pubkey.toBase58(), signer: key.isSigner, writable: key.isWritable,
+      owner: items[index]?.owner.toBase58() ?? null,
+      lamports: items[index]?.lamports ?? null,
+      dataBase64: items[index] ? Buffer.from(items[index].data).toString('base64') : null,
+    }));
+    const evidence = {
+      kind: 'UNEXPECTED-INCLUDED-LOCALNET-TRANSACTION-ERROR-NOT-CONSENSUS-PROOF',
+      mode, genesisHash: await connection.getGenesisHash(),
+      programId: programId.toBase58(), ...artifactBinding,
+      instructionProgramId: ix.programId.toBase58(),
+      instructionDataBase64: Buffer.from(ix.data).toString('base64'),
+      signerPubkeys: signers.map((signer) => signer.publicKey.toBase58()),
+      before: snapshot(before), after: snapshot(after),
+      ...outcome,
+    };
+    const directory = new URL('../../target/localnet-evidence/', import.meta.url);
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    writeFileSync(new URL('unexpected-onchain-' + outcome.signature + '.json', directory),
+      JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600 });
+    console.error('UNEXPECTED_ON_CHAIN_REJECTION ' + JSON.stringify({
+      signature: outcome.signature, instructionProgramId: evidence.instructionProgramId,
+      signerPubkeys: evidence.signerPubkeys, error: outcome.error, logs: outcome.logs,
+    }));
+    throw new Error('included transaction failed unexpectedly: ' + outcome.signature +
+      ' program=' + evidence.instructionProgramId + ' meta.err=' + JSON.stringify(outcome.error));
   }
-  assert.ok(included?.meta, 'successful transaction not in validator ledger: ' + signature);
-  assert.equal(included.meta.err, null, 'claimed-success transaction actually failed: ' + signature);
-  transactionEvidence.push({ label: 'confirmed-on-chain-success', signature, slot: included.slot,
-    error: included.meta.err, logs: included.meta.logMessages,
-    recentBlockhash: included.transaction.message.recentBlockhash });
-  await assertCustodyConservation('successful transaction ' + signature, included.slot);
-  return signature;
+  await assertCustodyConservation('successful transaction ' + outcome.signature, outcome.slot);
+  return outcome.signature;
 }
 async function fund(keypair) {
   const signature = await connection.requestAirdrop(keypair.publicKey, 3 * LAMPORTS_PER_SOL);
@@ -320,6 +362,11 @@ async function submitOnChain(ix, signers) {
   assert.deepEqual(included.meta.err, confirmation.value.err, 'confirmation and transaction mismatch');
   assert.ok(included.meta.logMessages?.length, 'no validator execution logs');
   return { signature, slot: included.slot, blockTime: included.blockTime,
+    instructionProgramId: ix.programId.toBase58(),
+    signerPubkeys: signers.map((signer) => signer.publicKey.toBase58()),
+    instructionAccounts: ix.keys.map((key) => ({
+      address: key.pubkey.toBase58(), signer: key.isSigner, writable: key.isWritable,
+    })),
     recentBlockhash: included.transaction.message.recentBlockhash,
     error: included.meta.err, logs: included.meta.logMessages };
 }

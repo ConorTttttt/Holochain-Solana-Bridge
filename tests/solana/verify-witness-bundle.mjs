@@ -26,7 +26,7 @@ const checkBinding = (object, label) => {
     label + ': missing/invalid genesis identity');
 };
 const openRpc = (name) => {
-  assert.match(name, /^[A-Za-z0-9-]+\\.rpc\\.json$/, 'unsafe witness path');
+  assert.match(name, /^[A-Za-z0-9-]+\.rpc\.json$/, 'unsafe witness path');
   const response = readJson(join(dir, name));
   assert.equal(response.jsonrpc, '2.0', name + ': missing JSON-RPC version');
   assert.equal(response.error, undefined, name + ': RPC error');
@@ -49,9 +49,14 @@ for (const witness of bundle.finalized) {
   const parsed = openRpc(witness.getTransactionRawFile);
   const signed = openRpc(witness.getTransactionBase64RawFile);
   const block = openRpc(witness.getBlockRawFile);
+  const signedBlock = openRpc(witness.getBlockBase64RawFile);
   assert.equal(parsed.slot, witness.slot, 'parsed transaction slot mismatch');
   assert.equal(signed.slot, witness.slot, 'signed transaction slot mismatch');
   assert.equal(block.blockhash, witness.blockhash, 'containing blockhash mismatch');
+  assert.equal(signedBlock.blockhash, witness.blockhash, 'signed blockhash mismatch');
+  assert.ok(Array.isArray(signedBlock.transactions), 'signed block must include all transactions');
+  assert.equal(signedBlock.transactions.length, block.transactions.length,
+    'signed and decoded blocks have different transaction counts');
   assert.deepEqual(parsed.meta?.err, witness.meta.err, 'parsed transaction error mismatch');
   assert.deepEqual(signed.meta?.err, witness.meta.err, 'signed transaction error mismatch');
   assert.equal(parsed.version, signed.version, 'parsed/base64 version mismatch');
@@ -69,6 +74,14 @@ for (const witness of bundle.finalized) {
   assert.ok(included, 'signed transaction absent from containing block');
   assert.deepEqual(included.meta?.err, witness.meta.err,
     'containing block execution disagrees with transaction');
+  const index = block.transactions.indexOf(included);
+  const signedIncluded = signedBlock.transactions[index];
+  assert.ok(Array.isArray(signedIncluded?.transaction) && signedIncluded.transaction.length === 2 &&
+    signedIncluded.transaction[1] === 'base64', 'matching signed block entry missing');
+  assert.equal(signedIncluded.transaction[0], signed.transaction[0],
+    'getBlock transaction bytes disagree with signed getTransaction bytes');
+  assert.deepEqual(signedIncluded.meta?.err, witness.meta.err,
+    'signed block execution disagrees with transaction');
   if (witness.meta.err === null) accepted += 1;
   else rejected += 1;
 }
