@@ -344,3 +344,149 @@ jobs:
             target/localnet-evidence/restart-validator-after.log
           if-no-files-found: error
           retention-days: 14
+
+  # A1 source execution and Observer Kit replay are prerequisites: unlike the
+  # standalone A4 archived-source build, this uses only fresh same-run evidence.
+  source-bound-own-dna-build:
+    name: Real SOURCE-BOUND own DNA locked build (NO SIGNING OR GRANT)
+    needs: [cross-lane-js]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: integration-cross-lane-js
+          path: ci-artifacts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: .
+      - name: Prove same-run original signed source and regenerated YAML BEFORE checking build locks
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
+          printf '%s\n' "$A0_EXPECTED_SHA" > ci-artifacts/build-checkout.sha
+          test "$(cat target/localnet-evidence/source-commit.txt)" = "$A0_EXPECTED_SHA"
+          test -s ci-artifacts/a0-execution-bound-dna.yaml
+          test -s ci-artifacts/a0-execution-bound-dna.report.json
+          (cd ci-artifacts && sha256sum -c a0-execution-bound-dna.yaml.sha256)
+          (cd ci-artifacts && sha256sum -c a0-execution-bound-dna.report.json.sha256)
+          (cd target/localnet-evidence && sha256sum -c evidence-manifest.sha256)
+          node scripts/ci/verify-integration-provenance.mjs
+          # The source producer/consumer and original A4 template checks
+          # execute AGAIN here; never trust an unauthenticated YAML label.
+          node demo/a0-execution-bound-dna.mjs --out ci-artifacts/a0-recomputed-bound-dna.yaml
+          cmp ci-artifacts/a0-execution-bound-dna.yaml ci-artifacts/a0-recomputed-bound-dna.yaml
+          cmp ci-artifacts/a0-execution-bound-dna.report.json ci-artifacts/a0-recomputed-bound-dna.report.json
+      - name: Fail closed without BOTH reviewed A4 Cargo.lock graphs; materialize only in throwaway checkout
+        run: |
+          set -euo pipefail
+          for lock in holochain/demo/Cargo.lock holochain/demo/ham-adapter/Cargo.lock; do
+            if [[ ! -s "$lock" ]] || ! git ls-files --error-unmatch -- "$lock" >/dev/null 2>&1; then
+              echo "BLOCKED_A4_REVIEWED_LOCK_ABSENT: $lock" | tee ci-artifacts/a0-source-bound-build-blocker.txt
+              exit 3
+            fi
+            sha256sum "$lock" | tee -a ci-artifacts/a0-source-bound-locks.sha256
+          done
+          cp holochain/demo/dna.yaml ci-artifacts/a0-original-checked-in-a4-dna.yaml
+          cp ci-artifacts/a0-execution-bound-dna.yaml holochain/demo/dna.yaml
+          cmp ci-artifacts/a0-execution-bound-dna.yaml holochain/demo/dna.yaml
+          git diff -- holochain/demo/dna.yaml > ci-artifacts/a0-ephemeral-dna-diff.patch
+          test -s ci-artifacts/a0-ephemeral-dna-diff.patch
+          echo 'EPHEMERAL_ONLY_SOURCE_PROJECTION__NO_GIT_COMMIT__NO_ZOME_CALL' > ci-artifacts/a0-build-policy.txt
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Compile native HAM and own DNA WASMs and pack actual Holochain 0.7.1 bundles
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add wasm32-unknown-unknown --toolchain 1.95.0
+          rustc +1.95.0 -Vv | tee ci-artifacts/a0-locked-rust-version.log
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash holochain/demo/build.sh 2>&1 | tee ci-artifacts/a0-real-source-bound-build.log
+          test -s holochain/demo/demo-build-dna-hash.txt
+          test -s holochain/demo/demo-build-artifacts.sha256
+          (cd holochain/demo && sha256sum -c demo-build-artifacts.sha256)
+          echo 'BUILT_ONLY__NOT_INSTALLED_OR_SIGNED' > ci-artifacts/a0-build-state.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-source-bound-own-dna-build-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ci-artifacts/
+            holochain/demo/demo-build-dna-hash.txt
+            holochain/demo/demo-build-artifacts.sha256
+            holochain/demo/holochain_solana_audit_demo.dna
+            holochain/demo/holochain_solana_audit_demo.happ
+            holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm
+          if-no-files-found: warn
+          retention-days: 14
+
+  source-bound-own-dna-install-readonly:
+    name: Actual own DNA conductor install and verified CellId (NO ZOME CALL)
+    needs: [source-bound-own-dna-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: integration-source-bound-own-dna-build-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .
+      - name: Bind actual compiled DNA/hApp to the exact source and both verified locks
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
+          test "$(cat ci-artifacts/build-checkout.sha)" = "$A0_EXPECTED_SHA"
+          test -s ci-artifacts/a0-execution-bound-dna.yaml
+          (cd ci-artifacts && sha256sum --check a0-execution-bound-dna.yaml.sha256)
+          test -s holochain/demo/demo-build-dna-hash.txt
+          test -s holochain/demo/demo-build-artifacts.sha256
+          (cd holochain/demo && sha256sum --check demo-build-artifacts.sha256)
+          test -s holochain/demo/holochain_solana_audit_demo.happ
+          test -s holochain/demo/holochain_solana_audit_demo.dna
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Install our source-bound DNA on disposable real conductor and admin-read CellId
+        run: |
+          set -euo pipefail
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash scripts/ci/a0-own-dna-install-readonly.sh \
+            holochain/demo/holochain_solana_audit_demo.happ \
+            holochain/demo/holochain_solana_audit_demo.dna \
+            ci-artifacts/source-bound-conductor
+          test -s ci-artifacts/source-bound-conductor/own-dna-install-readonly.json
+          echo 'OWN_DNA_INSTALLED_READONLY__EXTERNAL_LAIR_AND_A5_CALL_APPROVAL_STILL_BLOCKED'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-source-bound-own-dna-readonly-install-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ci-artifacts/source-bound-conductor/
+            ci-artifacts/build-checkout.sha
+            ci-artifacts/a0-execution-bound-dna.yaml.sha256
+          if-no-files-found: warn
+          retention-days: 14
