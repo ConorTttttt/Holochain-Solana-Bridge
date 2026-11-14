@@ -51,6 +51,7 @@ const evidence = Object.freeze({
 
 const inert = x => {
   assert.equal(x.creditEligible, false);
+  assert.equal(x.independentConsensusVerified, false);
   assert.equal(x.spendableBaseUnits, '0');
   assert.equal(x.withdrawalAuthorized, false);
 };
