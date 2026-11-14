@@ -27,8 +27,11 @@ function witnessFile(dir,name,pattern) {
   need(typeof name === 'string' && pattern.test(name), 'unsafe/missing archived filename');
   return jsonFile(join(dir,name));
 }
-function rpcResult(dir,name) {
-  const response = witnessFile(dir,name,/^(getTransaction|getBlock|getMultipleAccounts)-[A-Za-z0-9-]+\.rpc\.json$/);
+function rpcResult(dir,name,mode) {
+  need(typeof name === 'string' && name.startsWith(mode + '-'),
+    'cross-scenario RPC filename rejected');
+  const response = witnessFile(dir,name,
+    /^(lifecycle|init-capture|u64-max)-(getTransaction|getBlock|getMultipleAccounts)-[A-Za-z0-9-]+\.rpc\.json$/);
   need(response?.jsonrpc === '2.0' && response.error === undefined &&
     response.result !== null && response.result !== undefined,
     'incomplete RPC response in ' + name);
@@ -77,7 +80,7 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
       snapshot.slot >= trusted.trustedDeploymentSlot &&
       Array.isArray(snapshot.accounts) && snapshot.accounts.length >= 3,
       label + ': invalid finalized account manifest');
-    const raw = rpcResult(dir,snapshot.getMultipleAccountsRawFile);
+    const raw = rpcResult(dir,snapshot.getMultipleAccountsRawFile,mode);
     need(raw.context?.slot === snapshot.slot &&
       Array.isArray(raw.value) && raw.value.length === snapshot.accounts.length,
       label + ': inconsistent finalized account RPC');
@@ -103,12 +106,12 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     signatures.add(witness.signature);
     need(Number.isSafeInteger(witness.slot) &&
       witness.slot >= trusted.trustedDeploymentSlot, 'untrusted witness slot');
-    const parsed = rpcResult(dir,witness.getTransactionRawFile);
-    const signed = rpcResult(dir,witness.getTransactionBase64RawFile);
-    const blockJson = rpcResult(dir,witness.getBlockRawFile);
+    const parsed = rpcResult(dir,witness.getTransactionRawFile,mode);
+    const signed = rpcResult(dir,witness.getTransactionBase64RawFile,mode);
+    const blockJson = rpcResult(dir,witness.getBlockRawFile,mode);
     // SOL must capture a SECOND getBlock response with encoding=base64.
     // JSON-only blocks cannot pass OBS's every-entry Ed25519 policy.
-    const blockBase64 = rpcResult(dir,witness.getBlockBase64RawFile);
+    const blockBase64 = rpcResult(dir,witness.getBlockBase64RawFile,mode);
     need(parsed.slot === witness.slot && signed.slot === witness.slot &&
       parsed.version === signed.version &&
       ['legacy',0,1].includes(signed.version) &&
@@ -157,7 +160,7 @@ export async function replayValidatorWitness(options) {
   const {signature, trusted} = options;
   need(typeof signature === 'string', 'explicit deposit signature required');
   // Reuse the same actual @solana/kit Ed25519 block-entry verifier as the indexer.
-  const {signatureOf} = await import('../src/indexer.mjs');
+  const {signatureOf,sameSolanaExecutionMeta} = await import('../src/indexer.mjs');
   const {verifyDepositCandidates,attachReceiptObservation} =
     await import('../src/transaction.mjs');
   const {verifySnapshot} = await import('../src/verify.mjs');
@@ -179,7 +182,7 @@ export async function replayValidatorWitness(options) {
     const entry = item.blockBase64.transactions[offsets[0]];
     need(same(entry.version,item.signed.version) &&
       same(entry.transaction,item.signed.transaction) &&
-      same(entry.meta,item.signed.meta),
+      sameSolanaExecutionMeta(entry.meta,item.signed.meta),
       'getTransaction contradicts containing base64 getBlock');
     if (item.witness.signature === signature) selected = item;
   }
