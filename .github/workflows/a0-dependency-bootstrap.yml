@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   dependency-proposal:
-    name: Resolve both A4 Cargo graphs (NOT a trusted locked build)
+    name: Preserve reviewed WASM lock and propose missing native HAM lock (NOT a build)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -38,14 +38,15 @@ jobs:
           test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
           test -s holochain/demo/Cargo.toml
           test -s holochain/demo/ham-adapter/Cargo.toml
-          test ! -e holochain/demo/Cargo.lock
+          test -s holochain/demo/Cargo.lock
+          git ls-files --error-unmatch -- holochain/demo/Cargo.lock
           test ! -e holochain/demo/ham-adapter/Cargo.lock
       - name: Install pinned Rust only (NOT Nix, Lair or a conductor)
         run: |
           set -euo pipefail
           rustup toolchain install 1.95.0 --profile minimal
           rustc +1.95.0 -Vv
-      - name: Resolve both independent Holochain Cargo graphs without executing code
+      - name: Preserve reviewed WASM graph and propose native HAM lock without executing code
         env:
           A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
