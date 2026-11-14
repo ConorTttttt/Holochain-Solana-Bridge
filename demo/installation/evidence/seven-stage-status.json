@@ -1,19 +1,25 @@
 {
-  "baselineSourceCommit":"03b567a992bcd31930b49d08f594a4ef7ff58680",
-  "originalWorkflowRun":43648980986,
-  "independentReadOnlyVerificationRun":43651744347,
-  "stages":{
-    "source_verified":"BASELINE_EXECUTED_ORIGINAL_ARCHIVE_REHASHED",
-    "observer_evidence_admitted":"BASELINE_KIT_V2_PENDING_NO_ACK_ORIGINAL_BYTES_RECHECKED",
-    "holochain_runtime_installed":"NOT_EXECUTED_INSTALLATION_AUTHORIZATION_ABSENT",
-    "exact_call_approved":"NOT_APPROVED_SEPARATE_SIGNED_ZOME_CALL_GATE",
-    "signed_audit_action_executed":"NOT_EXECUTED",
-    "typed_readback_verified":"NOT_EXECUTED",
-    "restart_replay_verified":"NOT_EXECUTED"
+  "baselineSourceCommit": "03b567a992bcd31930b49d08f594a4ef7ff58680",
+  "originalWorkflowRun": 43648980986,
+  "independentReadOnlyVerificationRun": 43653123179,
+  "stages": {
+    "source_verified": "BASELINE_EXECUTED_ORIGINAL_ARCHIVE_REHASHED",
+    "observer_evidence_admitted": "BASELINE_KIT_V2_PENDING_NO_ACK_ORIGINAL_BYTES_RECHECKED",
+    "holochain_runtime_installed": "NOT_EXECUTED_INSTALLATION_AUTHORIZATION_ABSENT",
+    "exact_call_approved": "NOT_APPROVED_SEPARATE_SIGNED_ZOME_CALL_GATE",
+    "signed_audit_action_executed": "NOT_EXECUTED",
+    "typed_readback_verified": "NOT_EXECUTED",
+    "restart_replay_verified": "NOT_EXECUTED"
   },
-  "installedAgentPubKey":null,"installedCellId":null,"actionHash":null,
-  "externalLairIdentityVerified":false,"v2TransportApproved":false,
-  "creditEligible":false,"independentConsensusVerified":false,
-  "spendableBaseUnits":"0","withdrawalAuthorized":false,
-  "demoReady":false
+  "installedAgentPubKey": null,
+  "installedCellId": null,
+  "actionHash": null,
+  "externalLairIdentityVerified": false,
+  "v2TransportApproved": false,
+  "creditEligible": false,
+  "independentConsensusVerified": false,
+  "spendableBaseUnits": "0",
+  "withdrawalAuthorized": false,
+  "demoReady": false,
+  "reviewedExecutorCandidateSource": "8ecbee6818b6b1aba355bf8bcbbefd3fd68666f8"
 }
