@@ -47,7 +47,7 @@ pub fn get_contract(_: ()) -> ExternResult<DemoContract> {
 
 fn local_records() -> ExternResult<Vec<AuditRecord>> {
     let records = query(ChainQueryFilter::new()
-        .entry_type(EntryType::App(solana_audit_integrity::UnitEntryTypes::AuditObservation.into()))
+        .entry_type(solana_audit_integrity::UnitEntryTypes::AuditObservation.try_into()?)
         .include_entries(true))?;
     let mut out = Vec::new();
     for record in records {
@@ -60,8 +60,17 @@ fn local_records() -> ExternResult<Vec<AuditRecord>> {
 
 #[hdk_extern]
 pub fn get_observation(source_id: String) -> ExternResult<Option<AuditRecord>> {
-    let found = local_records()?.into_iter().find(|r| r.observation.source.id == source_id);
-    Ok(found)
+    let mut matches = local_records()?.into_iter()
+        .filter(|r| r.observation.source.id == source_id);
+    let first = matches.next();
+    // An ambiguous local chain is NOT safe to reconcile by choosing the first
+    // record. This is only a same-author check; it says nothing about other
+    // authors, partitions, source-chain forks or hostile rollback.
+    if matches.next().is_some() {
+        return Err(wasm_error!(WasmErrorInner::Guest(
+            "multiple local observations for source ID".into())));
+    }
+    Ok(first)
 }
 
 #[hdk_extern]
