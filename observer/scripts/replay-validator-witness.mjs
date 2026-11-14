@@ -121,6 +121,15 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     need(typeof wire === 'string' && wire.length > 0 &&
       Buffer.from(wire,'base64').toString('base64') === wire,
       'truncated/noncanonical signed transaction');
+    // Independent of SOL's bundle verifier: compare the original transaction
+    // bytes recorded at submission against finalized RPC bytes for this signature.
+    // Duplicate operation-log entries are allowed only if their wire bytes agree.
+    const submitted = Array.isArray(bundle.transactions) ?
+      bundle.transactions.filter(op => op?.signature === witness.signature &&
+        typeof op.signedWireBase64 === 'string') : [];
+    need(submitted.length > 0 &&
+      submitted.every(op => op.signedWireBase64 === wire),
+      'original submitted signed transaction differs from finalized wire');
     need(signed.meta && parsed.meta && witness.meta &&
       Object.hasOwn(signed.meta,'err') && Object.hasOwn(parsed.meta,'err') &&
       Object.hasOwn(witness.meta,'err') &&
@@ -218,7 +227,8 @@ export async function replayValidatorWitness(options) {
     x.transactionVerified === true),
     'shadow boundary escalation');
   return {evidence,accepted:archive.accepted,rejected:archive.rejected,
-    historyIndexed:false,independentConsensusVerified:false,creditEligible:false};
+    historyIndexed:false,independentConsensusVerified:false,creditEligible:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false};
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
