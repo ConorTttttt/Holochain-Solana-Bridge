@@ -30,7 +30,7 @@
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "80f79e6c0499122f3b36762f63eac990dab50111",
+  "parentIntegrationCommit": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/verify-integration-provenance.mjs",
@@ -65,7 +65,7 @@
       "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md"
     ]
   },
-  "method": "New immutable review child of PR #45 (not rewriting #39/#41/#45). Adopt ONLY exact Agent 3 reviewed production indexer and RPC meta negative blobs, preserve original CI witness producer and four denial fields. Run exact-SHA real three-mode Kit replay. No approval asserted.",
+  "method": "Exact reviewed A3 original indexer adopted in immutable #46 bc7c; create NEW review child to trigger exact-head RAVE five-job regression using CI-only explicit branch allowlist. All #46 6/6 shared + 3/3 real cross-agent pass preserved. A0 still blocked on source/ABI/Lair and SEC.",
   "exceptions": [
     "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
     "No binary/IDL hashes reused across disposable program IDs"
@@ -168,20 +168,21 @@
     }
   },
   "lastVerifiedExecution": {
-    "integrationSha": "80f79e6c0499122f3b36762f63eac990dab50111",
-    "sharedActionsRun": 43590812005,
+    "integrationSha": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
+    "sharedActionsRun": 43593366000,
     "sharedActionsConclusion": "success 6/6",
-    "integrationActionsRun": 43590812095,
-    "integrationActionsConclusion": "failure",
+    "integrationActionsRun": 43593366067,
+    "integrationActionsConclusion": "success 3/3",
     "integrationJobs": {
-      "solanaLifecycle": "success (real validator and three scenario archives)",
-      "sdkFixtures": "failure 3/3 original wire replay from production OBS indexer raw rewards-null/[] comparison",
+      "solanaLifecycle": "success",
+      "sdkFixtures": "success 3 signed-wire real scenarios + negative regressions",
       "publishedRaveRust": "success"
     },
-    "witnessArtifact": 14113085434,
-    "witnessArtifactSha256": "dfc4c82ec70cb16ff04a758f48bb3d78509c7bbbff1d319bf2f2e79ff026e6c8",
-    "sourceBlobFromAgent3": "8f1cdba2790bfd22a7f0235148ccb6a6ac7987e3",
-    "sourceStatus": "PROVISIONAL_PENDING_SAME_SHA_REAL_REPLAY_AND_A3_A5_HANDOFF"
+    "witnessArtifact": 14113652255,
+    "witnessArtifactSha256": "9f4dc3d4a94dc918e37edaf90489a121929e508e95690ed67ec95c7f39f99598",
+    "crossLaneArtifact": 14113667366,
+    "crossLaneArtifactSha256": "af326d48480cfdd9658efdf177dbc239e872c3cda550e0eb4533cad4aa538afc",
+    "sourceStatus": "OBS #36 exact blob was exercised in real Kit; A3 outbox, formal independent SEC and A2 #43 remain pending"
   },
   "integrationOnlyCiRemediation": {
     "date": "2026-11-14",
@@ -214,14 +215,14 @@
     "withdrawalAuthorized": false
   },
   "candidate": {
-    "branch": "integration/demo/2026-11-14-obs-replay-reviewed-source",
+    "branch": "integration/demo/2026-11-14-a1-rave5-required-review",
     "integrationPr": "NEW_DRAFT_REQUIRED",
     "status": "UNVERIFIED_NO_GREEN_CLAIM",
-    "basisCommit": "80f79e6c0499122f3b36762f63eac990dab50111",
+    "basisCommit": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
     "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
     "creationDateUtc": "2026-11-14",
     "immutableIdentity": "Create one review child only; do not rewrite failures or force-push",
-    "execution": "Shared CI 6 jobs, real SOL 3 scenario producer, real OBS Kit, RAVE five jobs, Holochain own DNA real runtime + restart at candidate SHA"
+    "execution": "At exactly new SHA: shared 6/6 + real SOL three archives and Observer replay + RAVE five jobs. A0 Holochain signed own-demo-DNA call remains independently BLOCKED."
   },
   "fileProvenance": {
     "tests/solana/integration.test.mjs": {
@@ -303,10 +304,10 @@
     }
   },
   "currentAcceptance": {
-    "A0": "BLOCKED pending exact-source signed wire replay and own-DNA external Lair signed write",
-    "B1": "BLOCKED (selected blocks, not complete original produced-slot two-provider history)",
-    "B2": "BLOCKED (published Unyt source/ABI/capabilities unverified)",
-    "C": "NO-GO (no credit, spend or withdrawal)"
+    "A0": "PARTIAL SOL/OBS root fixed; own-DNA write and signed real ActionHash blocked on Agent 4/A3/A5",
+    "B1": "BLOCKED (52 selected blocks not complete original two-provider produced-slot history)",
+    "B2": "BLOCKED (published Unyt source/ABI/capability proof absent)",
+    "C": "NO-GO (credit/spend/withdrawal all disabled)"
   },
   "nonEconomicPolicy": {
     "creditEligible": false,
@@ -337,5 +338,13 @@
     "status": "NOT_SIGNED_OFF_BY_A3_A4_A5",
     "sourceOnlyPrevious": "PR #45 source/witness/destination is not target delivery payload",
     "adapterSafety": "test_only_fixture remains only allowed origin pending A3/A5 authenticated outbox review"
+  },
+  "raveFiveJobRequired": {
+    "oldAtSha": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
+    "oldStatus": "not run for this branch: explicit push branch allowlist",
+    "newCandidateBranch": "integration/demo/2026-11-14-a1-rave5-required-review",
+    "change": ".github/workflows/rave-unyt-release.yml push branch allowlist only",
+    "status": "UNVERIFIED until five exact-SHA jobs complete",
+    "noUnytEconomicCalls": true
   }
 }

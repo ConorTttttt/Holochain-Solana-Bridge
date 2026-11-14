@@ -2,7 +2,7 @@ name: RAVE Unyt v0.117.0 release proof (non-economic)
 
 on:
   push:
-    branches: [agent/rave/9-rave-validation, integration/s0/11-all-agent-snapshot, integration/s0/2026-11-14-agent1-candidate, integration/s0/2026-11-14-sol38-review-pending]
+    branches: [agent/rave/9-rave-validation, integration/s0/11-all-agent-snapshot, integration/s0/2026-11-14-agent1-candidate, integration/s0/2026-11-14-sol38-review-pending, integration/demo/2026-11-14-a1-rave5-required-review]
   workflow_dispatch:
 
 permissions:
