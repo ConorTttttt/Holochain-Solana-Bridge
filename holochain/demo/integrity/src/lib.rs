@@ -161,17 +161,30 @@ pub fn check(item: &AuditObservation) -> Result<(), String> {
 
 #[hdk_extern]
 pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
-    if matches!(&op, Op::RegisterUpdate(_) | Op::RegisterDelete(_)
-        | Op::RegisterCreateLink(_) | Op::RegisterDeleteLink(_)) {
+    // HDI 0.8.1 uses CreateEntry/CreateRecord/Update/Delete/CreateLink/
+    // DeleteLink, not the pre-0.7 Register*/Store* op variant names.
+    // Classify the underlying action so the same append-only prohibition
+    // applies at record, entry, activity and registration authorities.
+    if matches!(
+        op.action_type(),
+        ActionType::Update | ActionType::Delete
+            | ActionType::CreateLink | ActionType::DeleteLink
+    ) {
         return Ok(ValidateCallbackResult::Invalid("audit DNA is append-only".into()));
     }
     match op.flattened::<EntryTypes, LinkTypes>()? {
-        FlatOp::StoreEntry(OpEntry::CreateEntry { app_entry: EntryTypes::AuditObservation(item), .. }) => {
-            Ok(match check(&item) {
-                Ok(()) => ValidateCallbackResult::Valid,
-                Err(reason) => ValidateCallbackResult::Invalid(reason),
-            })
-        }
+        // Both record authorities and entry authorities independently validate
+        // the SAME typed audit payload. Skipping CreateRecord would permit an
+        // otherwise-invalid entry to be accepted at a second DHT authority.
+        FlatOp::CreateEntry(OpEntry::CreateEntry {
+            app_entry: EntryTypes::AuditObservation(item), ..
+        })
+        | FlatOp::CreateRecord(OpRecord::CreateEntry {
+            app_entry: EntryTypes::AuditObservation(item), ..
+        }) => Ok(match check(&item) {
+            Ok(()) => ValidateCallbackResult::Valid,
+            Err(reason) => ValidateCallbackResult::Invalid(reason),
+        }),
         _ => Ok(ValidateCallbackResult::Valid),
     }
 }
