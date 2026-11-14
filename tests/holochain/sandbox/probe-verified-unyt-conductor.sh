@@ -54,7 +54,7 @@ printf '%s' "$PASSPHRASE" | timeout --signal=INT 300s hc sandbox --piped generat
   --app-id unyt-v0117-audit \
   --in-process-lair \
   --root "$ROOT" --directories agent-a \
-  "$VERIFIED/unyt.happ" > "$OUT/logs/install.log" 2>&1 || {
+  "$VERIFIED/unyt.happ" network mem > "$OUT/logs/install.log" 2>&1 || {
     echo 'BLOCKED_UNYT_CONDUCTOR: real hApp sandbox installation failed; see install.log' >&2
     exit 2
   }
