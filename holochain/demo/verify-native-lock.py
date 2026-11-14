@@ -15,7 +15,7 @@ ROOT = "solana-audit-ham-adapter"
 DIRECT = {"anyhow", "ham", "holo_hash", "holochain_client", "serde", "serde_json", "tokio"}
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
 HAM_SOURCE = f"git+https://github.com/unytco/ham?rev={REV}#{REV}"
-REF = re.compile(r"([A-Za-z0-9_-]+)(?: ([0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?))?\\Z")
+REF = re.compile(r"([A-Za-z0-9_-]+)(?: ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?))?\Z")
 
 
 def refuse(reason):
