@@ -44,7 +44,7 @@ The first new conductor attempt failed because a long GitHub workspace path exce
 
 - The pinned probe now parses `list-apps`/`list-cells` JSON and fails unless the installed app is enabled and has the exact DNA hash and a consistent agent key after restart. The initial successful run performed coarse text checks; enhanced identity assertions must pass a newer run.
 - It now redacts the disposable Lair `socket?k=...` auth token from uploaded startup logs; earlier success logs contained a transient credential to a CI-only Lair keystore that was torn down with the runner.
-- Its new invocation requests `hc sandbox ... network mem` to avoid contacting the default public Holochain development bootstrap and relay endpoints; only a new CI run can establish that the CLI invocation is correct and still installs successfully.
+- Its new invocation requests `hc sandbox ... network mem` and the new CI passes installation and restart. The generated NetworkConfig **still displays default public dev bootstrap and relay URLs**, so outbound network isolation is **not** established without connection-level evidence. Do not confuse memory-transport intent with proof that no network endpoint was contacted.
 - Existing non-economic Holochain shadow tests are now a separate GitHub Actions job. They are **model/test-only** until genuine validator-backed Observer evidence and a reviewed audit-only Unyt zome entry point are available.
 
 ## Not proven; economics remain disabled
@@ -54,3 +54,24 @@ The first new conductor attempt failed because a long GitHub workspace path exce
 The following require exact source-equivalent programs and adversarial tests before any economic release: `ParkedLinkStanding`, conflicting source-chain histories, duplicate recovery, agreement replacement, partition/rejoin, source-chain warrants, migration and Holochain 0.7.1 countersigning feature support. Do not infer ledger finality from one local conductor restart or one network agent.
 
 Maintain `creditEligible:false`, `spendableBaseUnits:"0"`, `withdrawalAuthorized:false`; **no spendable credit issuance, withdrawal, live transfer or mainnet custody.**
+
+
+## Latest verified combined baseline: run 43536513700
+
+Pinned branch commit `b94774816a38c35805b835a4c1ef78ae4432d714` passed all **five** GitHub Actions jobs:
+
+| CI gate | Outcome |
+| --- | --- |
+| Publisher-signed public Unyt v0.117.0 release bytes | **PASS** |
+| Published RAVE 0.15.0 pinned native regressions | **PASS** |
+| Pinned Holonix 0.7.1 bundle/DNA/WASM inventory | **PASS** |
+| Disposable real conductor install, restart, exact enabled app/cell DNA identity | **PASS** |
+| Existing non-economic OBS/Holochain shadow suite | **39 PASS, 0 FAIL, 0 SKIP** |
+
+[Full workflow](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43536513700), [real conductor artifact](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43536513700/artifacts/14088719826). Last artifact ZIP SHA-256: `becebff694d9d573d6e32b6302f818dbab8dcedadd34c24f97bfff2a24f4431c`.
+
+The latest `installed-apps-after-restart.log` reports `unyt-v0117-audit`, enabled `alliance` role, exact expected DNA `uhC0k1RtXY23HgGGKZdpNkF9Q_w8jwv57nviRQISGc4Ykw5SKGTDZ`. The separate `list-cells` record matches the installed app's disposable agent and DNA. Exact JSON app/cell assertions passed. Both startup logs contain `socket?k=[REDACTED]`, with no leaked live Lair auth token value; no keystore/database is in the artifact.
+
+**Network caveat:** `network mem` is accepted by the sandbox CLI and the local conductor lifecycle passes. Config output still contains `https://dev-test-bootstrap2.holochain.org/` and the default Iroh development relay URL; the test did not trace outbound sockets and therefore cannot independently prove there was no external networking. The sandbox account is disposable and the probe makes no economic zome calls.
+
+**Open:** Actual approved read-only coordinator zome call, production identity, exact-release source/WASM equivalence, two-conductor validation, fork and recovery finality, and genuine validator-backed Observer evidence. Do not grant economic privileges.
