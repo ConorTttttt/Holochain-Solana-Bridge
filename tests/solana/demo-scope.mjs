@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-export const DEMO_SCOPE_TAG = 'HSC/demo-localnet-source-scope/v1\\0';
+export const DEMO_SCOPE_TAG = 'HSC/demo-localnet-source-scope/v1\0';
 export const DEMO_SCHEMA = 'HSC/demo-solana-source-domain/v1';
 export const ECONOMIC_DENIAL = Object.freeze({
   creditEligible: false,
@@ -22,7 +22,7 @@ export function deriveDemoScope({ genesisHash, programId, mint }) {
   // Explicit NUL-delimited, ordered ASCII identities. Never derive from a
   // historical fixture or an environment-supplied authority/scope override.
   return createHash('sha256').update(DEMO_SCOPE_TAG)
-    .update(genesisHash).update('\\0').update(programId).update('\\0')
+    .update(genesisHash).update('\0').update(programId).update('\0')
     .update(mint).digest();
 }
 
@@ -67,7 +67,7 @@ export function assertDemoDomainShape(d) {
     assert.ok(Number.isSafeInteger(w.slot) && w.slot > 0, stage + ' finalized slot');
     for (const field of ['getTransactionRawFile', 'getTransactionBase64RawFile',
       'getBlockRawFile', 'getBlockBase64RawFile']) {
-      assert.match(w[field], /^[a-zA-Z0-9-]+\\.rpc\\.json$/, stage + '/' + field);
+      assert.match(w[field], /^[a-zA-Z0-9-]+\.rpc\.json$/, stage + '/' + field);
     }
   }
   assert.equal(new Set(Object.values(d.transactions).map(w => w.signature)).size, 3,
