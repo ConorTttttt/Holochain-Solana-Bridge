@@ -18,8 +18,13 @@ const expected = {
   sourceCommitSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   idlSha256: digest('target/idl/deposit_prototype.json'),
   elfSha256: digest('target/deploy/deposit_prototype.so'),
+  postSyncSourceSha256: digest(join(dir, 'tracked-post-sync.sha256')),
   programId: idl.address,
 };
+// Only the current local tracked checkout is independently checked here.
+// Archived local RPC genesis/deployment data are observations, not consensus.
+execFileSync('sha256sum', ['--check', join(dir, 'tracked-post-sync.sha256')],
+  { stdio: 'pipe' });
 const checkBinding = (object, label) => {
   for (const [key, value] of Object.entries(expected)) {
     assert.equal(object[key], value, label + ': incorrect ' + key);
