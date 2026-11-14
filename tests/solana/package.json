@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test sdk-compat.test.mjs layout.test.mjs",
+    "test": "node --test sdk-compat.test.mjs layout.test.mjs signed-message-fixtures.test.mjs",
     "test:integration": "node --test integration.test.mjs"
   },
   "dependencies": {

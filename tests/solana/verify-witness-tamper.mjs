@@ -86,6 +86,68 @@ const cases = {
     record.signedWireBase64 = flipMessageByte(record.signedWireBase64);
     writeJson(join(dir, bundleName), bundle);
   },
+  'all submitted signed wires deleted': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    for (const record of bundle.transactions) delete record.signedWireBase64;
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'submitted wire field malformed': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => typeof r.signedWireBase64 === 'string');
+    assert.ok(record, 'tamper setup: no original wire');
+    record.signedWireBase64 = 'not-base64!!!';
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'contradictory duplicate submitted wires': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => typeof r.signedWireBase64 === 'string');
+    assert.ok(record, 'tamper setup: no original wire');
+    bundle.transactions.push({ ...record,
+      signedWireBase64: flipMessageByte(record.signedWireBase64) });
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'fee payer attribution relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.feePayer);
+    assert.ok(record, 'tamper setup: no fee-payer field');
+    record.feePayer = '11111111111111111111111111111111';
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'required signer attribution relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.signerPubkeys);
+    assert.ok(record, 'tamper setup: no signer attribution');
+    record.signerPubkeys[0] = '11111111111111111111111111111111';
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'program attribution relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.instructionProgramId);
+    assert.ok(record, 'tamper setup: no program attribution');
+    record.instructionProgramId = '11111111111111111111111111111111';
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'instruction data relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.instructions?.length);
+    assert.ok(record, 'tamper setup: no instructions');
+    record.instructions[0].dataBase64 = 'AQ==';
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'instruction account flags relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.instructionAccounts?.length);
+    assert.ok(record, 'tamper setup: no instruction accounts');
+    record.instructionAccounts[0].writable = !record.instructionAccounts[0].writable;
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'message blockhash relabelled with intact signed bytes': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.recentBlockhash);
+    assert.ok(record, 'tamper setup: no recent blockhash');
+    record.recentBlockhash = '11111111111111111111111111111111';
+    writeJson(join(dir, bundleName), bundle);
+  },
   'expected rejection relabelled as success': (dir) => {
     const bundle = readJson(join(dir, bundleName));
     const rejected = firstRejected(bundle);
@@ -105,12 +167,33 @@ const cases = {
     writeJson(path, rpc);
   },
 };
+// SEC-38-3: accept only the intended rejection class, not a random crash.
+const expectedFailure = {
+  'archive marked incomplete': /partial\/failed witness archive is never a PASS/,
+  'finalized witness dropped while claiming complete': /finalized manifest does not cover EVERY recorded signed transaction/,
+  'containing base64 block file missing': /ENOENT/,
+  'signed message altered consistently in tx and block': /SIGNATURE_INVALID:/,
+  'submitted wire bytes differ from finalized bytes': /WIRE_FINALIZED_TRANSACTION:/,
+  'all submitted signed wires deleted': /WIRE_REQUIRED:/,
+  'submitted wire field malformed': /WIRE_MALFORMED:/,
+  'contradictory duplicate submitted wires': /WIRE_CONFLICT:/,
+  'fee payer attribution relabelled with intact signed bytes': /ATTR_FEE_PAYER:/,
+  'required signer attribution relabelled with intact signed bytes': /ATTR_SIGNERS:/,
+  'program attribution relabelled with intact signed bytes': /ATTR_PROGRAM:/,
+  'instruction data relabelled with intact signed bytes': /ATTR_INSTRUCTIONS:/,
+  'instruction account flags relabelled with intact signed bytes': /ATTR_INSTRUCTION_ACCOUNTS:/,
+  'message blockhash relabelled with intact signed bytes': /ATTR_BLOCKHASH:/,
+  'expected rejection relabelled as success': /recorded execution result disagrees with finalized ledger/,
+  'deployed ELF byte altered': /deployed ELF bytes differ from target\/deploy artifact/,
+};
+assert.deepEqual(Object.keys(expectedFailure).sort(), Object.keys(cases).sort(),
+  'every tamper mutation requires one named expected failure reason');
 for (const [name, mutate] of Object.entries(cases)) {
   const result = withCopy(mutate);
   assert.notEqual(result.status, 0, 'verifier ACCEPTED tampered archive: ' + name);
-  const reason = (result.stderr.match(/message: '([^']+)'/)?.[1] ??
-    result.stderr.split('\n').find((line) => line.includes('Error')) ?? '').slice(0, 160);
-  console.log('REJECTED (' + mode + '): ' + name + ' -> ' + reason);
+  assert.match(result.stderr, expectedFailure[name],
+    'WRONG REJECTION CLASS for ' + name + ':\n' + result.stderr);
+  console.log('REJECTED (' + mode + '): ' + name + ' -> ' + expectedFailure[name]);
 }
 console.log('PASS: ' + mode + ' verifier rejected all ' + Object.keys(cases).length +
-  ' tampered copies and accepted the untampered control');
+  ' named tamper classes and accepted the untampered control');

@@ -148,6 +148,11 @@ const artifactBinding = {
   elfSha256: createHash('sha256').update(
     readFileSync(new URL('../../target/deploy/deposit_prototype.so', import.meta.url))
   ).digest('hex'),
+  // This digest identifies the tracked source tree AFTER anchor keys sync,
+  // including the reviewed Cargo.lock. It is not a Git commit or a consensus proof.
+  postSyncSourceSha256: createHash('sha256').update(
+    readFileSync(new URL('../../target/localnet-evidence/tracked-post-sync.sha256', import.meta.url))
+  ).digest('hex'),
 };
 assert.match(artifactBinding.sourceCommitSha, /^[0-9a-f]{40}$/, 'unknown tested source commit');
 // Archive the ORIGINAL JSON-RPC text to avoid SDK deserialization or
@@ -247,11 +252,12 @@ async function saveTransactionEvidence() {
     assert.equal(typeof encodedTransaction, 'string');
     const signedBytes = Buffer.from(encodedTransaction, 'base64');
     assert.equal(signedBytes.toString('base64'), encodedTransaction, 'noncanonical base64 signed bytes');
-    if (typeof expected.signedWireBase64 === 'string') {
-      // The finalized ledger must contain EXACTLY the bytes this test signed.
-      assert.equal(encodedTransaction, expected.signedWireBase64,
-        'finalized transaction bytes differ from originally submitted wire bytes: ' + signature);
-    }
+    // No witness without byte-for-byte original submission. A missing wire is
+    // a hard archive failure, even when the RPC response is internally valid.
+    assert.equal(typeof expected.signedWireBase64, 'string',
+      'WIRE_REQUIRED: missing original submitted signed wire for ' + signature);
+    assert.equal(encodedTransaction, expected.signedWireBase64,
+      'WIRE_FINALIZED_TRANSACTION: finalized bytes differ from original submission ' + signature);
     const decodedSigned = VersionedTransaction.deserialize(signedBytes);
     assert.equal(decodedSigned.signatures.length, rawTx.transaction.signatures.length,
       'signed byte count disagrees with parsed RPC signatures');
