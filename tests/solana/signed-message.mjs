@@ -255,22 +255,60 @@ export function assertArchiveAttribution(decoded, records, witness, parsed, anch
         label + ': requested privilege exceeds signed effective privilege');
         return { address: a.pubkey, signer: a.isSigner, writable: a.isWritable };
       });
+      // The archive includes BOTH Anchor instructions and standalone classic
+      // SPL Token instructions deliberately submitted to provoke authority
+      // failures. Program identity is taken from the signed message, not from
+      // an archive-supplied label. Never apply the bridge IDL to another
+      // program, or silently accept flags for an unknown foreign program.
       if (anchorIdl) {
-        requireEvidence(anchorIdl.address === signed.programId,
-          'ATTR_REQUESTED_IDL', label + ': program is not reviewed IDL address');
         const data = Buffer.from(signed.dataBase64, 'base64');
-        const definition = anchorIdl.instructions?.find(ix =>
-          Array.isArray(ix.discriminator) && ix.discriminator.length === 8 &&
-          Buffer.from(ix.discriminator).equals(data.subarray(0, 8)));
-        requireEvidence(definition && Array.isArray(definition.accounts),
-          'ATTR_REQUESTED_IDL', label + ': no instruction discriminator in pinned IDL');
-        const metas = definition.accounts.map(meta => ({
-          isSigner: meta.signer === true,
-          isWritable: meta.writable === true,
-        }));
+        let metas;
+        let source;
+        if (signed.programId === anchorIdl.address) {
+          const definition = anchorIdl.instructions?.find(ix =>
+            Array.isArray(ix.discriminator) && ix.discriminator.length === 8 &&
+            Buffer.from(ix.discriminator).equals(data.subarray(0, 8)));
+          requireEvidence(definition && Array.isArray(definition.accounts),
+            'ATTR_REQUESTED_IDL', label + ': no instruction discriminator in pinned IDL');
+          metas = definition.accounts.map(meta => ({
+            isSigner: meta.signer === true,
+            isWritable: meta.writable === true,
+          }));
+          source = 'generated Anchor IDL';
+        } else if (signed.programId === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
+          // SPL Token v1 instruction ABI, single-authority forms only:
+          // MintTo (7): writable mint, writable destination, signer authority.
+          // SetAuthority (6): writable mint/token, signer current authority.
+          // Account layouts are documented in solana-program/token
+          // interface/src/instruction.rs; other opcodes/forms FAIL CLOSED.
+          const opcode = data[0];
+          if (opcode === 7 && data.length === 9 &&
+              signed.accounts.length === 3) {
+            metas = [
+              { isSigner: false, isWritable: true },
+              { isSigner: false, isWritable: true },
+              { isSigner: true, isWritable: false },
+            ];
+            source = 'SPL Token MintTo single-authority ABI';
+          } else if (opcode === 6 && signed.accounts.length === 2 &&
+              (data.length === 3 || data.length === 35) &&
+              data[1] <= 3 && data[2] === (data.length === 35 ? 1 : 0)) {
+            metas = [
+              { isSigner: false, isWritable: true },
+              { isSigner: true, isWritable: false },
+            ];
+            source = 'SPL Token SetAuthority single-authority ABI';
+          } else {
+            fail('ATTR_REQUESTED_PROGRAM', label +
+              ': unreviewed SPL Token opcode/authority variant or malformed data');
+          }
+        } else {
+          fail('ATTR_REQUESTED_PROGRAM', label +
+            ': no reviewed requested-account schema for signed program ' + signed.programId);
+        }
         same(requested.accounts.map(a => ({
           isSigner: a.isSigner, isWritable: a.isWritable,
-        })), metas, 'ATTR_REQUESTED_IDL', label + ': requested flags vs IDL');
+        })), metas, 'ATTR_REQUESTED_IDL', label + ': requested flags vs ' + source);
       }
       same(record.requestedInstructionAccounts, expectedRequestedAccounts,
         'ATTR_REQUESTED_ACCOUNTS', label + ': requested fields disagree');
