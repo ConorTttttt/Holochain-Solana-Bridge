@@ -31,6 +31,14 @@ function checkInternalBindings(w){
   need(e?.kind==='solana-deposit-evidence-v1' &&
     e.transactionVerified===true&&e.verifiedByRpcClaim===true&&
     e.refundedAtObservation===false,'INTERNAL_SOURCE_VERIFICATION_FLAGS');
+  // The reviewed v2 envelope embeds the entire original deposit evidence.
+  // A caller can recompute the unkeyed witness digest after modifying that
+  // nested data; enforce the same denial boundary here as in the builder.
+  // A hash check is never an independent verification or economic approval.
+  for(const [k,v] of Object.entries(DENIALS)){
+    need(e[k]===v&&e.receiptSnapshot?.[k]===v,
+      'NESTED_ECONOMIC_DENIAL_'+k);
+  }
   need(s.kind===e.kind&&s.sourceEventType==='deposit'&&
     /^[0-9a-f]{40}$/.test(s.codeVersion) &&
     /^(0|[1-9][0-9]*)$/.test(s.depositNonce) &&
@@ -175,6 +183,9 @@ export function verifyReviewedWitnessV2(w){
     for(const [k,v] of Object.entries(DENIALS))need(x?.[k]===v,'ECONOMIC_DENIAL');
   }
   need(w.proof?.evidenceOrigin==='observer_reviewed_outbox' &&
+    w.proof?.evidenceKind==='solana-deposit-evidence-v1' &&
+    w.proof?.verifiedByRpcClaim===true &&
+    w.proof?.transactionVerified===true &&
     w.proof?.historyComplete===false&&w.proof?.independentFinalityProof===false &&
     w.proof?.historyIndexed===false &&w.proof?.refundDurablyCommitted===false &&
     eq(w.proof.originalReceiptSnapshot,w.source.verifiedEvidence.receiptSnapshot),
