@@ -47,10 +47,13 @@ export function makeAuditOnlyEnvelope({evidence,rpcTransaction,expected}){
   need(snap.kind==='solana-receipt-observation-v1' &&
     snap.transactionVerified===false && snap.creditEligible===false,
     'later receipt snapshot is not signed history');
-  for(const field of ['genesisHash','program','mint','holochainScope']){
+  for(const field of ['program','mint','holochainScope']){
     requiredString(expected[field],'pinned '+field);
     need(evidence[field]===expected[field],field+' mismatch');
   }
+  requiredString(expected.genesisHash,'pinned genesisHash');
+  need(evidence.id===expected.genesisHash+':'+expected.program+':'+evidence.receiptAddress,
+    'genesis/program/receipt id mismatch');
   for(const field of ['id','program','mint','receiptAddress','holochainScope',
     'depositor','recipientCore','depositNonce','amountBaseUnits']){
     need(evidence[field]===snap[field], 'receipt snapshot '+field+' mismatch');
