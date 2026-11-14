@@ -38,7 +38,7 @@ function checkSigned(raw, signature) {
   assert.equal(encode58(signed.signatures[first]),signature,'RPC signature/wire mismatch');
   return { signed, compiled };
 }
-for (const mode of ['lifecycle','init-capture','u64-max']) {
+for (const mode of ['lifecycle','init-capture','u64-max','demo-domain']) {
   test('genuine finalized signed wire and block replay: '+mode,async()=>{
     const index=load('sprint1-'+mode+'-transactions.json');
     assert.equal(index.mode,mode);
@@ -114,14 +114,47 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
         assert.equal(result.creditEligible,false);
         assert.equal(result.rpcTransaction.slot,item.slot);
         verified++;
-        if(mode==='lifecycle'){
-          const fixture=load('active-receipt.json');
+        if(mode==='lifecycle'||mode==='demo-domain'){
+          const fixture=load(mode==='demo-domain'?'demo-domain-active-receipt.json':'active-receipt.json');
           if(item.signature===fixture.signatures.deposit){
             const [receipt,config,vault,mint]=fixture.accounts;
             const expected={program:index.programId,mint:mint.address,
               config:config.address,vault:vault.address,
               scope:decodeReceipt(Buffer.from(receipt.dataBase64,'base64')).scope};
+            if(mode==='demo-domain'){
+              // A2 #55's disposable source domain is derived from the executed
+              // genesis, deployed program and genuinely minted SPL address.
+              // Never admit the old all-07 or attacker all-2a test scopes.
+              const domain=load('demo-source-domain.json');
+              assert.equal(domain.sourceCommitSha,checkoutSha,'DEMO_DOMAIN_SOURCE_SHA');
+              assert.equal(domain.genesisHash,index.genesisHash,'DEMO_DOMAIN_GENESIS');
+              assert.equal(domain.programId,index.programId,'DEMO_DOMAIN_PROGRAM');
+              assert.equal(domain.mint,expected.mint,'DEMO_DOMAIN_MINT');
+              assert.equal(domain.receipt,fixture.accounts[0].address,'DEMO_DOMAIN_RECEIPT');
+              assert.equal(domain.scopeHex,expected.scope,'DEMO_DOMAIN_RECEIPT_SCOPE');
+              assert.equal(domain.initializedScopeHex,domain.scopeHex,'DEMO_DOMAIN_INITIALIZED_SCOPE');
+              assert.equal(domain.transactions.deposit.signature,item.signature,'DEMO_DOMAIN_DEPOSIT_SIGNATURE');
+              assert.equal(domain.transactions.deposit.slot,item.slot,'DEMO_DOMAIN_DEPOSIT_SLOT');
+              assert.equal(domain.historyComplete,false,'DEMO_DOMAIN_CANNOT_ASSERT_FULL_HISTORY');
+              for(const [k,v] of Object.entries({creditEligible:false,
+                independentConsensusVerified:false,spendableBaseUnits:'0',
+                withdrawalAuthorized:false}))assert.equal(domain[k],v,'DEMO_DOMAIN_ECONOMIC_DENIAL_'+k);
+              const domainBytes=Buffer.concat([
+                Buffer.from('HSC/demo-localnet-source-scope/v1'),Buffer.from([0]),
+                Buffer.from(index.genesisHash),Buffer.from([0]),
+                Buffer.from(index.programId),Buffer.from([0]),Buffer.from(expected.mint),
+              ]);
+              assert.equal(createHash('sha256').update(domainBytes).digest('hex'),domain.scopeHex,
+                'DEMO_DOMAIN_DERIVED_SCOPE');
+              assert.equal(domain.amountBaseUnits,'250000');
+              assert.equal(domain.nonce,'42017');
+            }
             const idl=JSON.parse(readFileSync('target/idl/deposit_prototype.json','utf8'));
+            if(mode==='demo-domain'){
+              const domain=load('demo-source-domain.json');
+              assert.equal(createHash('sha256').update(readFileSync('target/idl/deposit_prototype.json')).digest('hex'),
+                domain.idlSha256,'DEMO_DOMAIN_PINNED_GENERATED_IDL');
+            }
             const candidates=await verifyDepositCandidates({
               rpcTransaction:result.rpcTransaction,signature:item.signature,expected,
               genesisHash:index.genesisHash,idl,finalizedClaim:true,
@@ -148,7 +181,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                 snapshot:{slot:raw.slot,accounts:raw.accounts.map(account=>({
                   owner:account.owner,raw:Buffer.from(account.dataBase64,'base64')}))}};
             };
-            const active=sourceSnapshot('active-receipt');
+            const active=sourceSnapshot(mode==='demo-domain'?'demo-domain-active-receipt':'active-receipt');
             const live=await verifySnapshot({
               snapshot:active.snapshot,expected:active.expected,
               genesisHash:index.genesisHash,source:'original-finalized-localnet-archive',
@@ -429,7 +462,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
               const conflicting=reviewShadow({...live,receiptDigest:'f'.repeat(64)},
                 binding,shadowJournal);
               assert.equal(conflicting.verdict,'rejected','same-slot contradiction accepted');
-              const refunded=sourceSnapshot('refunded-receipt');
+              const refunded=sourceSnapshot(mode==='demo-domain'?'demo-domain-refunded-receipt':'refunded-receipt');
               const refundObservation=await verifySnapshot({
                 snapshot:refunded.snapshot,expected:refunded.expected,
                 genesisHash:index.genesisHash,source:'original-finalized-localnet-archive',
@@ -456,7 +489,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
     }
     assert.equal(authenticated,index.finalized.length);
     assert.ok(verified>0,'no successful finalized transaction passed OBS inclusion verification');
-    if(mode==='lifecycle')assert.ok(depositCount>0,'no real deposited receipt attributed by OBS');
+    if(mode==='lifecycle'||mode==='demo-domain')assert.ok(depositCount>0,'no real deposited receipt attributed by OBS');
   });
 }
 
