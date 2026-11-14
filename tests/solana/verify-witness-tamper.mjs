@@ -319,7 +319,7 @@ const expectedFailure = {
   'signed wire fee payer key mutated without re-signing': /SIGNATURE_INVALID:/,
   'signed wire required-signature header mutated': /SIGNATURE_COUNT:/,
   'signed wire compiled program index mutated without re-signing': /SIGNATURE_INVALID:/,
-  'signed wire compiled account index mutated without re-signing': /SIGNATURE_INVALID:/
+  'signed wire compiled account index mutated without re-signing': /SIGNATURE_INVALID:/,
   'signed message altered consistently in tx and block': /SIGNATURE_INVALID:/,
   'submitted wire bytes differ from finalized bytes': /WIRE_FINALIZED_TRANSACTION:/,
   'all submitted signed wires deleted': /WIRE_REQUIRED:/,
