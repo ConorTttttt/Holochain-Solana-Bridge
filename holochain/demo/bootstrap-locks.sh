@@ -36,9 +36,8 @@ fi
 for lock in Cargo.lock ham-adapter/Cargo.lock; do
   [[ -s "$lock" ]] || { echo "BLOCKED: missing generated $lock" >&2; exit 3; }
 done
-python3 - <<'PY'
+python3 -I - <<'PY'
 import pathlib, re, tomllib
-from collections import Counter
 
 root = pathlib.Path(".")
 with (root / "Cargo.toml").open("rb") as f:
@@ -61,7 +60,6 @@ for filename, pins in locks.items():
         lock = tomllib.load(f)
     assert lock.get("version") in (3, 4), f"unsupported Cargo.lock format in {filename}"
     packages = lock["package"]
-    seen = Counter(p["name"] for p in packages)
     for name, version in pins.items():
         matched = [p for p in packages if p["name"] == name]
         assert len(matched) == 1 and matched[0]["version"] == version, f"{filename}: unexpected {name} resolution"
