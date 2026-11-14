@@ -7,6 +7,8 @@
  * four-account raw RPC UTF-8 separately retained. A4 approval is outstanding.
  */
 import {createHash} from 'node:crypto';
+import {canonicalJSON as canonicalObserverJSON} from './demo-outbox.mjs';
+import {verifyReviewedWitnessV2} from './demo-witness-v2.mjs';
 
 export const A4_BINDING_DOMAIN='HSC/solana-audit-demo-v2/source-to-dna';
 const DENIALS=Object.freeze({creditEligible:false,independentConsensusVerified:false,
@@ -120,14 +122,56 @@ function assertReviewShape(record){
     sha(Buffer.from(record.proof.originalFourAccountRpcUtf8,'utf8'))!==
       record.proof.originalFourAccountRpcSha256)
     fail('RAW_PROOF_PREIMAGE_MISSING_OR_CHANGED');
-  // Decoding JSON is deliberately not enough to prove untrusted source origin.
-  // The actual producer must verify signed wire + Kit + ledger IN PROCESS.
+  // The whole A3 witness is mandatory; hash-only projections are rejected.
+  // Structural A3 verification remains NON-AUTHENTICATING (unkeyed digest).
+  let raw,originalRpc;
   try{
-    const raw=JSON.parse(record.proof.originalObserverWitnessCanonicalJson);
-    if(canonicalTypedV2(raw)!==record.proof.originalObserverWitnessCanonicalJson)
+    raw=JSON.parse(record.proof.originalObserverWitnessCanonicalJson);
+    if(canonicalObserverJSON(raw)!==record.proof.originalObserverWitnessCanonicalJson)
       fail('NONCANONICAL_OBSERVER_WITNESS_PREIMAGE');
-  }catch(e){fail('NONCANONICAL_OBSERVER_WITNESS_PREIMAGE')}
-  if(!record.proof.originalFourAccountRpcUtf8.length)fail('RAW_ACCOUNT_SIDECAR_REQUIRED');
+    verifyReviewedWitnessV2(raw);
+  }catch(e){fail('UNREVIEWED_OR_INCOMPLETE_ORIGINAL_WITNESS')}
+  if(record.witness.sourceWitnessDigest!==raw.witnessDigest||
+    record.witness.originalSignedWireSha256!==raw.proof.originalSignedWireSha256||
+    record.source.sourceId!==raw.source.id||
+    record.source.occurrenceId!==raw.source.occurrenceId||
+    record.source.genesisHash!==raw.source.genesisHash||
+    record.source.program!==raw.source.program||
+    record.source.mint!==raw.source.mint||
+    record.source.holochainScope!==raw.source.holochainScope||
+    record.source.depositNonce!==raw.source.depositNonce||
+    record.source.amountBaseUnits!==raw.source.amountBaseUnits||
+    record.source.recipientCore!==raw.source.recipientCore||
+    record.source.finalizedSlot!==raw.source.finalizedSlot||
+    record.source.sourceCodeCommit!==raw.source.codeVersion)
+    fail('SOURCE_WITNESS_PROJECTION_LOSS_OR_CONFLICT');
+  const hashes={
+    rpcExecutionMetadataSha256:sha(Buffer.from(canonicalObserverJSON(raw.proof.rpcTransaction.meta),'utf8')),
+    containingBlockSha256:sha(Buffer.from(canonicalObserverJSON(raw.proof.containingBlock),'utf8')),
+    receiptSnapshotSha256:sha(Buffer.from(canonicalObserverJSON({
+      original:raw.proof.originalReceiptSnapshot,
+      later:raw.proof.latestReconciledReceiptSnapshot,
+    }),'utf8')),
+    ledgerEvidenceSha256:sha(Buffer.from(canonicalObserverJSON(raw.source.verifiedEvidence),'utf8')),
+  };
+  if(Object.entries(hashes).some(([k,v])=>record.witness[k]!==v))
+    fail('COMPONENT_PREIMAGE_DIGEST_MISMATCH');
+  // Bind original four-account byte strings to the committed source snapshot
+  // digest, rather than treating a separately submitted sidecar as source truth.
+  try{
+    originalRpc=JSON.parse(record.proof.originalFourAccountRpcUtf8);
+    const values=originalRpc?.result?.value;
+    if(!Array.isArray(values)||values.length!==4||
+      originalRpc.result.context?.slot!==raw.proof.originalReceiptSnapshot.finalizedSlot)
+      fail('RAW_FOUR_ACCOUNT_RPC_CONTEXT');
+    for(const [i,k] of ['receiptDigest','configDigest','vaultDigest','mintDigest'].entries()){
+      const account=values[i];
+      if(!Array.isArray(account?.data)||account.data[1]!=='base64')fail('RAW_ACCOUNT_ENCODING');
+      const bytes=Buffer.from(account.data[0],'base64');
+      if(bytes.toString('base64')!==account.data[0]||
+        sha(bytes)!==raw.proof.originalReceiptSnapshot[k])fail('RAW_ACCOUNT_BYTES_CONTRADICT_SOURCE');
+    }
+  }catch(e){fail('RAW_ORIGINAL_ACCOUNT_SNAPSHOT_INCOMPLETE_OR_CONTRADICTORY')}
   return unsigned;
 }
 /**
