@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["integrity", "coordinator", "ham-adapter"]
+members = ["integrity", "coordinator"]
+# Native HAM/Lair client has a separate lock/target; exclude from WASM resolver.
+exclude = ["ham-adapter"]
 
 [workspace.package]
 edition = "2021"
