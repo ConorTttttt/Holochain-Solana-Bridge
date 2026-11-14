@@ -171,7 +171,7 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
             }
             mkdirSync('ci-artifacts',{recursive:true});
             writeFileSync('ci-artifacts/demo-source-only-observation.json',
-              JSON.stringify(prepared,null,2)+'\\n',{flag:'w',mode:0o600});
+              JSON.stringify(prepared,null,2)+'\n',{flag:'w',mode:0o600});
             console.log('SOURCE_ONLY_DEMO_PREPARED_NO_HOLOCHAIN_WRITE',
               prepared.id,prepared.source.signature);
             const dir=mkdtempSync(join(tmpdir(),'real-localnet-shadow-'));
