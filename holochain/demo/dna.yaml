@@ -1,0 +1,23 @@
+# AUDIT-ONLY DEMO DNA. The scope values MUST be replaced with a verified
+# disposable localnet source domain before build; this fixture is NEVER live.
+manifest_version: '0'
+name: holochain_solana_audit_demo
+integrity:
+  network_seed: DEMO-ONLY-REPLACE-WITH-FRESH-RANDOM-SEED
+  properties:
+    demoOnly: true
+    genesisHash: Ay3GSFNuCwTjMzLSyotzzsYcbdQfVAqrZwkdeHFN4wDK
+    program: EHT4VAKN1p1XMVkANkMunF8T6Hv3ASskRNDiEPQZ8nYh
+    mint: HbyzbpqUCx6A9g7xzau81eNvtJ6Ak4dTBaN1dHGxzyBc
+    holochainScope: '0707070707070707070707070707070707070707070707070707070707070707'
+  zomes:
+    - name: solana_audit_integrity
+      hash: null
+      path: target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm
+coordinator:
+  zomes:
+    - name: solana_audit
+      hash: null
+      path: target/wasm32-unknown-unknown/release/solana_audit.wasm
+      dependencies:
+        - name: solana_audit_integrity

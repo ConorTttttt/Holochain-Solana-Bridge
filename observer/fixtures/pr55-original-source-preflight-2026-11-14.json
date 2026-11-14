@@ -1,0 +1,68 @@
+{
+  "kind": "observer-pr55-original-archive-preflight-not-kit-admission",
+  "date": "2026-11-14",
+  "sourcePullRequest": 55,
+  "runId": 43604140724,
+  "jobId": 132475021174,
+  "artifactId": 14118166967,
+  "originalZipSha256": "33a56159b1ab680cbfc36bffb365a1195a54fbddafb89082d8efcee012c2a018",
+  "manifestEntriesVerified": 280,
+  "sourceCommitSha": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284",
+  "genesisHash": "BvMfXydfN4vFMSkWzDhBb5mwM1cJYyXswzsFFhrZ5dVv",
+  "program": "387eqrHkQHuZG82k8s4cGA3v5U8f433C2iWQe9x8LYG1",
+  "mint": "3V3vun9zdKfaVtW6i89kdagbBnTvACMCVmdWRtcsg8ig",
+  "holochainScope": "85738d0a1b3e751bfa70c94700b1f0b2ef8a881839cb585071219962c9616fe7",
+  "receipt": "5HzYHP6kwfi7GNxhACYZxqtjU3Zypr1UMS3DQjmgn1mH",
+  "recipientCoreHex": "b15cdf711a9c383f25701696276b79f71110ebeefe73cc33b60bd4a9b2dffadb",
+  "depositSignature": "4ibizpAzc2BmXAMhoPy15KmrvREnQMXcDp3QZszMGJL8wmWnNLG8GhKVbPjiLCMpS98k6c5GnpDCCuMdUkPeKETp",
+  "depositSlot": 42,
+  "depositNonce": "42017",
+  "depositAmountBaseUnits": "250000",
+  "idlSha256": "d17e9dc3877ee187065f3149088d2d6921d7995d3e661239f82fcece0de3e007",
+  "elfSha256": "13978320ac23cdb6cc5140100ad7c34997a93a6be5ce5dcc93d92a0650fea647",
+  "originalSignedWireSha256": "7dd4f34251059c1c13f01c29087ac1e619111a4bc65910de62210c9a77ba02bc",
+  "originalRecentBlockhash": "5ZvPPDRbqqKoPeP49HQRo33Wvkm9oeEGjR7rKCogaCK5",
+  "originalRpcExecutionMetaCanonicalSha256": "572d0e12d991ad5587e05d3504df6f7d433630978a840d441b0d3b7f8c8e3bb8",
+  "originalContainingBlockCanonicalSha256": "e074debfa7d9db304ce50ad8300b824d5c5db507f5ddfa8ff22697339d2ca6ef",
+  "originalActiveFourAccountRawRpcUtf8Sha256": "fd98967936b50b03e4896e7d490335ac853b5287bb7e1912cd27db64cf60fd7e",
+  "negativeCases": [
+    {
+      "mutation": "source scope",
+      "rejection": "SCOPE_SHAPE"
+    },
+    {
+      "mutation": "execution fee metadata",
+      "rejection": "EXECUTION_META"
+    },
+    {
+      "mutation": "original signed wire",
+      "rejection": "ED25519_SIGNATURE"
+    },
+    {
+      "mutation": "receipt account owner",
+      "rejection": "ACCOUNT_IDENTITY_OR_BYTES_0"
+    },
+    {
+      "mutation": "immutable source commit",
+      "rejection": "IMMUTABLE_SOURCE_SHA"
+    },
+    {
+      "mutation": "false complete history",
+      "rejection": "HISTORY_CLAIM"
+    }
+  ],
+  "negativeCasesRecomputedLocalManifest": true,
+  "archivePreflightOnly": true,
+  "sourceLedgerKitQueueVerified": false,
+  "witnessDigest": null,
+  "actionHash": null,
+  "reviewedOriginSignedTransportApproved": false,
+  "historyComplete": false,
+  "historyIndexed": false,
+  "refundDurablyCommitted": false,
+  "rollbackSecurityHold": "HOSTILE_FILE_ROLLBACK_UNPROTECTED",
+  "creditEligible": false,
+  "independentConsensusVerified": false,
+  "spendableBaseUnits": "0",
+  "withdrawalAuthorized": false
+}
