@@ -134,9 +134,11 @@ jobs:
       - name: Require fresh SAME SHA SOL demo-domain signed source -> production OBS Kit v2 pending queue (no ACK)
         run: |
           set -euo pipefail
-          bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node scripts/ci/a0-demo-domain-kit-v2.mjs
+          bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node --test scripts/ci/a0-demo-domain-kit-v2.mjs
           test -s ci-artifacts/observer-fresh-domain-reviewed-v2-original-signed-localnet.json
           (cd ci-artifacts && sha256sum --check observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
+      # OBS #57 permits archived RPC injection ONLY inside Node's test-runner child;
+      # run the original replay under that context, never relax production OBS.
       # CI-owned preauthorization stage runner repeats the genuine same-SHA
       # source-owned Kit replay. Its seven-stage report is NOT a Holochain ACK
       # and stage 4 stays closed absent independent exact-tuple approval.

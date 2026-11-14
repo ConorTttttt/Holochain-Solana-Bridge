@@ -137,7 +137,7 @@ function run(){
     const script='scripts/ci/a0-demo-domain-kit-v2.mjs';
     const owned=spawnSync('git',['ls-files','--error-unmatch','--',script],{encoding:'utf8'});
     assert.equal(owned.status,0,'CI_REPLAY_SCRIPT_NOT_TRACKED');
-    const child=spawnSync(process.execPath,[script],{encoding:'utf8',maxBuffer:16*1024*1024});
+    const child=spawnSync(process.execPath,['--test',script],{encoding:'utf8',maxBuffer:16*1024*1024});
     report.execution={program:'node',script,exitCode:child.status,
       exitSignal:child.signal??null,
       stdoutSha256:sha256(child.stdout??''),stderrSha256:sha256(child.stderr??''),
