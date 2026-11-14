@@ -1,4 +1,5 @@
-/** Proposed Agent 3 -> Agent 4 ABI (NOT a verified signed OBS outbox yet).
+/** Fixture-only Agent 4 destination ABI (NOT authenticated OBS outbox delivery).
+ *  Real outbox acceptance requires a separate SEC-reviewed capability + schema revision.
  *  No network calls, trust escalation, token balances, or signing functions.
  */
 const max = (1n << 64n) - 1n;
@@ -52,7 +53,7 @@ export function validateDemoObservation(item,expected) {
       s.occurrenceId!==`${s.genesisHash}:${s.program}:${s.signature}:outer:${s.instructionIndex}`) fail('source_identity');
   if (p.evidenceKind!=='solana-deposit-evidence-v1' || p.transactionVerified!==true ||
       p.verifiedByRpcClaim!==true || p.historyComplete!==false ||
-      !['test_only_fixture','observer_reviewed_outbox'].includes(p.evidenceOrigin)) fail('evidence_provenance');
+      p.evidenceOrigin!=='test_only_fixture') fail('evidence_provenance');
   return true;
 }
 export const ECONOMIC_DENIALS = Object.freeze({creditEligible:false,independentConsensusVerified:false,
