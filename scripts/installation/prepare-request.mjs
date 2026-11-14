@@ -22,6 +22,8 @@ if(args[0]==='freeze-host'){
  const codeRoot='/opt/hsc-audit-installation/'+executorSourceCommit+'/';
  const input='/var/lib/hsc-audit-installation/inputs/'+baselineSourceCommit+'/';
  const protectedFiles={};
+ const nodeExecutable=codeRoot+'runtime/node';
+ protectedFiles[nodeExecutable]=digest(readFileSync(process.execPath));
  for(const file of ['scripts/installation/execute-approved.mjs','demo/installation/authorization.mjs'])
   protectedFiles[codeRoot+file]=digest(readFileSync(file));
  for(const tool of Object.values(tools))protectedFiles[tool.path]=tool.sha256;
@@ -31,6 +33,7 @@ if(args[0]==='freeze-host'){
  const installationId=digest(Buffer.from(executorSourceCommit+baselineSourceCommit)).slice(0,32);
  const runtimeRoot='/var/lib/hsc-audit-installation/attempts/'+installationId;
  const request={schema:'hsc-exact-install-request-v1',requestState:'CODE_AND_ARGUMENTS_PREPARED_HOST_POLICY_REQUIRED',
+  nodeExecutable,nodeVersion:process.version,
   operation:'install-only',executorId:'hsc-disposable-installation-v1',executorSourceCommit,baselineSourceCommit,
   originalBuildArtifactId:14136370324,originalBuildArchiveSha256:'5b28358b65c18eceda3f7162dae20d60c2c9f55b83f4dcbed7561d257a0c9f06',
   inventorySha256:digest(readFileSync(root+'verified-inventory.json')),dnaHash:inventory.dnaHash,

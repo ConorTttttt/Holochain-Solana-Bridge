@@ -52,6 +52,9 @@ async function main(){
   assert.equal(request.protectedFiles[path],digest(readFileSync(path)),'EXECUTOR_CODE_NOT_BOUND');
  const tools=request.runtimeExecutables;
  for(const p of Object.values(tools))assert.ok(request.protectedFiles[p],'UNBOUND_RUNTIME_EXECUTABLE');
+ assert.equal(realpathSync(process.execPath),request.nodeExecutable,'UNAPPROVED_NODE_EXECUTABLE');
+ assert.equal(process.version,request.nodeVersion,'UNAPPROVED_NODE_VERSION');
+ assert.ok(request.protectedFiles[request.nodeExecutable],'UNBOUND_NODE_EXECUTABLE');
  const hc=tools.hc;assert.ok(request.protectedFiles[hc],'UNBOUND_HC_BINARY');
  assert.equal(spawnSync(hc,['--version'],{encoding:'utf8'}).stdout.trim(),request.runtimeVersions.hc,'WRONG_HC_VERSION');
  assert.ok(request.protectedFiles[request.dnaPath],'UNBOUND_DNA');

@@ -73,10 +73,13 @@ baseline remains unchanged; executor source and DNA build source are separate.
 An independent administrator, outside the agent/caller's control, must provision:
 
 - reviewed executor Node/runtime and the two code files at the request's exact
-  `/opt/hsc-audit-installation/<executor-source-sha>/...` paths; clean launcher
+  `/opt/hsc-audit-installation/<executor-source-sha>/...` paths, including the
+  exact Node binary hash/version in the request; clean launcher
   environment with no NODE_OPTIONS, preload or user-controlled PATH;
 - original hApp/DNA bytes at the request's exact input paths; all input/code/tool
-  paths and ancestors root-owned, non-symlink, and not group/world writable;
+  paths and ancestors root-owned, non-symlink, and not group/world writable.
+  A group-writable Nix store must be sealed by its administrator before execution;
+  the gate does not exempt store permissions;
 - an unprivileged dedicated executor UID and private writable `attempts/` parent;
   isolate it on a disposable host/job with cgroup-wide child cleanup, including
   external Lair, on timeout/failure; no general interactive executor shell;
@@ -110,7 +113,7 @@ schema = hsc-install-grant-v1
 keyId = independently provisioned approver key ID
 nonce = 64 lowercase hex characters, unique at the independent broker
 notBefore, expiresAt = integer Unix milliseconds, maximum 15-minute window
-requestDigest = SHA256("HSC/installation-request/v1\\0" + canonical(request))
+requestDigest = SHA256(UTF8("HSC/installation-request/v1") || 0x00 || UTF8(canonical(request)))
 executorId = hsc-disposable-installation-v1
 operation = install-only
 ```

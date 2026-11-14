@@ -44,6 +44,7 @@ jobs:
         with:
           name: installation-independent-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
+            work/installation-originals/baseline-api-verification.json
             work/installation-originals/verified-inventory.json
             work/installation-originals/runtime-inventory.json
             work/installation-originals/authorization-request.json

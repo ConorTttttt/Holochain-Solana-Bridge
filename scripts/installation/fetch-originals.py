@@ -3,6 +3,17 @@
 import hashlib,json,pathlib,stat,subprocess,zipfile
 pins=json.loads(pathlib.Path('demo/installation/baseline.json').read_text())
 root=pathlib.Path('work/installation-originals');root.mkdir(parents=True,exist_ok=True)
+def api(path):
+    return json.loads(subprocess.check_output(['gh','api',f"repos/{pins['repository']}/"+path]))
+for run_id in [pins['runId'],pins['sharedRunId']]:
+    run=api(f'actions/runs/{run_id}')
+    assert run['head_sha']==pins['sourceCommit'] and run['conclusion']=='success','BASELINE_CI_NOT_VERIFIED'
+job=api(f"actions/jobs/{pins['buildJobId']}")
+assert job['run_id']==pins['runId'] and job['conclusion']=='success','ORIGINAL_BUILD_JOB_NOT_VERIFIED'
+for step in job['steps']:
+    if step['name'].startswith(('Install disposable OWN','Publish seven-stage report ONLY')):
+        assert step['conclusion']=='skipped','BASELINE_UNEXPECTED_MUTATION'
+(root/'baseline-api-verification.json').write_text(json.dumps({'sourceCommit':pins['sourceCommit'],'runId':pins['runId'],'sharedRunId':pins['sharedRunId'],'buildJob':job['id'],'installationSkipped':True},indent=2)+'\n')
 for kind,item in pins['artifacts'].items():
     archive=root/(kind+'.zip')
     with archive.open('wb') as out:
