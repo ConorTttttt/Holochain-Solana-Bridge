@@ -141,6 +141,25 @@ const cases = {
     record.instructionAccounts[0].writable = !record.instructionAccounts[0].writable;
     writeJson(join(dir, bundleName), bundle);
   },
+  'requested privilege flags falsified against pinned IDL': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructions?.length &&
+      r.requestedInstructionAccounts?.length);
+    assert.ok(record, 'tamper setup: missing separate requested account records');
+    record.requestedInstructions[0].accounts[0].isWritable =
+      !record.requestedInstructions[0].accounts[0].isWritable;
+    record.requestedInstructionAccounts[0].writable =
+      record.requestedInstructions[0].accounts[0].isWritable;
+    writeJson(join(dir, bundleName), bundle);
+  },
+  'requested accounts contradict builder intent': (dir) => {
+    const bundle = readJson(join(dir, bundleName));
+    const record = bundle.transactions.find(r => r.requestedInstructionAccounts?.length);
+    assert.ok(record, 'tamper setup: no requested account flags');
+    record.requestedInstructionAccounts[0].writable =
+      !record.requestedInstructionAccounts[0].writable;
+    writeJson(join(dir, bundleName), bundle);
+  },
   'message blockhash relabelled with intact signed bytes': (dir) => {
     const bundle = readJson(join(dir, bundleName));
     const record = bundle.transactions.find(r => r.recentBlockhash);
@@ -182,6 +201,8 @@ const expectedFailure = {
   'program attribution relabelled with intact signed bytes': /ATTR_PROGRAM:/,
   'instruction data relabelled with intact signed bytes': /ATTR_INSTRUCTIONS:/,
   'instruction account flags relabelled with intact signed bytes': /ATTR_INSTRUCTION_ACCOUNTS:/,
+  'requested privilege flags falsified against pinned IDL': /ATTR_REQUESTED_IDL:/,
+  'requested accounts contradict builder intent': /ATTR_REQUESTED_ACCOUNTS:/,
   'message blockhash relabelled with intact signed bytes': /ATTR_BLOCKHASH:/,
   'expected rejection relabelled as success': /recorded execution result disagrees with finalized ledger/,
   'deployed ELF byte altered': /deployed ELF bytes differ from target\/deploy artifact/,
