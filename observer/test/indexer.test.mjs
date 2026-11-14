@@ -186,8 +186,12 @@ for(const [label,settings] of [
   test('cannot advance checkpoint over '+label,async t=>{
     const {options}=input(t);
     const rpc=rpcMock({bothProduced:true,failedTx:signedWire(settings),failedAtSlot:21});
-    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),
-      /invalid Ed25519 transaction signature/);
+    // A missing required signer is rejected at the stronger structural
+    // signature-presence gate, before Ed25519 verification is attempted.
+    const denied=label==='zero-filled missing second signature'
+      ? /missing required signer signature/
+      : /invalid Ed25519 transaction signature/;
+    await assert.rejects(indexFinalizedRange({...options,fetchFn:rpc.fetchFn}),denied);
     const state=JSON.parse(readFileSync(options.ledgerPath,'utf8'));
     assert.equal(state.checkpoint,20);
     assert.deepEqual(Object.keys(state.blocks),['20']);
