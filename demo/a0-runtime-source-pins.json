@@ -1,0 +1,38 @@
+{
+  "schema": "hsc-a0-runtime-source-pins-v1",
+  "recordedAt": "2026-11-14",
+  "integrationParent": {"pr": 51, "sha": "1c4bd936e82a759c53fe3fd9d6916b4adca245ff"},
+  "candidateSourceOwners": {
+    "observerV2": {"pr": 52, "sha": "3c919624ae9cd747501f8cb48a1f12bd8908561c", "status": "DRAFT_NOT_ADOPTED_OR_APPROVED"},
+    "observerV1Outbox": {"pr": 48, "sha": "220d5aa314c5b154608af24dea8b0af5c1ed6053", "status": "DRAFT_SOURCE_ONLY"},
+    "ownAuditDna": {"pr": 44, "sha": "681049a30bffc2bca45a40b0e88519e98053e083", "status": "DRAFT_MISSING_TWO_REVIEWED_LOCKFILES"},
+    "solanaRemediation": {"pr": 50, "sha": "e46c7228561150a4368c80d3e9a300184bb8f0d2", "status": "DRAFT_NEEDS_INDEPENDENT_REVIEW"}
+  },
+  "toolchains": {
+    "node": "22.16.0",
+    "rust": "1.95.0",
+    "holochain": "0.7.1",
+    "holonixRevision": "a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da",
+    "hamRevision": "fbb4b6eb8a79a507e9453b709ed00f15c5618fb4"
+  },
+  "reviewedBuildInputs": [
+    "holochain/demo/Cargo.toml",
+    "holochain/demo/Cargo.lock",
+    "holochain/demo/ham-adapter/Cargo.toml",
+    "holochain/demo/ham-adapter/Cargo.lock",
+    "holochain/demo/dna.yaml",
+    "holochain/demo/happ.yaml",
+    "holochain/demo/build.sh",
+    "holochain/demo/integrity/src/lib.rs",
+    "holochain/demo/coordinator/src/lib.rs",
+    "holochain/demo/ham-adapter/src/main.rs"
+  ],
+  "policy": {
+    "approvedObserverDnaV2Abi": false,
+    "approvedMutatingCall": false,
+    "allowPublishedUnytCoordinator": false,
+    "allowEconomicCredit": false,
+    "allowSolanaWithdrawal": false,
+    "readOnlyBuildEvaluationOnly": true
+  }
+}
