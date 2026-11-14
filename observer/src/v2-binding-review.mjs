@@ -9,6 +9,7 @@
 import {createHash} from 'node:crypto';
 import {canonicalJSON as canonicalObserverJSON} from './demo-outbox.mjs';
 import {verifyReviewedWitnessV2} from './demo-witness-v2.mjs';
+import {addressBytes,decode58,encode58} from './decode.mjs';
 
 export const A4_BINDING_DOMAIN='HSC/solana-audit-demo-v2/source-to-dna';
 const DENIALS=Object.freeze({creditEligible:false,independentConsensusVerified:false,
@@ -17,6 +18,9 @@ const fail=code=>{throw Error('OBS_V2_ABI_REVIEW_REFUSED:'+code)};
 const plain=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)&&
   Object.getPrototypeOf(x)===Object.prototype;
 const hex64=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+const hex32=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+const hex40=x=>typeof x==='string'&&/^[a-f0-9]{40}$/.test(x);
+const b58=(x,n)=>{try{const decoded=decode58(x);return decoded.length===n&&encode58(decoded)===x}catch{return false}};
 const u64=x=>typeof x==='string'&&/^(0|[1-9][0-9]*)$/.test(x)&&
   BigInt(x)<=(1n<<64n)-1n;
 const sha=x=>createHash('sha256').update(x).digest('hex');
@@ -110,6 +114,41 @@ function assertReviewShape(record){
     record.source.occurrenceId!==[record.source.genesisHash,record.source.program,
       record.source.signature,'outer',record.source.outerInstructionIndex].join(':'))
     fail('SOURCE_OCCURRENCE');
+  // Strict source and destination syntax is necessary but not sufficient:
+  // a connected runtime must independently authenticate deployment and CellId.
+  for(const k of ['genesisHash','program','mint','receiptAddress','configAddress',
+    'vaultAddress','depositor','recentBlockhash']){
+    if(!b58(record.source[k],32))fail('NONCANONICAL_BASE58_'+k);
+  }
+  if(!b58(record.source.signature,64)||
+    !b58(record.witness.containingBlockhash,32)||
+    !b58(record.witness.signedMessageRecentBlockhash,32))
+    fail('SIGNED_IDENTITIES');
+  if(!hex32(record.source.holochainScope)||!hex32(record.source.recipientCore)||
+    record.source.holochainScope==='0'.repeat(64)||
+    record.source.recipientCore==='0'.repeat(64))
+    fail('SOURCE_SCOPE_RECIPIENT');
+  if(!hex40(record.source.sourceCodeCommit)||
+    !hex64(record.source.idlSha256)||!hex64(record.source.elfSha256)||
+    typeof record.source.deploymentEpochId!=='string'||
+    record.source.deploymentEpochId.length<16||
+    /unknown|placeholder|not.?deployed/i.test(record.source.deploymentEpochId))
+    fail('SOURCE_VERSION_DEPLOYMENT_EPOCH');
+  if(record.source.recentBlockhash!==record.witness.signedMessageRecentBlockhash||
+    record.proof.evidenceKind!=='solana-deposit-evidence-v2'||
+    record.proof.sourceTrust!=='single-operator-rpc-claim'||
+    record.proof.transactionVerifiedRpcClaim!==true)
+    fail('SOURCE_PROOF_CONSTANTS');
+  for(const k of ['integrityWasmSha256','coordinatorWasmSha256','dnaBundleSha256',
+    'happBundleSha256','abiSha256'])if(!hex64(record.destination[k]))
+    fail('DESTINATION_BUILD_DIGEST_'+k);
+  if(typeof record.destination.installedAppId!=='string'||
+    record.destination.installedAppId.length<1||
+    typeof record.destination.dnaHash!=='string'||
+    record.destination.dnaHash.length<1||
+    typeof record.destination.cellAgentPubkey!=='string'||
+    record.destination.cellAgentPubkey.length<1)
+    fail('DESTINATION_IDENTITY');
   for(const k of ['originalSignedWireSha256','rpcExecutionMetadataSha256',
     'containingBlockSha256','receiptSnapshotSha256','ledgerEvidenceSha256',
     'sourceWitnessDigest'])if(!hex64(record.witness[k]))fail('WITNESS_DIGEST_TYPE_'+k);
