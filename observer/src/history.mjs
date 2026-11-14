@@ -13,6 +13,11 @@ import {addressBytes,encode58} from './decode.mjs';
 import {signatureOf} from './indexer.mjs';
 
 const need=(v,m)=>{if(!v) throw new Error('Historical archive failed: '+m);};
+const verifiedInThisProcess=new WeakSet();
+/** An arbitrary JSON object cannot claim a complete replayed history. */
+export function isVerifiedHistoryCoverage(record) {
+  return !!record && typeof record==='object' && verifiedInThisProcess.has(record);
+}
 const slot=(n,label)=>{need(Number.isSafeInteger(n)&&n>=0,'invalid '+label);return n;};
 const canonical=x=>Array.isArray(x)?x.map(canonical):
   x&&typeof x==='object'?Object.fromEntries(Object.entries(x).sort(([a],[b])=>
@@ -168,7 +173,7 @@ export async function verifyArchivedHistory(archive) {
     blockhashes[String(n)]=block.blockhash;
     previous={slot:n,blockhash:block.blockhash};
   }
-  return Object.freeze({
+  const coverage=Object.freeze({
     kind:'observer-history-coverage-v1',genesisHash:archive.genesisHash,
     fromSlot,toSlot,producedSlots:Object.freeze([...produced]),
     blockhashes:Object.freeze(blockhashes),twoProviderFullBlocksVerified:true,
@@ -178,4 +183,6 @@ export async function verifyArchivedHistory(archive) {
     evidenceTrust:'two_archive_provider_claims_NOT_consensus',
     archiveDigest:sha256(archive),
   });
+  verifiedInThisProcess.add(coverage);
+  return coverage;
 }
