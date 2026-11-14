@@ -8,7 +8,8 @@ const REQUIRED = [
   'id', 'kind', 'genesisHash', 'program', 'receiptAddress', 'configAddress',
   'vaultAddress', 'mint', 'depositor', 'recipientCore', 'holochainScope',
   'depositNonce', 'amountBaseUnits', 'finalizedSlot', 'receiptDigest',
-  'refunded', 'state', 'creditEligible', 'transactionVerified',
+  'refunded', 'state', 'creditEligible', 'independentConsensusVerified',
+  'spendableBaseUnits', 'withdrawalAuthorized', 'transactionVerified',
   'evidenceTrust', 'commitmentRequested', 'mintSupplyBaseUnits',
   'activeVaultBaseUnits', 'activeLiabilitiesBaseUnits', 'configDigest',
   'vaultDigest', 'mintDigest', 'configBump', 'receiptBump',
@@ -58,6 +59,9 @@ export function reviewShadow(observation, binding, journal) {
     if (observation.commitmentRequested !== 'finalized') flag('UNEXPECTED_RPC_COMMITMENT');
     if (!Number.isSafeInteger(observation.finalizedSlot) || observation.finalizedSlot <= 0) flag('INVALID_SLOT');
     if (observation.creditEligible !== false) flag('CREDIT_ELIGIBILITY_ESCALATION');
+    if (observation.independentConsensusVerified !== false) flag('INDEPENDENT_CONSENSUS_ESCALATION');
+    if (observation.spendableBaseUnits !== '0') flag('SPENDABLE_BALANCE_ESCALATION');
+    if (observation.withdrawalAuthorized !== false) flag('WITHDRAWAL_AUTHORIZATION_ESCALATION');
     if (typeof observation.refunded !== 'boolean') flag('INVALID_REFUND_FLAG');
     if (observation.state !== (observation.refunded ? 'refunded' : 'active_refundable')) {
       flag('INCONSISTENT_REFUND_STATE');
