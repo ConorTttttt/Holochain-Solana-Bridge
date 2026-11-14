@@ -7,7 +7,7 @@
  * node observer/scripts/replay-validator-witness.mjs \
  *   <target/localnet-evidence> <lifecycle|init-capture|u64-max> \
  *   <trusted-deployment.json> <target/idl/deposit_prototype.json> \
- *   <target/deploy/deposit_prototype.so> <successful-deposit-signature>
+ *   <target/deploy/deposit_prototype.so> <successful-deposit-signature|->
  *
  * stdout: JSON array of solana-deposit-evidence-v1 for SHADOW handoff only.
  * The separate trusted manifest must be pinned by CI/operator, not copied from RPC.
@@ -167,7 +167,8 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
 export async function replayValidatorWitness(options) {
   const archive = preflightValidatorWitness(options);
   const {signature, trusted} = options;
-  need(typeof signature === 'string', 'explicit deposit signature required');
+  need(typeof signature === 'string' && signature.length>0,
+    'deposit signature or explicit archive-only sentinel (-) required');
   // Reuse the same actual @solana/kit Ed25519 block-entry verifier as the indexer.
   const {signatureOf,sameSolanaExecutionMeta} = await import('../src/indexer.mjs');
   const {verifyDepositCandidates,attachReceiptObservation} =
@@ -195,6 +196,14 @@ export async function replayValidatorWitness(options) {
       'getTransaction contradicts containing base64 getBlock');
     if (item.witness.signature === signature) selected = item;
   }
+  // init-capture has NO successful deposit. Its honest result is fully signed
+  // historical-WITNESS-only verification, never fabricated deposit evidence.
+  if (signature==='-') return {
+    evidence:[],accepted:archive.accepted,rejected:archive.rejected,
+    signedWitnessesVerified:archive.transactions.length,archiveOnly:true,
+    historyIndexed:false,independentConsensusVerified:false,creditEligible:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false,
+  };
   need(selected && selected.signed.meta.err === null,
     'requested signature must be a finalized successful deposit');
   const deposits = await verifyDepositCandidates({
@@ -234,7 +243,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const [dir,mode,manifest,idlPath,elfPath,signature] = process.argv.slice(2);
     need([dir,mode,manifest,idlPath,elfPath,signature].every(Boolean),
-      'usage: <evidence-dir> <mode> <trusted-manifest> <IDL> <ELF> <deposit-signature>');
+      'usage: <evidence-dir> <mode> <trusted-manifest> <IDL> <ELF> <deposit-signature|archive-only->');
     const result = await replayValidatorWitness({
       dir,mode,trusted:jsonFile(manifest),idlPath,elfPath,signature,
     });
