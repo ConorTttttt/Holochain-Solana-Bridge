@@ -74,7 +74,14 @@ function operationName(ix) {
     Buffer.from(row.discriminator).equals(ix.data.subarray(0, 8)));
   return method ? 'bridge.' + method.name : ix.programId.toBase58();
 }
-async function traceSdk(label, callback) {
+async function traceSdk(label, callback, accountToTrace = null) {
+  // SDK convenience methods sometimes throw only the bare InstructionError,
+  // dropping the signature. Diff this account's actual validator history
+  // around the call; NEVER mistake a candidate for confirmed attribution.
+  const prior = accountToTrace
+    ? new Set((await connection.getSignaturesForAddress(accountToTrace, { limit: 50 }, 'confirmed'))
+      .map(row => row.signature))
+    : null;
   const record = { number: ++operationNumber, label, type: 'sdk-helper', status: 'started' };
   operationJournal.push(record); persistOperations();
   try {
@@ -85,6 +92,8 @@ async function traceSdk(label, callback) {
   } catch (error) {
     record.status = 'threw';
     record.error = String(error?.message ?? error);
+    record.rawError = error && typeof error === 'object'
+      ? JSON.stringify(error, Object.getOwnPropertyNames(error)) : String(error);
     record.signature = error?.signature ?? null;
     record.logs = error?.logs ?? null;
     if (record.signature) {
@@ -97,7 +106,28 @@ async function traceSdk(label, callback) {
     }
     console.error('SDK_HELPER_FAILURE ' + JSON.stringify(record));
     throw error;
-  } finally { persistOperations(); }
+  } finally {
+    if (prior) {
+      try {
+        const after = await connection.getSignaturesForAddress(accountToTrace,
+          { limit: 50 }, 'confirmed');
+        const newSignatures = after.filter(row => !prior.has(row.signature));
+        record.accountHistoryCandidates = [];
+        for (const row of newSignatures) {
+          const tx = await connection.getTransaction(row.signature, {
+            commitment: 'confirmed', maxSupportedTransactionVersion: 1 });
+          record.accountHistoryCandidates.push({
+            signature: row.signature, slot: row.slot, error: row.err,
+            metaErr: tx?.meta?.err ?? null, logs: tx?.meta?.logMessages ?? null,
+            emittingProgramId: errorEmitter(tx?.meta?.logMessages),
+            instructionProgramIds: tx?.transaction?.message?.instructions?.map(
+              ix => ix.programId.toBase58()) ?? [],
+          });
+        }
+      } catch (lookupError) { record.historyLookupError = String(lookupError); }
+    }
+    persistOperations();
+  }
 }
 // Bind every witness to the tested checkout and the *actual generated*
 // artifacts, not to the historical passing build or a declared placeholder.
@@ -722,7 +752,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     await capturePublicAccountFixture('two-refunded-receipts', [receiptA, receiptB, config, vault, mint], {});
   });
   await t.test('independent wallet accounting, concurrent deposits, rollback and authority attacks', async () => {
-    await traceSdk('sixth-subtest-second-wallet-mint', () => mintTo(connection, owner, mint, strangerSource, owner, 300_000n));
+    await traceSdk('sixth-subtest-second-wallet-mint', () => mintTo(connection, owner, mint, strangerSource, owner, 300_000n), mint);
     const tracked = [
       { who: owner.publicKey, n: nonce, amount, refunded: true },
       { who: owner.publicKey, n: new BN(U64_MAX.toString()), amount: 1n, refunded: true },
@@ -852,7 +882,7 @@ test('localnet-only: initialize, deposit, validation failures, pause and one ref
     transactionEvidence.push({ label: 'partial-aggregate-refund', signature: partSignature, error: null });
     tracked.find((x) => x.n.eq(n1)).refunded = true;
     await reconcile('one of two wallet deposits refunded');
-    const strangerDestination = await traceSdk('sixth-subtest-refund-destination', () => createAccount(connection, attacker, mint, attacker.publicKey, Keypair.generate()));
+    const strangerDestination = await traceSdk('sixth-subtest-refund-destination', () => createAccount(connection, attacker, mint, attacker.publicKey, Keypair.generate()), mint);
     const otherSignature = await send(await refundIx({
       signer: attacker.publicKey, to: strangerDestination, receiptKey: r2,
     }), [attacker]);
