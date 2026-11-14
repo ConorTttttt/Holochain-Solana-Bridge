@@ -473,3 +473,38 @@ test('42 fixed cross-language canonicalization primitive: exact wire bytes and v
   assert.notEqual(domainDigest(REVIEWED_V2_DOMAIN,changed),'739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91');
   assert.notEqual(domainDigest('HSC/different-domain',unsigned),'739a4609392bc5ab76ba1e8b438d3f51eb72344a22ecdae88c323218aa185e91');
 });
+
+test('43 arbitrary RPC fetcher stays refused outside Node test runner even if opt-in env leaks',async()=>{
+  const {spawnSync}=await import('node:child_process');
+  const url=new URL('../src/demo-outbox.mjs',import.meta.url).href;
+  const snippet=`
+    import {DemoOutbox} from ${JSON.stringify(url)};
+    const args={ledger:null,rpcUrls:[],signature:'x',receiptAddress:'r',
+      expected:{},idlText:'',codeVersion:'',fetchFn:async()=>null};
+    try{await DemoOutbox.prototype.queueVerified.call({expected:{}},args);
+      process.exitCode=91;
+    }catch(e){
+      if(!String(e).includes('RPC_FETCH_OVERRIDE_FORBIDDEN')){
+        console.error(String(e));process.exitCode=92;
+      }
+    }
+  `;
+  const env={...process.env,OBS_ALLOW_ARCHIVED_RPC_REPLAY:'1'};
+  delete env.NODE_TEST_CONTEXT;
+  const prod=spawnSync(process.execPath,['--input-type=module','--eval',snippet],{
+    cwd:process.cwd(),env,encoding:'utf8',timeout:3000,
+  });
+  assert.equal(prod.status,0,'production-shaped child must refuse injected RPC: '+prod.stderr);
+  const prior=process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+  process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY='1';
+  try{
+    const args={ledger:null,rpcUrls:[],signature:'x',receiptAddress:'r',
+      expected:{},idlText:'',codeVersion:'',fetchFn:async()=>null};
+    await assert.rejects(
+      DemoOutbox.prototype.queueVerified.call({expected:{}},args),
+      /PINNED_IDL_BYTES_REQUIRED/,'only explicit Node archive-test process may pass override guard');
+  }finally{
+    if(prior===undefined)delete process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+    else process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY=prior;
+  }
+});
