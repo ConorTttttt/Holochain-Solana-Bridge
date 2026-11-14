@@ -30,7 +30,7 @@ function fixture(version, signerCount) {
   const programIndex = signers.length;
   const otherIndex = accounts.length - 1;
   const hash = createHash('sha256').update('blockhash/' + version + '/' + signerCount).digest();
-  const instructionData = Buffer.from([1, 2, 3, 0, 255]);
+  const instructionData = Buffer.from([1, 2, 3, 0, 255, 9, 8, 7, 23]);
   const ix = Buffer.concat([
     Buffer.from([programIndex]), vec(2), Buffer.from([0, otherIndex]),
     vec(instructionData.length), instructionData
@@ -75,6 +75,8 @@ function fixture(version, signerCount) {
     ],
     emittingProgramId: null
   };
+  record.requestedInstructions = structuredClone(record.instructions);
+  record.requestedInstructionAccounts = structuredClone(record.instructionAccounts);
   return { wire, message, fixtureSigners: signers, decoded, record, rpc,
     witness: { signature: record.signature, messageRecentBlockhash: base58(hash) } };
 }
@@ -96,6 +98,39 @@ for (const [name, version, signers] of [
     assert.deepEqual(assertArchiveAttribution(decoded, [record], witness, rpc), wire);
   });
 }
+test('readonly requested fee-payer signer becomes writable in signed message', () => {
+  const { wire, decoded, record, rpc, witness } = fixture('legacy', 1);
+  assert.equal(decoded.instructions[0].accounts[0].isWritable, true,
+    'fee payer must be writable in the effective compiled message');
+  // Model an Anchor instruction declaring a readonly signer that also pays
+  // fees. The wire proves the effective writable bit; the pinned IDL (not
+  // the wire) attests the requested readonly intent.
+  record.requestedInstructions[0].accounts[0].isWritable = false;
+  record.requestedInstructionAccounts[0].writable = false;
+  const idl = {
+    address: record.instructionProgramId,
+    instructions: [{
+      discriminator: [...Buffer.from(record.instructions[0].dataBase64, 'base64').subarray(0, 8)],
+      accounts: [{ signer: true, writable: false },
+        { signer: false, writable: false }],
+    }],
+  };
+  assert.deepEqual(assertArchiveAttribution(decoded, [record], witness, rpc, idl), wire);
+  const effectiveTamper = structuredClone(record);
+  effectiveTamper.instructionAccounts[0].writable = false;
+  rejected('ATTR_INSTRUCTION_ACCOUNTS', () =>
+    assertArchiveAttribution(decoded, [effectiveTamper], witness, rpc, idl));
+  const idlTamper = structuredClone(record);
+  idlTamper.requestedInstructions[0].accounts[0].isWritable = true;
+  idlTamper.requestedInstructionAccounts[0].writable = true;
+  rejected('ATTR_REQUESTED_IDL', () =>
+    assertArchiveAttribution(decoded, [idlTamper], witness, rpc, idl));
+  const requestedCoherenceTamper = structuredClone(record);
+  requestedCoherenceTamper.requestedInstructionAccounts[0].writable = true;
+  rejected('ATTR_REQUESTED_ACCOUNTS', () =>
+    assertArchiveAttribution(decoded, [requestedCoherenceTamper], witness, rpc, idl));
+});
+
 test('synthetic signed-message tamper and attribution tamper reject by class', () => {
   const { wire, decoded, record, rpc, witness } = fixture(0, 2);
   const corruptedSignature = Buffer.from(wire);
