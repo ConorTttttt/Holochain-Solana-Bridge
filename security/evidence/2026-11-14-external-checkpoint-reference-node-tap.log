@@ -1,0 +1,47 @@
+# SEC reference-only Node test log — 2026-11-14
+# node --version => v22.16.0
+# node --check security/test/external-checkpoint-reference.test.mjs => exit status 0
+# Source file git-blob SHA: 4d77f50286db9e23ff94a3863020c89dc743d00f
+# Source file SHA-256: a869bee374d0c53f3faa475e236c39b66b86f31d6cc8bfca15ba1a63328e627a
+# Command: node --test security/test/external-checkpoint-reference.test.mjs
+TAP version 13
+# Subtest: SEC-EXT-01 three distinct independent Ed25519 attestations and domain separation
+ok 1 - SEC-EXT-01 three distinct independent Ed25519 attestations and domain separation
+  ---
+  duration_ms: 8.483275
+  type: 'test'
+  ...
+# Subtest: SEC-EXT-02 checkpoint range continuity, rollback, parent forgery and equivocation freeze
+ok 2 - SEC-EXT-02 checkpoint range continuity, rollback, parent forgery and equivocation freeze
+  ---
+  duration_ms: 7.432456
+  type: 'test'
+  ...
+# Subtest: SEC-EXT-03 host rewrite/rollback is visible only if off-host state survives
+ok 3 - SEC-EXT-03 host rewrite/rollback is visible only if off-host state survives
+  ---
+  duration_ms: 3.208709
+  type: 'test'
+  ...
+# Subtest: SEC-EXT-04 signatures bind source, genesis, IDL/ELF, DNA/agreement and block root
+ok 4 - SEC-EXT-04 signatures bind source, genesis, IDL/ELF, DNA/agreement and block root
+  ---
+  duration_ms: 3.317503
+  type: 'test'
+  ...
+# Subtest: SEC-EXT-05 two valid isolated ledgers can double-accept without shared global consumption
+ok 5 - SEC-EXT-05 two valid isolated ledgers can double-accept without shared global consumption
+  ---
+  duration_ms: 0.327622
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 117.956609
+# NOTE: Off-host keys/storage/network/consensus NOT run or simulated faithfully. This is a narrow in-memory threat model.
