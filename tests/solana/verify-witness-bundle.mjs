@@ -170,6 +170,7 @@ const fixtures = {
     'two-refunded-receipts', 'sprint1-two-wallets-live'],
   'init-capture': ['sprint1-initializer-capture'],
   'u64-max': ['sprint1-u64-refunded'],
+  'demo-domain': ['demo-domain-active-receipt', 'demo-domain-refunded-receipt'],
 };
 for (const name of fixtures[mode]) {
   const snapshot = readJson(join(dir, name + '.json'));
