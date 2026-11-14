@@ -34,6 +34,12 @@ jobs:
         with:
           node-version: '22.16.0'
           package-manager-cache: false
+      - name: Fail-fast independent signed-message and tamper syntax gate
+        run: |
+          node --check tests/solana/signed-message.mjs
+          node --check tests/solana/verify-witness-bundle.mjs
+          node --check tests/solana/verify-witness-tamper.mjs
+          node --test tests/solana/signed-message-fixtures.test.mjs
       - name: Install exact Rust 1.95.0
         run: |
           rustup toolchain install 1.95.0 --profile minimal
