@@ -211,6 +211,7 @@ export async function replayValidatorWitness(options) {
   }
   need(evidence.every(x=>x.creditEligible === false &&
     x.independentConsensusVerified === false &&
+    x.spendableBaseUnits === '0' && x.withdrawalAuthorized === false &&
     x.transactionVerified === true),
     'shadow boundary escalation');
   return {evidence,accepted:archive.accepted,rejected:archive.rejected,
