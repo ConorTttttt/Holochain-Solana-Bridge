@@ -173,6 +173,7 @@ export class DemoOutbox {
     this.expected=structuredClone(expected);
     this.destination=scopeOf(destination);
     this.filename=resolve(filename);
+    this.inFlight=new Set();
     mkdirSync(dirname(this.filename),{recursive:true,mode:0o700});
     this.lockFile=this.filename+'.lock';this.lockFd=openSync(this.lockFile,'wx',0o600);
     try{
@@ -276,6 +277,9 @@ export class DemoOutbox {
   }
   #ack(row,remote){
     const actionHash=verifyRemote(remote,row);
+    need(!Object.values(this.state.rows).some(other=>
+      other!==row&&other.state==='acked'&&other.actionHash===actionHash),
+      'REUSED_SIGNED_ACTION_HASH');
     const priorState=row.state,priorActionHash=row.actionHash;
     row.state='acked';row.actionHash=actionHash;
     try{this.persist();return 'acked';}
@@ -283,6 +287,12 @@ export class DemoOutbox {
   }
   /** On uncertain recovery, READ exact DNA/agent/source ID. Never blind retry. */
   async reconcile(id,client){
+    need(!this.inFlight.has(id),'CONCURRENT_RECONCILIATION');
+    this.inFlight.add(id);
+    try {return await this.#reconcile(id,client);}
+    finally {this.inFlight.delete(id);}
+  }
+  async #reconcile(id,client){
     const row=this.state.rows[id];need(row,'UNKNOWN_SOURCE');
     if(row.state==='acked')return 'acked';
     try{
@@ -294,11 +304,17 @@ export class DemoOutbox {
   }
   /** Write only AFTER `uncertain` was flushed and a target-scoped read. */
   async deliver(id,client,{crashAt}={}){
+    need(!this.inFlight.has(id),'CONCURRENT_DELIVERY');
+    this.inFlight.add(id);
+    try {return await this.#deliver(id,client,{crashAt});}
+    finally {this.inFlight.delete(id);}
+  }
+  async #deliver(id,client,{crashAt}={}){
     const row=this.state.rows[id];need(row,'UNKNOWN_SOURCE');
     if(row.state==='acked')return 'acked';
     need(row.observation.proof.evidenceOrigin!=='test_only_fixture'||
       process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE==='1','SYNTHETIC_DELIVERY_DISABLED');
-    if(row.state!=='pending')return this.reconcile(id,client);
+    if(row.state!=='pending')return this.#reconcile(id,client);
     try{
       const already=await this.#read(client,row);
       if(already)return this.#ack(row,already);
