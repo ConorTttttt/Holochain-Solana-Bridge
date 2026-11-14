@@ -9,6 +9,15 @@ use solana_audit_integrity::{check, AuditObservation, EntryTypes, KIND, SCHEMA};
 pub struct AuditRecord {
     pub action_hash: ActionHash,
     pub observation: AuditObservation,
+    pub credit_eligible: bool,
+    pub independent_consensus_verified: bool,
+    pub spendable_base_units: String,
+    pub withdrawal_authorized: bool,
+}
+fn audit_record(action_hash: ActionHash, observation: AuditObservation) -> AuditRecord {
+    AuditRecord { action_hash, observation,
+        credit_eligible: false, independent_consensus_verified: false,
+        spendable_base_units: "0".into(), withdrawal_authorized: false }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -43,7 +52,7 @@ fn local_records() -> ExternResult<Vec<AuditRecord>> {
     let mut out = Vec::new();
     for record in records {
         if let Some(observation) = record.entry().to_app_option::<AuditObservation>()? {
-            out.push(AuditRecord { action_hash: record.action_address().clone(), observation });
+            out.push(audit_record(record.action_address().clone(), observation));
         }
     }
     Ok(out)
@@ -72,5 +81,5 @@ pub fn record_observation(item: AuditObservation) -> ExternResult<AuditRecord> {
             "conflicting observation bytes for source ID".into())));
     }
     let action_hash = create_entry(&EntryTypes::AuditObservation(item.clone()))?;
-    Ok(AuditRecord { action_hash, observation: item })
+    Ok(audit_record(action_hash, item))
 }

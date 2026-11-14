@@ -52,6 +52,15 @@ struct Contract {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Record {
     action_hash: ActionHash, observation: Observation,
+    credit_eligible: bool, independent_consensus_verified: bool,
+    spendable_base_units: String, withdrawal_authorized: bool,
+}
+fn check_record(r: &Record) -> Result<()> {
+    if !denials(r.credit_eligible,r.independent_consensus_verified,
+        &r.spendable_base_units,r.withdrawal_authorized) {
+        return Err(anyhow!("DEMO_RECORD_ECONOMIC_ESCALATION"));
+    }
+    Ok(())
 }
 
 fn mandatory(name: &str) -> Result<String> {
@@ -165,6 +174,7 @@ async fn execute() -> Result<()> {
             let prior: Option<Record> = ham.call_zome(ROLE, ZOME, "get_observation", item.source.id.clone())
                 .await.map_err(|_| anyhow!("DEMO_READ_BEFORE_WRITE_FAILED"))?;
             if let Some(prior) = &prior {
+                check_record(prior)?;
                 if prior.observation != item { return Err(anyhow!("DEMO_DUPLICATE_CONFLICT")); }
             }
             let saved: Record = match prior {
@@ -175,6 +185,8 @@ async fn execute() -> Result<()> {
             let read: Option<Record> = ham.call_zome(ROLE,ZOME,"get_observation",item.source.id.clone())
                 .await.map_err(|_| anyhow!("DEMO_READBACK_FAILED"))?;
             let read = read.ok_or_else(|| anyhow!("DEMO_MISSING_READBACK"))?;
+            check_record(&read)?;
+            check_record(&saved)?;
             if read.action_hash != saved.action_hash || read.observation != item {
                 return Err(anyhow!("DEMO_CONTRADICTORY_READBACK"));
             }
@@ -190,6 +202,7 @@ async fn execute() -> Result<()> {
             let saved: Option<Record> = ham.call_zome(ROLE,ZOME,"get_observation",id.clone())
                 .await.map_err(|_| anyhow!("DEMO_READ_FAILED"))?;
             let saved = saved.ok_or_else(||anyhow!("DEMO_OBSERVATION_NOT_FOUND"))?;
+            check_record(&saved)?;
             println!("{}",serde_json::to_string(&saved)
                 .map_err(|_| anyhow!("OUTPUT_ENCODING_FAILED"))?);
         },
