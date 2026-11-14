@@ -123,14 +123,22 @@ fn check_payload(o: &Observation, delivery: bool) -> Result<()> {
 
 async fn connect_preflight() -> Result<Ham> {
     let app_id = mandatory("DEMO_APP_ID")?;
-    if app_id.contains("unyt") || app_id.contains("Unyt") {
+    if app_id.to_ascii_lowercase().contains("unyt") {
         return Err(anyhow!("PUBLISHED_UNYT_APP_REFUSED"));
+    }
+    // An absent Lair credential or conductor config must fail with a stable,
+    // pre-connection class rather than depending on HAM's internal error
+    // propagation. Never print these paths or their contents.
+    let conductor_config = PathBuf::from(mandatory("DEMO_CONDUCTOR_CONFIG")?);
+    let passphrase_file = PathBuf::from(mandatory("DEMO_LAIR_PASSPHRASE_FILE")?);
+    if !conductor_config.is_file() || !passphrase_file.is_file() {
+        return Err(anyhow!("LAIR_REQUIRED_OR_INVALID"));
     }
     let config = HamConfig::new(env_port("DEMO_ADMIN_PORT")?, env_port("DEMO_APP_PORT")?, app_id.clone())
         .with_request_timeout_secs(30)
         .with_signing(LairCredentials::Node {
-            conductor_config: PathBuf::from(mandatory("DEMO_CONDUCTOR_CONFIG")?),
-            passphrase_file: PathBuf::from(mandatory("DEMO_LAIR_PASSPHRASE_FILE")?),
+            conductor_config,
+            passphrase_file,
         }, CapGrantOptIn::Withheld)
         .map_err(|_| anyhow!("LAIR_REQUIRED_OR_INVALID"))?;
     let ham = Ham::connect(config).await.map_err(|_| anyhow!("HAM_LAIR_OR_WEBSOCKET_UNAVAILABLE"))?;
