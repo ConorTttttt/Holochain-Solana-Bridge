@@ -38,7 +38,10 @@ jobs:
           test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
           test -s holochain/demo/Cargo.toml
           test -s holochain/demo/ham-adapter/Cargo.toml
-          test ! -e holochain/demo/Cargo.lock
+          # A4 owns the byte-identical reviewed WASM lock; do not re-resolve it.
+          test -s holochain/demo/Cargo.lock
+          git ls-files --error-unmatch -- holochain/demo/Cargo.lock >/dev/null
+          # A4 native graph remains absent; bootstrap proposes it without committing.
           test ! -e holochain/demo/ham-adapter/Cargo.lock
       - name: Install pinned Rust only (NOT Nix, Lair or a conductor)
         run: |
