@@ -8,6 +8,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
 import { encode58, decodeReceipt } from '../src/decode.mjs';
@@ -40,6 +42,13 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
   test('genuine finalized signed wire and block replay: '+mode,async()=>{
     const index=load('sprint1-'+mode+'-transactions.json');
     assert.equal(index.mode,mode);
+    // A historical valid signed-wire artifact from another source SHA is
+    // valuable, but is NOT an accepted same-SHA integration result.
+    const checkoutSha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+    const archiveSha=readFileSync(root+'source-commit.txt','utf8').trim();
+    assert.match(checkoutSha,/^[0-9a-f]{40}$/);
+    assert.equal(archiveSha,checkoutSha,'SAME_SHA_SOURCE_PRODUCER_REQUIRED');
+    assert.equal(index.sourceCommitSha,checkoutSha,'SAME_SHA_INDEX_REQUIRED');
     assert.ok(index.genesisHash && index.programId);
     assert.ok(index.finalized.length>0,'empty real validator witness');
     let verified=0, authenticated=0, depositCount=0;
@@ -212,7 +221,8 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                 // replay the same retained validator RPC bytes; they are not
                 // independent historical consensus providers.
                 const {DemoOutbox}=await import('../src/demo-outbox.mjs');
-                const {verifyReviewedWitnessV2}=await import('../src/demo-witness-v2.mjs');
+                const {verifyReviewedWitnessV2,REVIEWED_V2_DOMAIN}=await import('../src/demo-witness-v2.mjs');
+                const {canonicalJSON,domainDigest}=await import('../src/demo-outbox.mjs');
                 const ciIdlText=readFileSync('target/idl/deposit_prototype.json','utf8');
                 const sourcePins={
                   genesisHash:index.genesisHash,program:index.programId,
@@ -276,14 +286,64 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                     destinationReadback:{state:'not_approved_or_written',actionHash:null},
                   },null,2)+'\n');
                   writeFileSync(originalV2File,originalV2Bytes,{mode:0o600});
-                  const originalV2Sha=(await import('node:crypto')).createHash('sha256')
+                  const originalV2Sha=createHash('sha256')
                     .update(originalV2Bytes).digest('hex');
-                  writeFileSync(originalV2File+'.sha256',originalV2Sha+'  '+
-                    'observer-reviewed-v2-original-signed-localnet.json\n');
+                  // Portable, byte-exact canonical test vector for independent A4/A5
+                  // implementations. It excludes only the terminal witnessDigest.
+                  const {witnessDigest:expectedV2Digest,...unsignedV2}=row.reviewedWitnessV2;
+                  const canonicalBytes=Buffer.from(canonicalJSON(unsignedV2),'utf8');
+                  const independentDigest=createHash('sha256').update(Buffer.concat([
+                    Buffer.from(REVIEWED_V2_DOMAIN,'utf8'),Buffer.from([0]),canonicalBytes,
+                  ])).digest('hex');
+                  assert.equal(independentDigest,expectedV2Digest);
+                  assert.equal(domainDigest(REVIEWED_V2_DOMAIN,unsignedV2),expectedV2Digest);
+                  const canonFile='ci-artifacts/observer-reviewed-v2-original-signed-localnet.canonical.json';
+                  writeFileSync(canonFile,canonicalBytes,{mode:0o600});
+                  const digestFile='ci-artifacts/observer-reviewed-v2-original-signed-localnet.witness-digest.txt';
+                  writeFileSync(digestFile,expectedV2Digest+'\n',{mode:0o600});
+                  const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+                  writeFileSync(originalV2File+'.sha256',[
+                    originalV2Sha+'  observer-reviewed-v2-original-signed-localnet.json',
+                    hash(canonicalBytes)+'  observer-reviewed-v2-original-signed-localnet.canonical.json',
+                    hash(Buffer.from(expectedV2Digest+'\n'))+
+                      '  observer-reviewed-v2-original-signed-localnet.witness-digest.txt',
+                    '',
+                  ].join('\n'));
                   console.log('ORIGINAL_KIT_V2_SOURCE_ARTIFACT_SHA256',originalV2Sha);
+                  console.log('ORIGINAL_KIT_V2_CANONICAL_WITNESS_DIGEST',expectedV2Digest);
                   await assert.rejects(
                     candidateV2Outbox.queueVerified({...queueArgs,idlText:ciIdlText+' '}),
                     /PINNED_IDL_BYTES_REQUIRED/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,codeVersion:'0'.repeat(40)}),
+                    /SOURCE_COMMIT_BINDING/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,expected:{
+                      ...expected,program:'11111111111111111111111111111111',
+                    }}),/PINNED_DEPLOYMENT_MISMATCH/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,expected:{
+                      ...expected,scope:'f'.repeat(64),
+                    }}),/PINNED_DEPLOYMENT_MISMATCH/);
+                  // Even a fully recomputed unkeyed hash cannot mask changed
+                  // source, occurrence, containing block or future receipt.
+                  const structuralMutants=[
+                    w=>{w.source.depositNonce='9999'},
+                    w=>{w.source.occurrenceId+=':other'},
+                    w=>{w.source.blockhash='altered-blockhash'},
+                    w=>{w.proof.containingBlock.blockhash='altered-blockhash'},
+                    w=>{w.proof.rpcTransaction.meta.fee+=1},
+                    w=>{w.proof.latestReconciledReceiptSnapshot.refunded=true},
+                    w=>{w.source.codeVersion='f'.repeat(40)},
+                    w=>{w.destination.appId='published-Unyt-app'},
+                  ];
+                  for(const mutate of structuralMutants){
+                    const w=structuredClone(row.reviewedWitnessV2);
+                    mutate(w);
+                    const {witnessDigest:removed,...payload}=w;
+                    w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,payload);
+                    assert.throws(()=>verifyReviewedWitnessV2(w),/OBS_V2_REFUSED:/);
+                  }
                   const adversarialRpcCases=[
                     {
                       label:'signed-wire-message-tamper',
