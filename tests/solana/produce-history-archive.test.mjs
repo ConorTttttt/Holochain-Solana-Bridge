@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-async function serve(block7 = true) {
+async function serve(block7 = true, contradict = false) {
   const history = [];
   const server = http.createServer(async (req, res) => {
     let body = '';
@@ -21,7 +21,8 @@ async function serve(block7 = true) {
       : msg.method === 'getSlot' ? 40
       : msg.method === 'getBlocks' ? [5, 7]
       : msg.method === 'getBlock' ? (msg.params[0] === 7 && !block7 ? null : {
-        blockhash: '11111111111111111111111111111111',
+        blockhash: contradict ? '22222222222222222222222222222222' :
+          '11111111111111111111111111111111',
         previousBlockhash: '11111111111111111111111111111111',
         parentSlot: msg.params[0] === 5 ? 4 : 5,
         transactions: [],
@@ -139,6 +140,27 @@ test('four-account pre-capture records raw finalized context, never historical c
     assert.ok(checkManifest(dir).length > 0);
   } finally {
     await new Promise(ok => a.server.close(ok));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two returned full blocks conflict: preserve explicit gap, never vote it away', async () => {
+  const a = await serve(), b = await serve(true, true);
+  const dir = mkdtempSync(join(tmpdir(), 'sol-archive-fork-'));
+  try {
+    const result = await command([
+      '--provider-a-id=a', '--provider-a-operator=operatorA', '--provider-a-url=' + a.url,
+      '--provider-b-id=b', '--provider-b-operator=operatorB', '--provider-b-url=' + b.url,
+      '--from-slot=5', '--to-slot=7', '--out=' + dir,
+    ]);
+    assert.equal(result.status, 2, result.stderr);
+    const handoff = load(join(dir, 'produced-slot-handoff.json'));
+    assert.ok(handoff.gaps.some(x => x.classification === 'PROVIDER_BLOCK_CONFLICT'));
+    assert.equal(handoff.fullHistoryGate, 'BLOCKED');
+    assert.ok(checkManifest(dir).length > 0);
+  } finally {
+    await Promise.all([new Promise(ok => a.server.close(ok)),
+      new Promise(ok => b.server.close(ok))]);
     rmSync(dir, { recursive: true, force: true });
   }
 });
