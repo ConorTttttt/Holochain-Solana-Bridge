@@ -14,6 +14,7 @@ import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transa
 import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from './sdk-compat.mjs';
 import { TOKEN_PROGRAM_ID, AuthorityType, createAccount, createMint, createMintToInstruction, createSetAuthorityInstruction, getAccount, getMint, mintTo } from '@solana/spl-token';
 import { decodeConfig, decodeReceipt, decodeTokenAccount, discriminator } from '../../observer/src/decode.mjs';
+import { recoverIncludedRejection, assertRecoveredIncludedRejection } from './confirmation-recovery.mjs';
 
 const RPC = 'http://127.0.0.1:8899'; // Never accept an externally supplied RPC URL.
 const connection = new Connection(RPC, 'confirmed');
@@ -558,27 +559,15 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
         { signature, ...blockhash }, 'confirmed');
       confirmationError = confirmation.value.err;
     } catch (error) {
-      record.confirmationSdkException = String(error?.message ?? error);
-      let witnessedStatus = null;
-      for (let i = 0; i < 60; i++) {
-        const result = await connection.getSignatureStatuses([signature],
-          { searchTransactionHistory: true });
-        const candidate = result.value[0];
-        if (candidate &&
-            ['confirmed', 'finalized'].includes(candidate.confirmationStatus)) {
-          witnessedStatus = candidate;
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-      // A transport failure, absent signature, unsigned transaction, or
-      // unexpectedly successful transaction is NEVER recovered as rejection.
-      if (!witnessedStatus || witnessedStatus.err === null) throw error;
-      assert.ok(Number.isSafeInteger(witnessedStatus.slot),
-        'included rejection status has invalid slot: ' + signature);
-      confirmationError = witnessedStatus.err;
-      recoveredConfirmedSlot = witnessedStatus.slot;
+      // The SDK sometimes rejects an included failed instruction as a raw
+      // InstructionError. Never recover transport or expiration exceptions.
+      const recovered = await recoverIncludedRejection({ error, signature, connection });
+      record.confirmationSdkException = JSON.stringify(error);
+      record.recoveredOriginalSignatureStatus = { signature, ...recovered.status };
+      confirmationError = recovered.err;
+      recoveredConfirmedSlot = recovered.slot;
       record.confirmationRecoveredFromOriginalRpc = true;
+      persistOperations();
     }
     record.confirmationError = confirmationError;
     record.status = 'confirmed'; persistOperations();
@@ -599,10 +588,8 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     assert.deepEqual(included.meta.err, confirmationError,
       'confirmation/status and included execution mismatch: ' + signature);
     if (recoveredConfirmedSlot !== null) {
-      assert.equal(included.slot, recoveredConfirmedSlot,
-        'recovered rejected transaction status slot contradicts included transaction');
-      assert.notEqual(included.meta.err, null,
-        'SDK rejection cannot turn included success into expected failure');
+      assertRecoveredIncludedRejection({ signature, included,
+        recovered: { slot: recoveredConfirmedSlot, err: confirmationError } });
     }
     assert.ok(included.meta.logMessages?.length, 'missing included execution logs: ' + signature);
     const outcome = {

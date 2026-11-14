@@ -42,6 +42,7 @@ jobs:
           node --check tests/solana/verify-witness-bundle.mjs
           node --check tests/solana/verify-witness-tamper.mjs
           node --test tests/solana/signed-message-fixtures.test.mjs
+          node --test tests/solana/confirmation-recovery.test.mjs
       - name: Install exact Rust 1.95.0
         run: |
           rustup toolchain install 1.95.0 --profile minimal
