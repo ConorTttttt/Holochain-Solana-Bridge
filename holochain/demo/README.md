@@ -16,6 +16,19 @@ On an independently reconstructed, GitHub-blob-matched copy of the two current A
 
 The WASM workspace now intentionally excludes the separate native HAM/Lair adapter. Both require their own trusted, committed Rust 1.95.0 lockfile before a `--locked` build. A1 owns CI workflows; see [SEC_REVIEW_TUPLE.md](SEC_REVIEW_TUPLE.md) for the not-yet-approved exact call checklist and [ABI_PROJECTION_HANDOFF.md](ABI_PROJECTION_HANDOFF.md) for the incompatible A1/A3 source-only input projection.
 
+## ReviewZome remediation and safe read-only runner (still NOT runtime evidence)
+
+The [HDK/HDI 0.7.1 source audit](REVIEWZOME_071_SOURCE.md) documents explicit trait derivation, typed `FlatOp`, correct fallible `UnitEntryTypes` source-chain filtering, and ambiguous same-author readback refusal. The improved `build.sh` also requires **both committed Cargo locks**, compiles native HAM and both WASMs `--locked`, and archives both bundle SHA-256 values plus the actual `hc dna hash`; that script is still blocked by the missing lockfiles, source-verified disposable scope and a trusted toolchain.
+
+Only AFTER a new own-DNA app/cell and external Lair exist, Agent 1 can run the **non-mutating** identity/contract probe:
+
+```sh
+bash tests/holochain/demo/read-only-probe.sh
+bash tests/holochain/demo/read-only-probe.sh --negative
+```
+
+The second command requires a **successful signed baseline preflight** and then verifies exact fixed refusal classes for published-Unyt app ID, mismatched DNA, mismatched agent and missing Lair. It never invokes `record_observation` or grants a capability; its script syntax was independently checked against its exact GitHub blob (not a live Holochain runtime test). A future signed write requires a separate Agent 5 approval tied to **final immutable source + WASMs + DNA + actual app/CellId/agent/signing identity/ABI**.
+
 ## Local reproducibility / CURRENTLY UNEXECUTED for the Rust/conductor layers
 
 Use the exact pinned Holonix commit a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da with Holochain 0.7.1. On a disposable validator, FIRST replace dna.yaml's test-only genesis/program/mint/scope with the matching *verified* Observer domain, then replace the placeholder network_seed with a new unpredictable disposable seed. Before the locked build, generate and **commit/review** the two lockfiles using a trusted pinned networked runner:
