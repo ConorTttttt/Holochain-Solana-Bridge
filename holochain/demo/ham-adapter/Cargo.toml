@@ -1,3 +1,8 @@
+# Standalone native HAM/Lair workspace: the repository root is a separate
+# Solana workspace and must not absorb this manifest during Cargo resolution.
+[workspace]
+resolver = "2"
+
 [package]
 name = "solana-audit-ham-adapter"
 version = "0.1.0"
