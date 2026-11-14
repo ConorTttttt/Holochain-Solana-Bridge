@@ -98,7 +98,6 @@ export function decodeSignedWire(bytes, label = 'signed transaction') {
     label + ': address-table lookups require independent table-account proof');
   const message = wire.subarray(messageStart);
   const signatures = signatureBuffers.map((sig, i) => {
-    const key = Buffer.from(staticKeys[i] ? wire.subarray(0, 0) : []);
     // Recover raw pubkey from the signed message, never from an archive label.
     // For compact formats the address is already decoded; base58-decode below.
     const raw = decode58(staticKeys[i]);
