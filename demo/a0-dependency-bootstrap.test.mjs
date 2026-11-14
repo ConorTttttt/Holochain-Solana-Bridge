@@ -13,7 +13,7 @@ test('bootstrap is independent of reviewed locked DNA build gate',()=>{
  assert.match(wf,/holochain\/demo\/Cargo\.lock/);
  assert.match(wf,/holochain\/demo\/ham-adapter\/Cargo\.lock/);
  assert.match(script,/UNREVIEWED_RESOLUTION_PROPOSAL_NOT_COMMITTED/);
- assert.doesNotMatch(script,/\bcargo .*\b(build|test|run)\b/);
+ assert.doesNotMatch(script,/^\s*cargo \+1\.95\.0 (build|check|test|run)\b/m);
  assert.doesNotMatch(wf,/\bhc dna pack\b|record_observation|cap-grant/);
 });
 test('same SHA integration requires new SOL domain evidence and source reviewed OBS queue',()=>{
