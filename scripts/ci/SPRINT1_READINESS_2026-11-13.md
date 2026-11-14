@@ -1,3 +1,32 @@
+# P0 cross-agent handoff — 14 November 2026 (authoritative newer evidence)
+
+**Status: RED / DRAFT / NO MERGE OR ECONOMIC AUTHORIZATION.** The original integrated snapshot `cd4ab8dd61ec7353b330ba4a55f1d0ac5f5a9bf0` is immutable. It is NOT a passing combined baseline. Older dated sections below are retained as historical evidence, not current conclusions.
+
+## Exact-head executed evidence (`cd4ab8dd`)
+
+| Workflow / run | Job | Outcome |
+| --- | --- | --- |
+| Shared Actions 43529253015 | Secret/generated-file guard; disposable validator RPC smoke; reviewed lockfiles; OBS SDK unit tests; real host Rust + Anchor/SBPF; available SOL/SEC/RAVE offline suites | **6/6 jobs PASS** |
+| Integration Actions 43529253005 | Real Solana local validator lifecycle, init-capture, u64-max and restart runner | **FAIL** in lifecycle subtest 6; later scenarios never ran |
+| Integration Actions 43529253005 | Required real SDK offline fixtures and source-RPC/wire/shadow gate | **FAIL** (three mandatory missing transaction archives) |
+| Integration Actions 43529253005 | Actual published RAVE 0.15.0 Rust | **PASS 12/12** |
+
+Real local-validator evidence artifact **14087460958** uploaded **24 public-only files**. Disposable program `B8WpDXUeH96FiWYmhqwpF3Hf4MKNagM5XpZJtaVuPvF`; generated IDL SHA256 `ea6f78383e6fa9148a560f628fb7648bacede90388a4951c1f158f71c2b2cf83`, SBPF SHA256 `8162421ae2dd56927510d381bbe6c70ce760750e6d53ce2f02683ef106439928`. These hashes belong to this disposable build **only**. Its 14-day Actions artifact retention expires approximately **27 November 2026**; preserve audit evidence separately without keys.
+
+**Actual P0 root:** `tests/solana/integration.test.mjs:592` test `independent wallet accounting, concurrent deposits, rollback and authority attacks` fails after the first five lifecycle subtests succeed: `InstructionError: [0, { Custom: 6004 }]`. Generated IDL maps 6004 to `MintFreezable`, but this is not sufficient to attribute the exception to an instruction/program without its raw transaction signature, ordered account metas and `meta.logMessages`. The uploaded files contain real finalized four-account snapshots and the public signed signatures for earlier successful transactions, **not** the failing transaction. SOL must publish a reproducible failing signature/log/account bundle. Do **not** weaken mint safety to make the test green.
+
+**Artifact loss is producer-side at this SHA:** `saveTransactionEvidence()` writes `sprint1-lifecycle-transactions.json` only at the end of the failed subtest. `tests/solana/localnet-build.sh` uses `set -e`, so `sprint1-init-capture-transactions.json` and `sprint1-u64-max-transactions.json` are never produced either. GitHub uploaded partial evidence successfully; the download succeeded but cannot recover files that never existed. The downstream signed-wire/ledger/shadow milestone is **UNPROVEN**.
+
+**CI-only remedy already staged on PR #37:** explicit downstream SOL source-owned witness-bundle validation bound to checked-out SHA, generated IDL/ELF/program/genesis for all three modes; add the previously excluded public snapshot paths `sprint1-two-wallets-live.json`, `sprint1-initializer-capture.json` and `sprint1-u64-refunded.json` to the upload allowlist. Original finalized `getTransaction` (JSON + base64 signed bytes), full `getBlock` (JSON + base64), execution metadata, and account RPC snapshots remain mandatory. These changes are **not** proof that the upstream producer bug is fixed.
+
+## Owner requests and next exact-head gates
+
+SOL #35: recover the exact `6004` transaction/issuer/signature, source-own its fix and test diagnostics, backport base64 block capture/witness-regex changes; run all three disposable-validator scenarios and retained-ledger restart. OBS #36: backport narrow test assertion/secondary-signer restart corrections, exercise SDK-backed signed-wire and durable-ledger tests. SEC #33: backport valid-message Ed25519 tamper fixture and independently validate checkpoints and numeric/ledger attacks. CI #32/#37: pin verified owned source SHAs, download same-run genuine archives, rerun every required suite at the exact new integrated SHA; **both required workflows must be fully successful** before green is claimed.
+
+Still blocked beyond a passing JS shadow path: actual Unyt conductor + compatible DNA/zomes under an authenticated, reproducible runtime; multi-agent consistency and migration/partition recovery; independently authenticated Solana consensus/finality rather than a single localhost-RPC claim; economic policy, administration/upgrade controls, security signoff, production credit and withdrawal authorization. The JS quarantine-only adapter is **not** real conductor execution and must never issue credit or withdrawals.
+
+---
+
 # Sprint 1 integration readiness — 13 November 2026
 
 **P0 RED / integration-only DRAFT; never merge or authorize economics.** The previous tested SHA `4949b5693dccba1ff373a276a75c27db2f045005` remains immutable. Actions `43520698081`: Anchor/SBPF compiler, lock provenance and validator RPC smoke PASS; standalone OBS 47/48 and cross-lane 124/125 FAIL. Actions `43520697998`: published RAVE Rust 12/12 PASS; real SOL lifecycle FAILED at missing signer, downstream suites not fully exercised. Earlier failed snapshot `24b60e72ac78afbab5562c605094c3146bddd653` is also retained.
