@@ -1,0 +1,63 @@
+{
+  "schema": "hsc-a0-runtime-source-pins-v1",
+  "recordedAt": "2026-11-14",
+  "integrationParent": {
+    "pr": 51,
+    "sha": "1c4bd936e82a759c53fe3fd9d6916b4adca245ff"
+  },
+  "candidateSourceOwners": {
+    "observerV2": {
+      "pr": 52,
+      "sha": "3c919624ae9cd747501f8cb48a1f12bd8908561c",
+      "status": "DRAFT_REAL_SAME_SHA_A0_QUEUEVERIFIED_PENDING_SECURITY_FIXTURE_CI_FAILURE"
+    },
+    "observerV1Outbox": {
+      "pr": 48,
+      "sha": "220d5aa314c5b154608af24dea8b0af5c1ed6053",
+      "status": "DRAFT_SOURCE_ONLY"
+    },
+    "ownAuditDna": {
+      "pr": 44,
+      "sha": "049c3787584215e016e988c1dc4430f3dad04190",
+      "status": "DRAFT_NOT_ADOPTED_TWO_CARGO_LOCKS_ABSENT_AND_SCOPE_PLACEHOLDER"
+    },
+    "solanaRemediation": {
+      "pr": 50,
+      "sha": "640714a14ba338c615cf2ada55ca4166646a2d96",
+      "status": "EXACT_HEAD_REAL_LOCALNET_REPORTED_INDEPENDENT_SEC_REVIEW_REQUIRED"
+    },
+    "securityReview": {
+      "pr": 33,
+      "sha": "2f82cede69dffed2157654de6e112bf8b17ac6e4",
+      "status": "REVIEW_OWNER_HEAD_NOT_VERDICT_OR_AUTHORIZATION"
+    }
+  },
+  "toolchains": {
+    "node": "22.16.0",
+    "rust": "1.95.0",
+    "holochain": "0.7.1",
+    "holonixRevision": "a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da",
+    "hamRevision": "fbb4b6eb8a79a507e9453b709ed00f15c5618fb4"
+  },
+  "reviewedBuildInputs": [
+    "holochain/demo/Cargo.toml",
+    "holochain/demo/Cargo.lock",
+    "holochain/demo/ham-adapter/Cargo.toml",
+    "holochain/demo/ham-adapter/Cargo.lock",
+    "holochain/demo/dna.yaml",
+    "holochain/demo/happ.yaml",
+    "holochain/demo/build.sh",
+    "holochain/demo/integrity/src/lib.rs",
+    "holochain/demo/coordinator/src/lib.rs",
+    "holochain/demo/ham-adapter/src/main.rs"
+  ],
+  "policy": {
+    "approvedObserverDnaV2Abi": false,
+    "approvedMutatingCall": false,
+    "allowPublishedUnytCoordinator": false,
+    "allowEconomicCredit": false,
+    "allowSolanaWithdrawal": false,
+    "readOnlyBuildEvaluationOnly": true
+  },
+  "note": "Candidate reference SHAs only: no specialist source blob is adopted by pinning; historical PR/run evidence retained unchanged. No build, published Unyt or mutating-call approval."
+}

@@ -1,0 +1,115 @@
+name: A0 own-DNA reproducible build gate (NO SIGNED WRITE)
+
+on:
+  pull_request:
+    branches: [agent/ci/11-build-pipeline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a0-own-dna-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  static-readiness:
+    name: Immutable A0 source and missing-lock evidence (audit-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Verify checked-out immutable source and test fail-closed refusal
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
+          mkdir -p ci-artifacts
+          git rev-parse HEAD > ci-artifacts/source-commit.sha
+          node --check demo/a0-runtime-gate.mjs
+          node --check demo/a0-own-dna-workflow.test.mjs
+          node --test demo/a0-runtime-gate.test.mjs demo/a0-own-dna-workflow.test.mjs 2>&1 | tee ci-artifacts/a0-runtime-refusal-tests.log
+          node demo/a0-runtime-gate.mjs --out ci-artifacts/a0-runtime-readiness.json
+          sha256sum ci-artifacts/a0-runtime-readiness.json > ci-artifacts/a0-runtime-readiness.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: a0-runtime-readiness-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ci-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  own-dna-build:
+    name: Own Holochain 0.7.1 locked build (PR/dispatch; source-gated, NO ZOME CALL)
+    needs: [static-readiness]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # PR events default to a synthetic merge SHA; build the *exact* reviewed head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Refuse unreviewed/missing A4 source and both locked graphs before installing tools
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          test "$(git rev-parse HEAD)" = "$A0_EXPECTED_SHA"
+          git rev-parse HEAD > ci-artifacts/source-commit.sha
+          # Intentionally FAIL this required PR job when reviewed source, both
+          # Cargo locks or source-authenticated disposable scope are absent.
+          # No Nix/Rust installation or zome call is attempted on refusal.
+          node demo/a0-runtime-gate.mjs --out ci-artifacts/a0-runtime-readiness.json --require-build
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Pinned Rust 1.95 / Holonix Holochain 0.7.1 own-DNA build only
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add wasm32-unknown-unknown --toolchain 1.95.0
+          rustc +1.95.0 -Vv | tee ci-artifacts/rustc-version.log
+          nix --version | tee ci-artifacts/nix-version.log
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash holochain/demo/build.sh 2>&1 | tee ci-artifacts/own-dna-build.log
+          test -s holochain/demo/demo-build-artifacts.sha256
+          test -s holochain/demo/demo-build-dna-hash.txt
+          (cd holochain/demo && sha256sum --check demo-build-artifacts.sha256)
+      - name: Explicitly retain NO-WRITE policy; never infer security approval from a build
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          node demo/a0-runtime-gate.mjs --out ci-artifacts/a0-runtime-readiness.json --require-write && exit 1 || rc=$?
+          test "$rc" -eq 3
+          echo 'BUILD ONLY: ActionHash, external Lair authorization, approved v2 ABI and Holochain readback are NOT verified.'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: a0-own-dna-build-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ci-artifacts/
+            holochain/demo/demo-build-artifacts.sha256
+            holochain/demo/demo-build-dna-hash.txt
+            holochain/demo/holochain_solana_audit_demo.dna
+            holochain/demo/holochain_solana_audit_demo.happ
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm
+          if-no-files-found: warn
+          retention-days: 14
