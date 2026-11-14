@@ -6,8 +6,9 @@
   "description": "Read-only finalized Solana transaction, receipt and historical block evidence. NEVER authorizes credit.",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/cli.mjs && node --check src/verify.mjs && node --check src/decode.mjs && node --check src/pda.mjs && node --check scripts/verify-idl.mjs && node --check src/transaction.mjs && node --check src/ledger.mjs && node --check src/indexer.mjs && node --check scripts/replay-validator-witness.mjs && node --check test/validator-witness.test.mjs && node --check test/ledger-authentication-boundary.test.mjs && node --check src/refund.mjs && node --check src/history.mjs && node --check scripts/replay-refund-witness.mjs && node --check test/refund-ledger.test.mjs && node --check test/history.test.mjs && node --check scripts/replay-quarantined-ledger.mjs && node --check src/demo-outbox.mjs && node --check test/demo-outbox.test.mjs && node --check test/indexer-metadata-handoff.test.mjs && node --check src/v2-proof-contract.mjs && node --check test/v2-proof-contract.test.mjs",
-    "verify:idl": "node scripts/verify-idl.mjs"
+    "check": "node --check src/cli.mjs && node --check src/verify.mjs && node --check src/decode.mjs && node --check src/pda.mjs && node --check scripts/verify-idl.mjs && node --check src/transaction.mjs && node --check src/ledger.mjs && node --check src/indexer.mjs && node --check scripts/replay-validator-witness.mjs && node --check test/validator-witness.test.mjs && node --check test/ledger-authentication-boundary.test.mjs && node --check src/refund.mjs && node --check src/history.mjs && node --check scripts/replay-refund-witness.mjs && node --check test/refund-ledger.test.mjs && node --check test/history.test.mjs && node --check scripts/replay-quarantined-ledger.mjs && node --check src/demo-outbox.mjs && node --check test/demo-outbox.test.mjs && node --check test/indexer-metadata-handoff.test.mjs && node --check src/v2-proof-contract.mjs && node --check test/v2-proof-contract.test.mjs && node --check test/demo-outbox-original-artifact.test.mjs",
+    "verify:idl": "node scripts/verify-idl.mjs",
+    "test:original-outbox": "OBS_REQUIRE_ORIGINAL_OUTBOX=1 node --test test/demo-outbox-original-artifact.test.mjs"
   },
   "engines": {
     "node": ">=20"
