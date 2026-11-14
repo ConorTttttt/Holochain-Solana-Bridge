@@ -1,0 +1,17 @@
+{
+  "purpose": "disposable-local-validator-test-only-NOT-independent-trust",
+  "programId": "EHT4VAKN1p1XMVkANkMunF8T6Hv3ASskRNDiEPQZ8nYh",
+  "sourceCommitSha": "cca4e9a94b5147efa82ac0106f1f97f75a42251f",
+  "idlSha256": "1d0693206815787d1ee7fe22435f39dd3bf6b3953a3dcb4b58cc7c82aa653121",
+  "elfSha256": "753c130a158e35c241962c07d7425a0ced70a2496354f39dd4187f4d3c6cdb38",
+  "trustedDeploymentSlot": 5,
+  "genesisHash": "CneMp5SxfKQZ3aoyQQKSKBRNcuSHVmsCga7BgABiom7Z",
+  "expected": {
+    "program": "EHT4VAKN1p1XMVkANkMunF8T6Hv3ASskRNDiEPQZ8nYh",
+    "mint": "BUxm14VQ6u5RruEtRRxPYsQv9SUyfWhqjZuzGinZAByA",
+    "config": "3htP2qPWBuMocy9dHYadUkRtRedzsF6rZ7Mvf6EMmJLm",
+    "vault": "6gu3Qoeu9XGa5RASMAvkEvZJmwJ6AAKmMvQL1GF1URfC",
+    "scope": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "idlSha256": "1d0693206815787d1ee7fe22435f39dd3bf6b3953a3dcb4b58cc7c82aa653121"
+  }
+}
