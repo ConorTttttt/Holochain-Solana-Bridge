@@ -152,3 +152,30 @@ test('18 signed write response mismatched readback ActionHash stays uncertain',a
   assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
   assert.equal(await outbox.reconcile(evidence.id,client),'acked');assert.equal(client.writes,1);
 });
+test('19 arbitrary JSON cannot claim reviewed provenance via production queue API',async t=>{
+  const {outbox,ledger,evidence,tx}=make(t);
+  await assert.rejects(outbox.queueVerified({ledger,evidence,rpcTransaction:tx,
+    codeVersion:'caller-says-reviewed'}),/TWO_RPC_URLS_REQUIRED/);
+  assert.deepEqual(outbox.status.rows,{});
+});
+test('20 synthetic fixtures require explicit test-only opt-in and cannot become reviewed',t=>{
+  const {outbox,ledger,evidence,tx}=make(t);
+  const value=process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE;
+  delete process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE;
+  try{
+    assert.throws(()=>outbox.queueSyntheticFixture({ledger,evidence,rpcTransaction:tx,codeVersion:'fixture'}),
+      /SYNTHETIC_DISABLED/);
+    assert.deepEqual(outbox.status.rows,{});
+  }finally{process.env.DEMO_ALLOW_TEST_ONLY_FIXTURE=value}
+});
+test('21 exact A4 v1 record is root/source/proof, not A1 witness/destination',t=>{
+  const {outbox,queue}=make(t);queue();
+  const item=Object.values(outbox.state.rows)[0].observation;
+  assert.deepEqual(Object.keys(item).sort(),[
+    'kind','schemaVersion','source','proof',...Object.keys(DENIALS)].sort());
+  assert.equal(item.source.instructionIndex,0);
+  assert.equal(item.source.sourceEventType,'deposit');
+  assert.equal(item.proof.historyComplete,false);
+  assert.equal('witness' in item,false);assert.equal('destination' in item,false);
+  assert.equal(outbox.status.rollbackSecurityHold,ROLLBACK_HOLD);
+});
