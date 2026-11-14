@@ -198,7 +198,7 @@ jobs:
       - name: Install exact Anchor CLI
         run: |
           source scripts/ci/toolchain.env
-          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
+          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --rev "8d9d1488d9b8af41b266d7513eea2e668adf15a2" anchor-cli --locked
       - name: Toolchain evidence
         run: bash scripts/ci/record.sh tool-versions bash scripts/ci/tool-versions.sh
       - name: Create disposable localnet program keypair and sync only temporary ID
