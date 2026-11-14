@@ -146,11 +146,13 @@ test('17 remote readback with wrong denial flags never ACKs',async t=>{
   assert.equal(await outbox.deliver(evidence.id,client),'pending');
   assert.equal(client.writes,0);
 });
-test('18 signed write response mismatched readback ActionHash stays uncertain',async t=>{
-  const {outbox,evidence,queue}=make(t);queue();const client=remote();
+test('18 signed write response/readback ActionHash contradiction is durable HOLD',async t=>{
+  const {outbox,evidence,queue,path}=make(t);queue();const client=remote();
   const orig=client.write.bind(client);client.write=async (...args)=>{await orig(...args);return {actionHash:'not-the-readback-action'}};
   assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
-  assert.equal(await outbox.reconcile(evidence.id,client),'acked');assert.equal(client.writes,1);
+  assert.equal(JSON.parse(readFileSync(path,'utf8')).rows[evidence.id].returnedActionHash,'not-the-readback-action');
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');assert.equal(client.writes,1);
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');
 });
 test('19 arbitrary JSON cannot claim reviewed provenance via production queue API',async t=>{
   const {outbox,ledger,evidence,tx}=make(t);
@@ -281,4 +283,38 @@ test('29 unrelated RPC fractional, unsafe, negative or nonfinite values refuse',
   ];
   for(const meta of bad)assert.throws(()=>queue(evidence,{...tx,meta}),
     /NON_CANONICAL_RPC_NUMERIC/);
+});
+
+test('30 restart retains returned ActionHash and refuses contradictory later source record',async t=>{
+  const {path,outbox,evidence,queue}=make(t);queue();const client=remote();
+  const write=client.write.bind(client);
+  client.write=async(...args)=>{await write(...args);client.records.delete(evidence.id);
+    return {actionHash:'source-action-A'}};
+  assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
+  assert.equal(JSON.parse(readFileSync(path,'utf8')).rows[evidence.id].returnedActionHash,'source-action-A');
+  outbox.close();
+  const restored=new DemoOutbox(path,{expected,destination});
+  client.records.set(evidence.id,{
+    actionHash:'different-source-action-B',observation:restored.state.rows[evidence.id].observation,...DENIALS,
+  });
+  assert.equal(await restored.reconcile(evidence.id,client),'hold');
+  assert.equal(await restored.deliver(evidence.id,client),'hold');
+  assert.equal(client.writes,1,'no second write after an ambiguous prior write');
+  restored.close();
+});
+test('31 exact returned ActionHash may ACK only matching later readback after restart',async t=>{
+  const {path,outbox,evidence,queue}=make(t);queue();const client=remote();
+  const write=client.write.bind(client);
+  client.write=async(...args)=>{await write(...args);client.records.delete(evidence.id);
+    return {actionHash:'expected-source-action'}};
+  assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
+  outbox.close();
+  const restored=new DemoOutbox(path,{expected,destination});
+  client.records.set(evidence.id,{
+    actionHash:'expected-source-action',observation:restored.state.rows[evidence.id].observation,...DENIALS,
+  });
+  assert.equal(await restored.reconcile(evidence.id,client),'acked');
+  assert.equal(restored.status.rows[evidence.id].actionHash,'expected-source-action');
+  assert.equal(client.writes,1);
+  restored.close();
 });
