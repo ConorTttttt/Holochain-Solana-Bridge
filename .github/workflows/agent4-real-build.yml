@@ -44,7 +44,13 @@ jobs:
                   blob=z.read('holochain/demo/'+name)
                   assert hashlib.sha256(blob).hexdigest()==digest
                   target=root/name
-                  if name=='Cargo.lock': assert target.read_bytes()==blob
+                  if name=='Cargo.lock':
+                      old=b'name = "solana_audit_integrity"\nversion = "0.1.0"\ndependencies = [\n "bs58",\n "hdi",\n "rmp-serde",\n "serde",\n]'
+                      new=b'name = "solana_audit_integrity"\nversion = "0.1.0"\ndependencies = [\n "bs58",\n "hdi",\n "holochain_serialized_bytes",\n "rmp-serde",\n "serde",\n]'
+                      assert blob.count(old)==1, 'WASM lock original root no longer matches'
+                      reviewed=blob.replace(old,new)
+                      assert hashlib.sha256(reviewed).hexdigest()=='c5774a18ba821005d80e51c7bf1663062817ce06e585a2bc2245e09da3b4d6c6', 'unreviewed WASM lock proposal'
+                      assert target.read_bytes()==reviewed, 'current WASM lock not the reviewed one-line graph-root correction'
                   else:
                       assert not target.exists() or target.read_bytes()==blob
                       target.write_bytes(blob)
@@ -53,7 +59,9 @@ jobs:
           assert set(manifest['dependencies'])=={'anyhow','serde','serde_json','ham','holochain_client','holo_hash','tokio'}
           assert manifest['dependencies']['ham']=={'git':'https://github.com/unytco/ham','rev':'fbb4b6eb8a79a507e9453b709ed00f15c5618fb4'}
           assert manifest['dependencies']['holochain_client']=='=0.9.1' and manifest['dependencies']['holo_hash']=='=0.7.1'
-          print('ORIGINAL_RESOLVER_ARTIFACT_AND_CURRENT_STANDALONE_MANIFEST_OK')
+          wasm_manifest=tomllib.loads((root/'integrity/Cargo.toml').read_text())
+          assert wasm_manifest['dependencies']['holochain_serialized_bytes']=='=0.0.57', 'macro crate not strictly pinned'
+          print('ORIGINAL_RESOLVER_ARTIFACT_CURRENT_NATIVE_AND_REVIEWED_WASM_ROOT_OK')
           PY
           python3 holochain/demo/verify-native-lock.py | tee ci-artifacts/a4/native-structural-review.log
           sha256sum holochain/demo/Cargo.lock holochain/demo/ham-adapter/Cargo.lock | tee ci-artifacts/a4/initial-lock-digests.txt
@@ -66,7 +74,7 @@ jobs:
           cargo +1.95.0 tree --locked --manifest-path Cargo.toml --target wasm32-unknown-unknown > ../../ci-artifacts/a4/wasm-tree.log 2>&1
           cargo +1.95.0 tree --locked --manifest-path ham-adapter/Cargo.toml > ../../ci-artifacts/a4/native-tree.log 2>&1
           cd ../..
-          echo '85ce7ffafbdf158148a62c64d87fb582b6fe06ffa164e774006c2bdd9afa9751  holochain/demo/Cargo.lock' | sha256sum --check
+          echo 'c5774a18ba821005d80e51c7bf1663062817ce06e585a2bc2245e09da3b4d6c6  holochain/demo/Cargo.lock' | sha256sum --check
           echo '08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399  holochain/demo/ham-adapter/Cargo.lock' | sha256sum --check
           python3 holochain/demo/verify-native-lock.py
       - name: Commit reviewed exact lock on A4 branch only (never force push)
@@ -116,6 +124,11 @@ jobs:
         if: always()
         with:
           name: a4-real-locked-run-${{ github.run_id }}
-          path: ci-artifacts/a4/
+          path: |
+            ci-artifacts/a4/
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm
+            holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm
+            holochain/demo/holochain_solana_audit_demo.dna
+            holochain/demo/holochain_solana_audit_demo.happ
           if-no-files-found: warn
           retention-days: 14
