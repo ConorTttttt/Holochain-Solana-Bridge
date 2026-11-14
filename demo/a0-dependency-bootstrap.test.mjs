@@ -9,7 +9,9 @@ test('bootstrap is independent of reviewed locked DNA build gate',()=>{
  assert.match(wf,/ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
  assert.match(wf,/rustup toolchain install 1\.95\.0/);
  assert.match(script,/cargo \+1\.95\.0 generate-lockfile --manifest-path holochain\/demo\/Cargo\.toml/);
- assert.match(script,/cargo \+1\.95\.0 generate-lockfile --manifest-path holochain\/demo\/ham-adapter\/Cargo\.toml/);
+ assert.match(script,/cargo \+1\.95\.0 generate-lockfile --manifest-path "\$ham_tmp\/Cargo\.toml"/);
+ assert.match(script,/cmp holochain\/demo\/ham-adapter\/Cargo\.toml "\$ham_tmp\/Cargo\.toml"/);
+ assert.match(script,/nativeHamOriginalWorkspaceBoundaryRequiresAgent4Correction:true/);
  assert.match(wf,/holochain\/demo\/Cargo\.lock/);
  assert.match(wf,/holochain\/demo\/ham-adapter\/Cargo\.lock/);
  assert.match(script,/UNREVIEWED_RESOLUTION_PROPOSAL_NOT_COMMITTED/);

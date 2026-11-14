@@ -26,10 +26,22 @@ node scripts/ci/verify-integration-provenance.mjs > ci-artifacts/a0-bootstrap-so
 # zome calls, Lair, hc pack, conductor, mainnet, or economic functionality.
 cargo +1.95.0 generate-lockfile --manifest-path holochain/demo/Cargo.toml
 test -s holochain/demo/Cargo.lock
-cargo +1.95.0 generate-lockfile --manifest-path holochain/demo/ham-adapter/Cargo.toml
-test -s holochain/demo/ham-adapter/Cargo.lock
+# A4 native HAM currently inherits the repository-root Cargo workspace unless it
+# declares its own [workspace]. This is an A4 source issue: CI must not edit it.
+# Resolve a byte-for-byte copy OUTSIDE the parent workspace and report the
+# layout blocker to A4. The proposed lock is not build-ready until A4 fixes
+# source ownership and commits a matching reviewed graph.
+ham_tmp="$(mktemp -d -t hsc-ham-deps.XXXXXXXX)"
+trap 'rm -rf -- "$ham_tmp"' EXIT
+mkdir -p "$ham_tmp/src"
+cp holochain/demo/ham-adapter/Cargo.toml "$ham_tmp/Cargo.toml"
+cp holochain/demo/ham-adapter/src/main.rs "$ham_tmp/src/main.rs"
+cmp holochain/demo/ham-adapter/Cargo.toml "$ham_tmp/Cargo.toml"
+cargo +1.95.0 generate-lockfile --manifest-path "$ham_tmp/Cargo.toml"
+test -s "$ham_tmp/Cargo.lock"
+cargo +1.95.0 metadata --locked --no-deps --format-version 1 --manifest-path "$ham_tmp/Cargo.toml" > ci-artifacts/a0-bootstrap-native-metadata.json
+cp "$ham_tmp/Cargo.lock" holochain/demo/ham-adapter/Cargo.lock
 cargo +1.95.0 metadata --locked --no-deps --format-version 1 --manifest-path holochain/demo/Cargo.toml > ci-artifacts/a0-bootstrap-wasm-metadata.json
-cargo +1.95.0 metadata --locked --no-deps --format-version 1 --manifest-path holochain/demo/ham-adapter/Cargo.toml > ci-artifacts/a0-bootstrap-native-metadata.json
 sha256sum holochain/demo/Cargo.lock holochain/demo/ham-adapter/Cargo.lock > ci-artifacts/a0-bootstrap-lockfiles.sha256
 git diff --exit-code -- Cargo.lock Cargo.toml holochain/demo
 node --input-type=module <<'NODE' > ci-artifacts/a0-bootstrap-provenance.json
@@ -50,6 +62,8 @@ sourceOwner:manifest.sources.RAVE,
 rust:'1.95.0',holonixRevision:'a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da',
 hamRevision:'fbb4b6eb8a79a507e9453b709ed00f15c5618fb4',
 status:'UNREVIEWED_RESOLUTION_PROPOSAL_NOT_COMMITTED',
+nativeHamBootstrapMethod:'BYTE_IDENTICAL_MANIFEST_COPY_OUTSIDE_INHERITED_ROOT_WORKSPACE',
+nativeHamOriginalWorkspaceBoundaryRequiresAgent4Correction:true,
 inputs: Object.fromEntries(inputs.map(p=>[p,{gitBlob:blob(p),sha256:digest(p),upstreamGitBlob:manifest.fileProvenance[p]?.sha}])),
 locks:Object.fromEntries(locks.map(p=>[p,{sha256:digest(p),byteLength:readFileSync(p).length,tracked:false}])),
 nonAuthorizing:true,independentDependencyApproval:false,
