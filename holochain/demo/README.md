@@ -6,21 +6,34 @@ This entirely independent DNA is NOT the signed Unyt v0.117.0 release. Neither t
 
 ## What the source does
 
-The integrity zome checks an ABI version, real DNA-scope properties (genesis/program/mint/scope), source and occurrence IDs, canonical positive u64 decimals, event type (deposit only), witness format, strict nested denial fields, and append-only entry shape. The coordinator stores audit entries on the caller's own chain and reads back by source ID; identical same-agent replays return the previous action, conflicting content is refused. This does **not** implement globally unique exactly-once across multiple authors or hostile rollback. Source observations are claims supplied by the Observer; the DNA does not cryptographically prove Solana transactions.
+The integrity zome is currently **fixture-only even at the DNA validator**: it refuses an arbitrary `observer_reviewed_outbox` provenance label pending A3-authenticated exporter and independent SEC-approved versioned intake. It checks an ABI version, real DNA-scope properties (genesis/program/mint/scope), source and occurrence IDs, canonical positive u64 decimals, event type (deposit only), witness format, strict nested denial fields, and append-only entry shape. The coordinator stores audit entries on the caller's own chain and reads back by source ID; identical same-agent replays return the previous action, conflicting content is refused. This does **not** implement globally unique exactly-once across multiple authors or hostile rollback. Source observations are claims supplied by the Observer; the DNA does not cryptographically prove Solana transactions.
 
 The adapter uses **only** its own role audit / zome solana_audit with the fixed function allowlist get_contract, record_observation and get_observation. It checks installed app/cell, agent, expected DNA hash, own ABI and external Lair. Capability grants are withheld. It intentionally accepts only fixtures explicitly labeled test_only_fixture and requires DEMO_ALLOW_TEST_ONLY_FIXTURE=1 pending an Agent 3-reviewed authenticated outbox interface. Never present fixture delivery as a genuine deposit.
 
+## Latest executed evidence (14 November 2026)
+
+On an independently reconstructed, GitHub-blob-matched copy of the two current A4 JavaScript files, `node --test tests/holochain/demo/demo-abi.test.mjs` passed **36/36**, zero skipped; these are synthetic contract tests only. Local `nix`, `cargo`, `rustc`, `hc`, conductor and external Lair are unavailable. Real attempted pinned `nix develop ...` and `cargo +1.95.0 ...` commands failed at **`command not found`**, before compilation. No PR #44 same-SHA Actions run, WASM, DNA/hApp digest, installed cell, signed ActionHash or restart evidence is claimed. Full logs and blockers: [BUILD_EVIDENCE_2026-11-14.md](BUILD_EVIDENCE_2026-11-14.md).
+
+The WASM workspace now intentionally excludes the separate native HAM/Lair adapter. Both require their own trusted, committed Rust 1.95.0 lockfile before a `--locked` build. A1 owns CI workflows; see [SEC_REVIEW_TUPLE.md](SEC_REVIEW_TUPLE.md) for the not-yet-approved exact call checklist and [ABI_PROJECTION_HANDOFF.md](ABI_PROJECTION_HANDOFF.md) for the incompatible A1/A3 source-only input projection.
+
 ## Local reproducibility / CURRENTLY UNEXECUTED for the Rust/conductor layers
 
-Use the exact pinned Holonix commit a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da with Holochain 0.7.1. On a disposable validator, FIRST replace dna.yaml's test-only genesis/program/mint/scope with the matching *verified* Observer domain, then replace the placeholder network_seed with a new unpredictable disposable seed. Compute the DNA hash from the packed artifact, and pin it in both app deployment and the caller's DEMO_EXPECTED_DNA_HASH.
+Use the exact pinned Holonix commit a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da with Holochain 0.7.1. On a disposable validator, FIRST replace dna.yaml's test-only genesis/program/mint/scope with the matching *verified* Observer domain, then replace the placeholder network_seed with a new unpredictable disposable seed. Before the locked build, generate and **commit/review** the two lockfiles using a trusted pinned networked runner:
+
+```sh
+cargo +1.95.0 generate-lockfile --manifest-path holochain/demo/Cargo.toml
+cargo +1.95.0 generate-lockfile --manifest-path holochain/demo/ham-adapter/Cargo.toml
+```
+
+Compute the DNA hash from the packed artifact, and pin it in both app deployment and the caller's DEMO_EXPECTED_DNA_HASH.
 
 ```sh
 node --test tests/holochain/demo/demo-abi.test.mjs
 nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command bash holochain/demo/build.sh
-cargo +1.95.0 run --manifest-path holochain/demo/ham-adapter/Cargo.toml -- preflight
+cargo +1.95.0 run --locked --manifest-path holochain/demo/ham-adapter/Cargo.toml -- preflight
 # After authorized disposable install and external Lair config:
-DEMO_ALLOW_TEST_ONLY_FIXTURE=1 cargo +1.95.0 run --manifest-path holochain/demo/ham-adapter/Cargo.toml -- deliver /path/to/explicitly-test-only-observation.json
-cargo +1.95.0 run --manifest-path holochain/demo/ham-adapter/Cargo.toml -- read '<source-id>'
+DEMO_ALLOW_TEST_ONLY_FIXTURE=1 cargo +1.95.0 run --locked --manifest-path holochain/demo/ham-adapter/Cargo.toml -- deliver /path/to/explicitly-test-only-observation.json
+cargo +1.95.0 run --locked --manifest-path holochain/demo/ham-adapter/Cargo.toml -- read '<source-id>'
 # Shut down and restart SAME conductor, repeat read and compare stored ActionHash.
 ```
 
