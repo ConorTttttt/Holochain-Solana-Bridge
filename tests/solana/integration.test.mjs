@@ -546,8 +546,41 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
       persistOperations();
       throw error;
     }
-    const confirmation = await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
-    record.confirmationError = confirmation.value.err;
+    // web3.js confirmTransaction may REJECT its Promise for an INCLUDED
+    // expected-negative transaction, returning only a bare InstructionError.
+    // Do not reclassify that SDK exception as a successful test or drop the
+    // original signed wire: require the validator's own finalized/confirmed
+    // signature status and then its original getTransaction meta below.
+    let confirmationError;
+    let recoveredConfirmedSlot = null;
+    try {
+      const confirmation = await connection.confirmTransaction(
+        { signature, ...blockhash }, 'confirmed');
+      confirmationError = confirmation.value.err;
+    } catch (error) {
+      record.confirmationSdkException = String(error?.message ?? error);
+      let witnessedStatus = null;
+      for (let i = 0; i < 60; i++) {
+        const result = await connection.getSignatureStatuses([signature],
+          { searchTransactionHistory: true });
+        const candidate = result.value[0];
+        if (candidate &&
+            ['confirmed', 'finalized'].includes(candidate.confirmationStatus)) {
+          witnessedStatus = candidate;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      // A transport failure, absent signature, unsigned transaction, or
+      // unexpectedly successful transaction is NEVER recovered as rejection.
+      if (!witnessedStatus || witnessedStatus.err === null) throw error;
+      assert.ok(Number.isSafeInteger(witnessedStatus.slot),
+        'included rejection status has invalid slot: ' + signature);
+      confirmationError = witnessedStatus.err;
+      recoveredConfirmedSlot = witnessedStatus.slot;
+      record.confirmationRecoveredFromOriginalRpc = true;
+    }
+    record.confirmationError = confirmationError;
     record.status = 'confirmed'; persistOperations();
     let included;
     for (let i = 0; i < 20; i++) {
@@ -563,8 +596,14 @@ async function submitOnChain(ix, signers, label = operationName(ix)) {
     record.logs = included.meta.logMessages;
     record.emittingProgramId = errorEmitter(record.logs);
     persistOperations();
-    assert.deepEqual(included.meta.err, confirmation.value.err,
-      'confirmation and included execution mismatch: ' + signature);
+    assert.deepEqual(included.meta.err, confirmationError,
+      'confirmation/status and included execution mismatch: ' + signature);
+    if (recoveredConfirmedSlot !== null) {
+      assert.equal(included.slot, recoveredConfirmedSlot,
+        'recovered rejected transaction status slot contradicts included transaction');
+      assert.notEqual(included.meta.err, null,
+        'SDK rejection cannot turn included success into expected failure');
+    }
     assert.ok(included.meta.logMessages?.length, 'missing included execution logs: ' + signature);
     const outcome = {
       signature, slot: included.slot, blockTime: included.blockTime,
