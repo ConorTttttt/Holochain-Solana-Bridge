@@ -13,7 +13,7 @@ Checked GitHub source heads and exact run identities on 2026-11-14:
 | SOL baseline | #50 | 640714a14ba338c615cf2ada55ca4166646a2d96 | 43599879389; original 14116560514 | SEC-38-1/2/3/4 limited technical accept |
 | SOL fresh | #55 | c071e4c98e7b2dd04a18374f3792c0a90ce4b284 | 43604140724, job 132475021174 success; original 14118166967 | ACCEPT non-economic localnet origin |
 | OBS reviewed v2 | #52 | a2338f965916ffac982527f6dc7696e9c5706345 | 43603678118 shared CI 5/6, cross-lane failure 132475785120 | TEST-ONLY SOURCE REVIEW, v2 signed admission CLOSED |
-| Holochain own DNA | #44 | 7572859b7850a7ce0bcab138d59c164ee17da28b | No actual own-DNA build/install or signed runtime result | WRITE CLOSED |
+| Holochain own DNA | #44 | 294c523f8ebbebc6ff499831b07e6a1a0c39255d | No actual own-DNA build/install or signed runtime result | WRITE CLOSED |
 | CI integration | #54 | 093a7454a36c3a26cc107b06b1334a289940811e | 43603110341 own-DNA build gate failure / exit 3 | A0 CLOSED |
 
 SEC #53's two and ONLY two changed source paths:
@@ -84,7 +84,7 @@ Two RPC URLs are not independent consensus or genuinely independent operators. L
 
 ## Own-DNA exact-head runtime inspection and function restrictions
 
-A4 **current HEAD 7572859b7850a7ce0bcab138d59c164ee17da28b**, not the older c7964607... in its PR text, adds source-only bootstrap-locks.sh and refines build.sh. Both holochain/demo/Cargo.lock and holochain/demo/ham-adapter/Cargo.lock still return GitHub 404/missing; no tracked lock hash. DNA YAML still includes DEMO-ONLY-REPLACE network seed and old 07 placeholder scope. No compiled WASM digests, DNA/hApp bundle digests, Holochain DNA hash, installed app, full CellId, actual agent, external Lair signing, read-only on-conductor negative result, or genuine Holochain ActionHash. Script validates pinned HAM revision fbb4b6eb8a79a507e9453b709ed00f15c5618fb4 and CapGrantOptIn::Withheld in source only. Source coordinator exports get_contract, get_observation, list_observations, record_observation (v1 only); v2 function absent. No capability grant opt-in, no published Unyt coordinator, no economic function may be authorized.
+A4 **current HEAD 294c523f8ebbebc6ff499831b07e6a1a0c39255d**, not the older c7964607... in its PR text, adds source-only bootstrap-locks.sh, refines build.sh, and adds a standalone [workspace] to ham-adapter/Cargo.toml (one further manifest-only commit after 7572859...). Both holochain/demo/Cargo.lock and holochain/demo/ham-adapter/Cargo.lock still return GitHub 404/missing; no tracked lock hash. DNA YAML still includes DEMO-ONLY-REPLACE network seed and old 07 placeholder scope. No compiled WASM digests, DNA/hApp bundle digests, Holochain DNA hash, installed app, full CellId, actual agent, external Lair signing, read-only on-conductor negative result, or genuine Holochain ActionHash. Script validates pinned HAM revision fbb4b6eb8a79a507e9453b709ed00f15c5618fb4 and CapGrantOptIn::Withheld in source only. Source coordinator exports get_contract, get_observation, list_observations, record_observation (v1 only); v2 function absent. No capability grant opt-in, no published Unyt coordinator, no economic function may be authorized.
 
 A1 PR #54 exact HEAD 093a7454a36c3a26cc107b06b1334a289940811e own-DNA build workflow run 43603110341 job 132471965436 **FAILED exit code 3** at immutable source preflight: buildInputsTracked:false, no actual locks/own-DNA source in that combined checkout. Other green shared/integration checks cannot override this failure. No actual on-conductor read-only or write proof exists.
 
