@@ -8,6 +8,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { getTransactionDecoder, getCompiledTransactionMessageDecoder, getBase64Encoder } from '@solana/kit';
 import { encode58, decodeReceipt } from '../src/decode.mjs';
@@ -40,6 +42,13 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
   test('genuine finalized signed wire and block replay: '+mode,async()=>{
     const index=load('sprint1-'+mode+'-transactions.json');
     assert.equal(index.mode,mode);
+    // A historical valid signed-wire artifact from another source SHA is
+    // valuable, but is NOT an accepted same-SHA integration result.
+    const checkoutSha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+    const archiveSha=readFileSync(root+'source-commit.txt','utf8').trim();
+    assert.match(checkoutSha,/^[0-9a-f]{40}$/);
+    assert.equal(archiveSha,checkoutSha,'SAME_SHA_SOURCE_PRODUCER_REQUIRED');
+    assert.equal(index.sourceCommitSha,checkoutSha,'SAME_SHA_INDEX_REQUIRED');
     assert.ok(index.genesisHash && index.programId);
     assert.ok(index.finalized.length>0,'empty real validator witness');
     let verified=0, authenticated=0, depositCount=0;
@@ -206,6 +215,209 @@ for (const mode of ['lifecycle','init-capture','u64-max']) {
                   block:{slot:item.slot,blockhash:'contradictory-blockhash'}}),
                   /conflicting finalized blockhash/);
                 assert.equal(restart.checkpoint,item.slot);
+
+                // ORIGINAL Kit-backed outbox admission, not an invented signed
+                // transaction and NOT a Holochain ACK. Both endpoint names
+                // replay the same retained validator RPC bytes; they are not
+                // independent historical consensus providers.
+                const {DemoOutbox}=await import('../src/demo-outbox.mjs');
+                const {verifyReviewedWitnessV2,REVIEWED_V2_DOMAIN}=await import('../src/demo-witness-v2.mjs');
+                const {canonicalJSON,domainDigest}=await import('../src/demo-outbox.mjs');
+                const ciIdlText=readFileSync('target/idl/deposit_prototype.json','utf8');
+                const sourcePins={
+                  genesisHash:index.genesisHash,program:index.programId,
+                  mint:expected.mint,holochainScope:expected.scope,
+                  idlSha256:(await import('node:crypto')).createHash('sha256')
+                    .update(ciIdlText).digest('hex'),
+                  sourceCommitSha:index.sourceCommitSha,
+                };
+                const target={dnaHash:'NOT_DEPLOYED_DEMO_DNA',
+                  agentKey:'NOT_DEPLOYED_DEMO_AGENT',
+                  appId:'observer-owned-localnet-audit-proposal',
+                  role:'audit',zome:'solana_audit'};
+                const candidateV2Outbox=new DemoOutbox(join(dir,'reviewed-outbox.json'),
+                  {expected:sourcePins,destination:target});
+                const archivedRpc=async (_rpcUrl,options)=>{
+                  const req=JSON.parse(options.body);
+                  let value;
+                  if(req.method==='getGenesisHash')value=index.genesisHash;
+                  else if(req.method==='getTransaction'){
+                    assert.equal(req.params[0],item.signature);
+                    value=tx;
+                  }else if(req.method==='getBlock'){
+                    assert.equal(req.params[0],item.slot);
+                    value=block;
+                  }else if(req.method==='getMultipleAccounts'){
+                    assert.deepEqual(req.params[0],[
+                      receipt.address,expected.config,expected.vault,expected.mint]);
+                    value={context:{slot:active.raw.slot},value:active.raw.accounts.map(a=>({
+                      owner:a.owner,executable:false,lamports:a.lamports,
+                      space:Buffer.from(a.dataBase64,'base64').length,
+                      data:[a.dataBase64,'base64'],
+                    }))};
+                  }else throw Error('UNEXPECTED_ORIGINAL_RPC_METHOD:'+req.method);
+                  return {ok:true,json:async()=>({jsonrpc:'2.0',id:1,result:value})};
+                };
+                const queueArgs={ledger:restart,rpcUrls:[
+                  'http://127.0.0.1:8899','http://127.0.0.1:9900'],
+                  signature:item.signature,receiptAddress:receipt.address,
+                  expected,idlText:ciIdlText,codeVersion:index.sourceCommitSha,
+                  fetchFn:archivedRpc};
+                const savedOptIn=process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+                process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY='1';
+                try{
+                  assert.equal(await candidateV2Outbox.queueVerified(queueArgs),'pending');
+                  assert.equal(await candidateV2Outbox.queueVerified(queueArgs),'pending');
+                  const row=candidateV2Outbox.state.rows[evidence.id];
+                  assert.equal(row.observation.proof.evidenceOrigin,
+                    'observer_reviewed_outbox');
+                  assert.equal(row.reviewedWitnessV2.source.depositNonce,'42017');
+                  assert.equal(row.reviewedWitnessV2.source.recipientCore,evidence.recipientCore);
+                  assert.equal(row.reviewedWitnessV2.source.blockhash,item.blockhash);
+                  assert.equal(row.reviewedWitnessV2.proof.historyComplete,false);
+                  assert.ok(verifyReviewedWitnessV2(row.reviewedWitnessV2));
+                  const originalV2File='ci-artifacts/observer-reviewed-v2-original-signed-localnet.json';
+                  mkdirSync('ci-artifacts',{recursive:true});
+                  const originalV2Bytes=Buffer.from(JSON.stringify({
+                    immutableSourceCommitSha:index.sourceCommitSha,
+                    originalLocalnetSource:'real SOL local-validator signed wire archived by same CI run',
+                    witness:row.reviewedWitnessV2,
+                    // No signed Holochain record exists at this stage.
+                    destinationReadback:{state:'not_approved_or_written',actionHash:null},
+                  },null,2)+'\n');
+                  writeFileSync(originalV2File,originalV2Bytes,{mode:0o600});
+                  const originalV2Sha=createHash('sha256')
+                    .update(originalV2Bytes).digest('hex');
+                  // Portable, byte-exact canonical test vector for independent A4/A5
+                  // implementations. It excludes only the terminal witnessDigest.
+                  const {witnessDigest:expectedV2Digest,...unsignedV2}=row.reviewedWitnessV2;
+                  const canonicalBytes=Buffer.from(canonicalJSON(unsignedV2),'utf8');
+                  const independentDigest=createHash('sha256').update(Buffer.concat([
+                    Buffer.from(REVIEWED_V2_DOMAIN,'utf8'),Buffer.from([0]),canonicalBytes,
+                  ])).digest('hex');
+                  assert.equal(independentDigest,expectedV2Digest);
+                  assert.equal(domainDigest(REVIEWED_V2_DOMAIN,unsignedV2),expectedV2Digest);
+                  const canonFile='ci-artifacts/observer-reviewed-v2-original-signed-localnet.canonical.json';
+                  writeFileSync(canonFile,canonicalBytes,{mode:0o600});
+                  const digestFile='ci-artifacts/observer-reviewed-v2-original-signed-localnet.witness-digest.txt';
+                  writeFileSync(digestFile,expectedV2Digest+'\n',{mode:0o600});
+                  const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+                  writeFileSync(originalV2File+'.sha256',[
+                    originalV2Sha+'  observer-reviewed-v2-original-signed-localnet.json',
+                    hash(canonicalBytes)+'  observer-reviewed-v2-original-signed-localnet.canonical.json',
+                    hash(Buffer.from(expectedV2Digest+'\n'))+
+                      '  observer-reviewed-v2-original-signed-localnet.witness-digest.txt',
+                    '',
+                  ].join('\n'));
+                  console.log('ORIGINAL_KIT_V2_SOURCE_ARTIFACT_SHA256',originalV2Sha);
+                  console.log('ORIGINAL_KIT_V2_CANONICAL_WITNESS_DIGEST',expectedV2Digest);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,idlText:ciIdlText+' '}),
+                    /PINNED_IDL_BYTES_REQUIRED/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,codeVersion:'0'.repeat(40)}),
+                    /SOURCE_COMMIT_BINDING/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,expected:{
+                      ...expected,program:'11111111111111111111111111111111',
+                    }}),/PINNED_DEPLOYMENT_MISMATCH/);
+                  await assert.rejects(
+                    candidateV2Outbox.queueVerified({...queueArgs,expected:{
+                      ...expected,scope:'f'.repeat(64),
+                    }}),/PINNED_DEPLOYMENT_MISMATCH/);
+                  // Even a fully recomputed unkeyed hash cannot mask changed
+                  // source, occurrence, containing block or future receipt.
+                  const structuralMutants=[
+                    w=>{w.source.depositNonce='9999'},
+                    w=>{w.source.occurrenceId+=':other'},
+                    w=>{w.source.blockhash='altered-blockhash'},
+                    w=>{w.proof.containingBlock.blockhash='altered-blockhash'},
+                    w=>{w.proof.rpcTransaction.meta.fee+=1},
+                    w=>{w.proof.latestReconciledReceiptSnapshot.refunded=true},
+                    // Changing to another *valid* SHA-40 only becomes a
+                    // refusal at queueVerified's out-of-band commit pin.
+                    w=>{w.source.codeVersion='not-an-immutable-sha'},
+                    w=>{w.destination.appId='published-Unyt-app'},
+                  ];
+                  for(const mutate of structuralMutants){
+                    const w=structuredClone(row.reviewedWitnessV2);
+                    mutate(w);
+                    const {witnessDigest:removed,...payload}=w;
+                    w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,payload);
+                    assert.throws(()=>verifyReviewedWitnessV2(w),/OBS_V2_REFUSED:/);
+                  }
+                  const adversarialRpcCases=[
+                    {
+                      label:'signed-wire-message-tamper',
+                      mutate:(url,method,json)=>{
+                        if(method==='getTransaction'){
+                          const b=Buffer.from(json.result.transaction[0],'base64');
+                          b[b.length-2]^=1;
+                          json.result.transaction[0]=b.toString('base64');
+                        }
+                      },
+                    },
+                    {
+                      label:'execution-fee-metadata-tamper',
+                      mutate:(url,method,json)=>{
+                        if(method==='getTransaction')json.result.meta.fee+=1;
+                      },
+                    },
+                    {
+                      label:'second-endpoint-genesis-mismatch',
+                      mutate:(url,method,json)=>{
+                        if(url.includes('9900')&&method==='getGenesisHash')
+                          json.result='different-reported-genesis';
+                      },
+                    },
+                    {
+                      label:'later-receipt-account-owner-substitution',
+                      mutate:(url,method,json)=>{
+                        if(url.includes('9900')&&method==='getMultipleAccounts')
+                          json.result.value[0].owner='11111111111111111111111111111111';
+                      },
+                    },
+                  ];
+                  for(const item of adversarialRpcCases){
+                    let modified=false;
+                    const negativeRpc=async(url,init)=>{
+                      const original=await archivedRpc(url,init);
+                      const body=structuredClone(await original.json());
+                      const method=JSON.parse(init.body).method;
+                      const previous=JSON.stringify(body);
+                      item.mutate(url,method,body);
+                      modified ||= previous!==JSON.stringify(body);
+                      return {ok:true,json:async()=>body};
+                    };
+                    await assert.rejects(candidateV2Outbox.queueVerified({
+                      ...queueArgs,fetchFn:negativeRpc}),
+                      /contradicts|mismatch|noncanonical|invalid|signature|owner|genesis|receipt/i,
+                      item.label);
+                    assert.equal(modified,true,'negative must mutate original '+item.label);
+                  }
+                  assert.equal(candidateV2Outbox.status.rows[evidence.id].state,'pending');
+                  for(const shortcut of ['transactionVerified','historyComplete',
+                    'historyCoveredByTwoRpcClaims','witnessDigest']){
+                    await assert.rejects(
+                      candidateV2Outbox.queueVerified({...queueArgs,[shortcut]:true}),
+                      /UNTRUSTED_AUTH_SHORTCUT/);
+                  }
+                  await assert.rejects(candidateV2Outbox.deliver(evidence.id,{
+                    preflight:async()=>target,read:async()=>null,
+                    write:async()=>{throw Error('MUST_NEVER_WRITE_UNAPPROVED_V1')},
+                  }),/REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED/);
+                  assert.equal(candidateV2Outbox.status.rows[evidence.id].state,'pending');
+                }finally{
+                  if(savedOptIn===undefined)delete process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY;
+                  else process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY=savedOptIn;
+                  candidateV2Outbox.close();
+                }
+                const reopenedOutbox=new DemoOutbox(join(dir,'reviewed-outbox.json'),
+                  {expected:sourcePins,destination:target});
+                assert.equal(reopenedOutbox.status.rows[evidence.id].state,'pending');
+                reopenedOutbox.close();
+                console.log('REAL_SIGNED_KIT_OUTBOX_QUEUED_V2_NOT_DELIVERED',
+                  evidence.id,item.signature);
               } finally { restart.close(); }
               const shadowActive=reviewShadow(live,binding,shadowJournal);
               assert.equal(shadowActive.verdict,'quarantined');

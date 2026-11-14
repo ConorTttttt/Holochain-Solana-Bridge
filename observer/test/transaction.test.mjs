@@ -157,9 +157,12 @@ test('2 separate deposit instructions produce 2 immutable receipt identities and
   assert.equal(found[0].creditEligible,false);
   assert.equal(found[0].transactionVerified,true);
   assert.equal(found[0].independentConsensusVerified,false);
+  assert.equal(found[0].spendableBaseUnits,'0');
+  assert.equal(found[0].withdrawalAuthorized,false);
   const cand=found[0];
   const observation={
     kind:'solana-receipt-observation-v1',creditEligible:false,transactionVerified:false,
+    independentConsensusVerified:false,spendableBaseUnits:'0',withdrawalAuthorized:false,
     ...Object.fromEntries(['id','program','receiptAddress','configAddress','vaultAddress',
       'mint','depositor','recipientCore','holochainScope','depositNonce','amountBaseUnits',
       'configBump','receiptBump'].map(k=>[k,cand[k]])),
@@ -173,9 +176,17 @@ test('2 separate deposit instructions produce 2 immutable receipt identities and
   assert.equal(evidence.transactionVerified,true);
   assert.equal(evidence.independentConsensusVerified,false);
   assert.equal(evidence.creditEligible,false);
+  assert.equal(evidence.spendableBaseUnits,'0');
+  assert.equal(evidence.withdrawalAuthorized,false);
   assert.equal(evidence.refundedAtObservation,false);
   assert.equal(Object.isFrozen(evidence),true);
   assert.throws(()=>attachReceiptObservation(cand,{...observation,creditEligible:true}),
+    /invalid receipt observation/);
+  assert.throws(()=>attachReceiptObservation({...cand,independentConsensusVerified:true},observation),
+    /invalid transaction candidate/);
+  assert.throws(()=>attachReceiptObservation({...cand,spendableBaseUnits:'250000'},observation),
+    /invalid transaction candidate/);
+  assert.throws(()=>attachReceiptObservation(cand,{...observation,withdrawalAuthorized:true}),
     /invalid receipt observation/);
   assert.throws(()=>attachReceiptObservation(cand,{...observation,recipientCore:'00'.repeat(32)}),
     /snapshot mismatch/);
