@@ -83,7 +83,19 @@ const cases = {
     const bundle = readJson(join(dir, bundleName));
     const record = bundle.transactions.find((r) => typeof r.signedWireBase64 === 'string');
     assert.ok(record, 'tamper setup: no submitted wire bytes recorded');
-    record.signedWireBase64 = flipMessageByte(record.signedWireBase64);
+    // Multiple operation labels may contain the SAME original submitted wire.
+    // Mutate every copy identically to isolate RPC/wire mismatch; contradictory
+    // duplicate wires are tested separately as WIRE_CONFLICT.
+    const altered = flipMessageByte(record.signedWireBase64);
+    let changed = 0;
+    for (const entry of bundle.transactions) {
+      if (entry.signature !== record.signature ||
+          !Object.hasOwn(entry, 'signedWireBase64')) continue;
+      assert.equal(typeof entry.signedWireBase64, 'string');
+      entry.signedWireBase64 = altered;
+      changed++;
+    }
+    assert.ok(changed > 0, 'tamper setup: signature had no submitted wires');
     writeJson(join(dir, bundleName), bundle);
   },
   'all submitted signed wires deleted': (dir) => {
