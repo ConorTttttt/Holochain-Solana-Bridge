@@ -1,5 +1,5 @@
 {
-  "status": "P0 RED — pre-review SOL #38 integration trial; SEC sign-off / Agent 2 adoption PENDING. Exact-head CI not yet established.",
+  "status": "P0 REVIEW CANDIDATE — production OBS rewards fix source-pinned; not accepted until genuine same-SHA replay, A2/A3/A4/A5 approval",
   "base": {
     "branch": "agent/ci/11-build-pipeline",
     "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
@@ -15,8 +15,9 @@
     },
     "OBS": {
       "branch": "agent/obs/8-observer-validation",
-      "sha": "94361778d08a3cfd5358d5d3de1af5a1c0318835",
-      "pr": 36
+      "sha": "2931c5fc51736e3c845cb9bedc55c578534b53a1",
+      "pr": 36,
+      "adoptionStatus": "PROVISIONAL_SOURCE_BLOB_COPY_HANDOFF_REQUESTED"
     },
     "RAVE": {
       "branch": "agent/rave/9-rave-validation",
@@ -29,7 +30,7 @@
       "pr": 33
     }
   },
-  "parentIntegrationCommit": "aa2502da3f9bcd0cdd07763725ad6618a8006919",
+  "parentIntegrationCommit": "80f79e6c0499122f3b36762f63eac990dab50111",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/verify-integration-provenance.mjs",
@@ -50,7 +51,8 @@
       "observer/src/indexer.mjs",
       "observer/scripts/replay-validator-witness.mjs",
       "observer/test/validator-witness.test.mjs",
-      "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md"
+      "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md",
+      "observer/test/rpc-meta-equivalence.test.mjs"
     ],
     "RAVE": [
       "tests/holochain/sandbox/inspect-verified-unyt.sh",
@@ -63,7 +65,7 @@
       "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md"
     ]
   },
-  "method": "Preserved executed P0 failure cd4ab8dd; CI-only workflow upload allowlist and cross-job provenance checks; updated CI readiness, with unchanged specialist implementation/source pins. New integration commit requires independent full exact-head workflow success.",
+  "method": "New immutable review child of PR #45 (not rewriting #39/#41/#45). Adopt ONLY exact Agent 3 reviewed production indexer and RPC meta negative blobs, preserve original CI witness producer and four denial fields. Run exact-SHA real three-mode Kit replay. No approval asserted.",
   "exceptions": [
     "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
     "No binary/IDL hashes reused across disposable program IDs"
@@ -119,6 +121,10 @@
     {
       "path": "observer/ci/s0-signed-wire-evidence.mjs",
       "reason": "CI-owned original signed-wire replay; not part of OBS default test discovery"
+    },
+    {
+      "path": "observer/test/rpc-meta-equivalence.test.mjs",
+      "reason": "SHA-exact Agent 3 original source-owned negative regression copied into integration review; provisional until explicit handoff"
     }
   ],
   "conductorStatus": "REAL DISPOSABLE Holochain 0.7.1 local conductor install/restart and matching app/cell identity VERIFIED at RAVE 17a3623 / Actions 43537089670; NO approved zome call or source-to-WASM equivalence, no B2/C authorization.",
@@ -162,29 +168,20 @@
     }
   },
   "lastVerifiedExecution": {
-    "integrationSha": "cd4ab8dd61ec7353b330ba4a55f1d0ac5f5a9bf0",
-    "sharedActionsRun": 43529253015,
-    "sharedActionsConclusion": "success",
-    "sharedPassingJobs": 6,
-    "integrationActionsRun": 43529253005,
+    "integrationSha": "80f79e6c0499122f3b36762f63eac990dab50111",
+    "sharedActionsRun": 43590812005,
+    "sharedActionsConclusion": "success 6/6",
+    "integrationActionsRun": 43590812095,
     "integrationActionsConclusion": "failure",
     "integrationJobs": {
-      "solanaLifecycle": "failure Custom 6004 at integration.test.mjs:592",
-      "sdkFixtures": "failure missing three genuine transaction archives",
-      "publishedRaveRust": "success 12/12"
+      "solanaLifecycle": "success (real validator and three scenario archives)",
+      "sdkFixtures": "failure 3/3 original wire replay from production OBS indexer raw rewards-null/[] comparison",
+      "publishedRaveRust": "success"
     },
-    "partialLocalnetEvidenceArtifact": 14087460958,
-    "artifactFileCount": 24,
-    "disposableProgramId": "B8WpDXUeH96FiWYmhqwpF3Hf4MKNagM5XpZJtaVuPvF",
-    "idlSha256": "ea6f78383e6fa9148a560f628fb7648bacede90388a4951c1f158f71c2b2cf83",
-    "elfSha256": "8162421ae2dd56927510d381bbe6c70ce760750e6d53ce2f02683ef106439928",
-    "errorAttribution": "MintFreezable is IDL enum code 6004, but the failing transaction/signature/issuer has not been captured. No SOL fix claimed.",
-    "blockers": [
-      "lifecycle multiwallet subtest threw before archive writer",
-      "isolated init-capture and u64-max modes never ran",
-      "retained-ledger restart not reached",
-      "signed wire replay/shadow end-to-end tests have no mandatory transaction archive"
-    ]
+    "witnessArtifact": 14113085434,
+    "witnessArtifactSha256": "dfc4c82ec70cb16ff04a758f48bb3d78509c7bbbff1d319bf2f2e79ff026e6c8",
+    "sourceBlobFromAgent3": "8f1cdba2790bfd22a7f0235148ccb6a6ac7987e3",
+    "sourceStatus": "PROVISIONAL_PENDING_SAME_SHA_REAL_REPLAY_AND_A3_A5_HANDOFF"
   },
   "integrationOnlyCiRemediation": {
     "date": "2026-11-14",
@@ -217,15 +214,14 @@
     "withdrawalAuthorized": false
   },
   "candidate": {
-    "branch": "integration/s0/2026-11-14-sol38-review-pending",
+    "branch": "integration/demo/2026-11-14-obs-replay-reviewed-source",
     "integrationPr": "NEW_DRAFT_REQUIRED",
-    "sourceCiPr": 32,
     "status": "UNVERIFIED_NO_GREEN_CLAIM",
-    "basisCommit": "6a500811eb8b7b08865a4ae0acce327cbdbae002",
+    "basisCommit": "80f79e6c0499122f3b36762f63eac990dab50111",
     "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
     "creationDateUtc": "2026-11-14",
-    "immutableIdentity": "Freeze at actual new Git SHA; do not force-push or overwrite after creation",
-    "execution": "Shared CI, integration SOL/OBS, and RAVE five jobs all required at EXACT new SHA"
+    "immutableIdentity": "Create one review child only; do not rewrite failures or force-push",
+    "execution": "Shared CI 6 jobs, real SOL 3 scenario producer, real OBS Kit, RAVE five jobs, Holochain own DNA real runtime + restart at candidate SHA"
   },
   "fileProvenance": {
     "tests/solana/integration.test.mjs": {
@@ -242,7 +238,7 @@
     },
     "observer/src/indexer.mjs": {
       "lane": "OBS",
-      "sha": "03bb55c5ad8309f05d29b4d6dcda0ddacc6d0be7"
+      "sha": "8f1cdba2790bfd22a7f0235148ccb6a6ac7987e3"
     },
     "observer/scripts/replay-validator-witness.mjs": {
       "lane": "OBS",
@@ -287,6 +283,10 @@
     "tests/solana/verify-witness-tamper.mjs": {
       "lane": "SOL",
       "sha": "be52a648d27668b108473ae2e438cb2d0938ee5c"
+    },
+    "observer/test/rpc-meta-equivalence.test.mjs": {
+      "lane": "OBS",
+      "sha": "07b844a41d9179d249c5e2415ea3ae2734a8355c"
     }
   },
   "integrationOnlyProvenance": {
@@ -303,10 +303,10 @@
     }
   },
   "currentAcceptance": {
-    "A": "BLOCKED — standalone SOL #38 PASS, new combined exact-SHA CI pending",
-    "B1": "BLOCKED — actual SOL archive has not passed independent OBS durable-ledger replay at new integration SHA",
-    "B2": "BLOCKED — older candidate passed disposable conductor 5/5; no approved source-equivalent zome call or integration binding",
-    "C": "NO-GO — crediting, withdrawals and independent economic finality disabled"
+    "A0": "BLOCKED pending exact-source signed wire replay and own-DNA external Lair signed write",
+    "B1": "BLOCKED (selected blocks, not complete original produced-slot two-provider history)",
+    "B2": "BLOCKED (published Unyt source/ABI/capabilities unverified)",
+    "C": "NO-GO (no credit, spend or withdrawal)"
   },
   "nonEconomicPolicy": {
     "creditEligible": false,
@@ -330,5 +330,12 @@
     "standaloneEvidenceArtifact": 14106778660,
     "standaloneEvidenceDigest": "sha256:aa4cbdf19979816f48c1b2a2327bd09bc578953f5b5794bb8863672b41da7600",
     "noEconomicClaims": true
+  },
+  "provisionalDemoSchema": {
+    "kind": "solana-observation-demo-v1",
+    "target": "Agent 4 #44 strict root/source/proof, deposit only",
+    "status": "NOT_SIGNED_OFF_BY_A3_A4_A5",
+    "sourceOnlyPrevious": "PR #45 source/witness/destination is not target delivery payload",
+    "adapterSafety": "test_only_fixture remains only allowed origin pending A3/A5 authenticated outbox review"
   }
 }
