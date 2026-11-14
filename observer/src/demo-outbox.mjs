@@ -31,6 +31,35 @@ function encode(x){
 export const canonicalJSON=encode;
 const sha256=(x)=>createHash('sha256').update(x).digest('hex');
 export const domainDigest=(domain,data)=>sha256(Buffer.concat([Buffer.from(domain,'utf8'),Buffer.from([0]),Buffer.from(encode(data),'utf8')]));
+
+/**
+ * Solana JSON-RPC's UI-only token display metadata can include decimals
+ * (uiTokenAmount.uiAmount, e.g. 0.25). The underlying exact amount/decimals
+ * are independently validated as integer strings by verifyDepositCandidates.
+ * Keep generic canonicalJSON strictly integral, permit finite nonnegative
+ * fractional numeric values ONLY at that RPC display field, and bind them
+ * into the witness. Never use uiAmount for custody accounting.
+ */
+function rpcMetaCanonicalJSON(value,path=[]){
+  if(value===null||typeof value==='string'||typeof value==='boolean')return JSON.stringify(value);
+  if(typeof value==='number'){
+    if(Number.isSafeInteger(value)&&!Object.is(value,-0))return JSON.stringify(value);
+    const displayOnly=path.length>=2&&path.at(-1)==='uiAmount'&&path.at(-2)==='uiTokenAmount';
+    need(displayOnly&&Number.isFinite(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER,
+      'NON_CANONICAL_RPC_NUMERIC');
+    return JSON.stringify(value);
+  }
+  if(Array.isArray(value))return '['+value.map((v,i)=>rpcMetaCanonicalJSON(v,[...path,String(i)])).join(',')+']';
+  need(obj(value),'NON_CANONICAL_RPC_OBJECT');
+  const keys=Object.keys(value).sort();
+  need(keys.every(k=>!['__proto__','constructor','prototype'].includes(k)),'PROTOTYPE_KEY');
+  return '{'+keys.map(k=>JSON.stringify(k)+':'+rpcMetaCanonicalJSON(value[k],[...path,k])).join(',')+'}';
+}
+const rpcMetaDigest=(meta)=>sha256(Buffer.concat([
+  Buffer.from(DOMAIN+'/rpc-meta','utf8'),Buffer.from([0]),
+  Buffer.from(rpcMetaCanonicalJSON(meta),'utf8'),
+]));
+
 const hex64=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 const positive=x=>typeof x==='string'&&/^[1-9][0-9]*$/.test(x)&&BigInt(x)<(1n<<64n);
 const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -117,7 +146,7 @@ function sourceProof(evidence,ledgerRecord,rpcTransaction,destination,codeVersio
   const components={
     sourceId:evidence.id,occurrenceId:evidence.occurrenceId,
     signedWireSha256,
-    rpcExecutionMetadataSha256:domainDigest(DOMAIN+'/rpc-meta',rpcTransaction.meta),
+    rpcExecutionMetadataSha256:rpcMetaDigest(rpcTransaction.meta),
     receiptSnapshotSha256:domainDigest(DOMAIN+'/snapshot',evidence.receiptSnapshot),
     ledgerEvidenceSha256:domainDigest(DOMAIN+'/ledger-evidence',evidence),
     destination,
