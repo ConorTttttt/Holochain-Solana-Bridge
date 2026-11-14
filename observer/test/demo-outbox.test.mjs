@@ -262,9 +262,11 @@ function syntheticV2(t){
   return buildReviewedWitnessV2({
     evidence:withBlock,rpcTransaction:tx,
     containingBlock:{blockhash:withBlock.blockhash,parentSlot:16,
-      previousBlockhash:'1'.repeat(32),transactions:[]},
+      previousBlockhash:'1'.repeat(32),transactions:[{
+        transaction:structuredClone(tx.transaction),meta:structuredClone(tx.meta),
+      }]},
     laterReceiptSnapshot:withBlock.receiptSnapshot,
-    destination,expected,codeVersion:'observer-source-pinned-review',
+    destination,expected,codeVersion:'a'.repeat(40),
   });
 }
 test('28 v2 keeps nonce recipient signed wire block metadata and original receipt snapshot',t=>{
@@ -304,8 +306,10 @@ test('30 v2 expressly refuses missing signed original and mismatched block/recei
   const {evidence,tx}=make(t);
   const e={...evidence,blockhash:'1'.repeat(32)};
   const build=(rest={})=>buildReviewedWitnessV2({
-    evidence:e,rpcTransaction:tx,containingBlock:{blockhash:e.blockhash,transactions:[]},
-    laterReceiptSnapshot:e.receiptSnapshot,destination,expected,codeVersion:'pinned',
+    evidence:e,rpcTransaction:tx,containingBlock:{blockhash:e.blockhash,transactions:[{
+      transaction:structuredClone(tx.transaction),meta:structuredClone(tx.meta),
+    }]},
+    laterReceiptSnapshot:e.receiptSnapshot,destination,expected,codeVersion:'a'.repeat(40),
     ...rest,
   });
   assert.throws(()=>build({rpcTransaction:{...tx,transaction:['invalid','base64']}}),
@@ -402,4 +406,54 @@ test('38 nested expected history or digest flags are not silently treated as sou
     /UNTRUSTED_EXPECTED_SHORTCUT/);
   }
   assert.deepEqual(outbox.status.rows,{});
+});
+
+test('39 rehashing altered v2 fields cannot erase source, block or receipt contradictions',t=>{
+  const original=syntheticV2(t);
+  const mutate=[
+    w=>{w.source.depositNonce='42018'}, // source/verifiedEvidence split
+    w=>{w.source.occurrenceId+=':1'}, // occurrence split
+    w=>{w.source.codeVersion='forged-version'}, // not an immutable git commit
+    w=>{w.proof.containingBlock.blockhash='wrong-blockhash'},
+    w=>{w.proof.containingBlock.transactions[0].transaction[0]='AQ=='},
+    w=>{w.proof.containingBlock.transactions[0].meta.fee++},
+    w=>{w.proof.rpcTransaction.meta.err={InstructionError:[0,'Custom']}},
+    w=>{w.proof.latestReconciledReceiptSnapshot.refunded=true},
+    w=>{w.proof.latestReconciledReceiptSnapshot.depositNonce='9999'},
+    w=>{w.proof.originalReceiptSnapshot.finalizedSlot=1},
+    w=>{w.destination.role='settlement'},
+    w=>{w.destination.appId='published-UNYT-coordinator'},
+  ];
+  for(const change of mutate){
+    const w=structuredClone(original);
+    change(w);
+    // A malicious JSON producer can always recompute an unkeyed SHA256 digest.
+    // The receiver must not mistake a self-consistent checksum for authority.
+    const {witnessDigest:discard,...body}=w;
+    w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,body);
+    assert.throws(()=>verifyReviewedWitnessV2(w),/OBS_V2_REFUSED:/);
+  }
+});
+test('40 original block rewards null versus [] is the only permitted meta normalization',t=>{
+  const w=syntheticV2(t);
+  w.proof.containingBlock.transactions[0].meta.rewards=[];
+  let {witnessDigest:old,...body}=w;
+  w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,body);
+  assert.equal(verifyReviewedWitnessV2(w),true);
+  w.proof.containingBlock.transactions[0].meta.rewards=[{pubkey:'forged'}];
+  ({witnessDigest:old,...body}=w);
+  w.witnessDigest=domainDigest(REVIEWED_V2_DOMAIN,body);
+  assert.throws(()=>verifyReviewedWitnessV2(w),/ORIGINAL_BLOCK_ENTRY_METADATA/);
+});
+test('41 reviewed producer requires a pinned 40-character source commit even with synthetic content',t=>{
+  const {evidence,tx}=make(t);
+  const withBlock={...evidence,blockhash:'1'.repeat(32)};
+  assert.throws(()=>buildReviewedWitnessV2({
+    evidence:withBlock,rpcTransaction:tx,
+    containingBlock:{blockhash:withBlock.blockhash,transactions:[{
+      transaction:tx.transaction,meta:tx.meta,
+    }]},
+    laterReceiptSnapshot:withBlock.receiptSnapshot,
+    destination,expected,codeVersion:'arbitrary-imported-json',
+  }),/PINNED_CODE_VERSION/);
 });
