@@ -7,9 +7,9 @@
   },
   "candidateSourceOwners": {
     "observerV2": {
-      "pr": 52,
-      "sha": "a2338f965916ffac982527f6dc7696e9c5706345",
-      "status": "ADOPTED_SOURCE_V2_SAME_SHA_KIT_PENDING_UNAPPROVED_TRANSPORT"
+      "pr": 57,
+      "sha": "38847cf1399c59fd1a1665c8bef2249479d7da03",
+      "status": "ADOPTED_A3_NINE_BLOBS_SOURCE_ONLY_TRANSPORT_UNAPPROVED"
     },
     "observerV1Outbox": {
       "pr": 48,
@@ -18,8 +18,8 @@
     },
     "ownAuditDna": {
       "pr": 44,
-      "sha": "c7964607a4f42e83474977edc123774a4fb9188b",
-      "status": "ADOPTED_A4_SOURCE_TWO_LOCKS_AND_SCOPE_NOT_YET_REVIEWED"
+      "sha": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a",
+      "status": "A4_WASM_LOCK_ADOPTED_NATIVE_LOCK_MISSING_AND_SAME_RUN_SOURCE_PROPERTIES_UNBUILT"
     },
     "solanaRemediation": {
       "pr": 50,
@@ -69,5 +69,5 @@
     "allowSolanaWithdrawal": false,
     "readOnlyBuildEvaluationOnly": true
   },
-  "note": "This integration candidate physically adopts exact specialist Git blobs, but compiled/tested same-SHA review remains pending. No locks/scope/ABI approval and no Holochain write."
+  "note": "A1 exact HEAD immutable candidate source-owner Git blobs, same-run source-domain binding implementation pending; A4 native HAM lock missing. No signed call/capability grant."
 }

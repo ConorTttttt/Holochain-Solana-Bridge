@@ -1,5 +1,5 @@
 {
-  "status": "P0 REVIEW CANDIDATE — production OBS rewards fix source-pinned; not accepted until genuine same-SHA replay, A2/A3/A4/A5 approval",
+  "status": "P0 DRAFT INTEGRATION — exact A3 #57 source and A4 #44 root lock adopted; new head CI execution REQUIRED; no signed write",
   "base": {
     "branch": "agent/ci/16-a0-build-pr-preflight-20261114",
     "sha": "093a7454a36c3a26cc107b06b1334a289940811e"
@@ -12,14 +12,14 @@
       "status": "DRAFT_EXACT_HEAD_STANDALONE_VALIDATOR_SUCCESS_SEPARATE_SEC_REVIEW_REQUIRED"
     },
     "OBS": {
-      "sha": "a2338f965916ffac982527f6dc7696e9c5706345",
-      "pr": 52,
-      "status": "DRAFT_V2_REVIEWED_ORIGIN_TRANSPORT_BLOCKED"
+      "sha": "38847cf1399c59fd1a1665c8bef2249479d7da03",
+      "pr": 57,
+      "status": "A3_SOURCE_BLOBS_ADOPTED_V2_REVIEW_NOT_APPROVAL"
     },
     "RAVE": {
-      "sha": "c7964607a4f42e83474977edc123774a4fb9188b",
+      "sha": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a",
       "pr": 44,
-      "status": "SOURCE_ONLY_LOCKS_AND_SCOPE_MISSING"
+      "status": "A4_REVIEWED_ROOT_LOCK_AND_STANDALONE_NATIVE_MANIFEST_ADOPTED_NATIVE_LOCK_STILL_MISSING"
     },
     "SEC": {
       "sha": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
@@ -49,20 +49,32 @@
       "observer/scripts/replay-validator-witness.mjs",
       "observer/test/validator-witness.test.mjs",
       "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md",
-      "observer/test/rpc-meta-equivalence.test.mjs"
+      "observer/test/rpc-meta-equivalence.test.mjs",
+      "observer/ci/s0-signed-wire-evidence.mjs",
+      "observer/docs/OBS_V2_SCHEMA_ALIGNMENT_PR55_2026-11-14.md",
+      "observer/fixtures/pr55-original-source-preflight-2026-11-14.json",
+      "observer/fixtures/v2-binding-primitive-vectors.json",
+      "observer/scripts/verify-pr55-archive-preflight.mjs",
+      "observer/src/demo-outbox.mjs",
+      "observer/src/v2-binding-review.mjs",
+      "observer/test/demo-outbox.test.mjs",
+      "observer/test/v2-binding-review.test.mjs"
     ],
     "RAVE": [
       "tests/holochain/sandbox/inspect-verified-unyt.sh",
       "tests/holochain/sandbox/probe-verified-unyt-conductor.sh",
       "holochain/research/HOLONIX_071_ROOT_CAUSE_AND_CONDUCTOR_GATE.md",
       "holochain/research/UNYT_0117_ACTUAL_BUNDLE_INVENTORY.md",
-      "holochain/research/UNYT_0117_REAL_CONDUCTOR_PROOF.md"
+      "holochain/research/UNYT_0117_REAL_CONDUCTOR_PROOF.md",
+      "holochain/demo/Cargo.lock",
+      "holochain/demo/build.sh",
+      "holochain/demo/ham-adapter/Cargo.toml"
     ],
     "SEC": [
       "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md"
     ]
   },
-  "method": "Exact reviewed A3 original indexer adopted in immutable #46 bc7c; create NEW review child to trigger exact-head RAVE five-job regression using CI-only explicit branch allowlist. All #46 6/6 shared + 3/3 real cross-agent pass preserved. A0 still blocked on source/ABI/Lair and SEC.",
+  "method": "Immutable A1 PR58 child: exact original A3 #57 nine Git blobs and A4 #44 reviewed root lock, native standalone workspace manifest and build script; SEC #53 original two fixture blobs preserved; same-run dynamic DNA source-domain proposal; no write approval",
   "exceptions": [
     "Previously reviewed lockfiles and CI provenance retained; SOL now owns npm lock and npm ci",
     "No binary/IDL hashes reused across disposable program IDs"
@@ -99,7 +111,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "UNVERIFIED new candidate: source adoption and dependency bootstrap must be run in Actions at its exact SHA; standalone SOL #55 success is separate.",
+  "latestExecutionStatus": "NEW CANDIDATE NOT EXECUTED: prior A1 2bc6887b CI 6/6 shared 3/3 cross lane; native HAM lock absent and Holochain build not achieved",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -212,14 +224,14 @@
     "withdrawalAuthorized": false
   },
   "candidate": {
-    "branch": "integration/demo/2026-11-14-a1-bootstrap-source-v2",
+    "branch": "integration/demo/2026-11-14-a1-source-domain-obsv2",
     "integrationPr": "DRAFT_TO_CREATE",
     "status": "UNVERIFIED_NO_GREEN_CLAIM",
-    "basisCommit": "093a7454a36c3a26cc107b06b1334a289940811e",
+    "basisCommit": "2bc6887b1c373311f2fbddea530bd533067dad84",
     "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
     "creationDateUtc": "2026-11-14",
-    "immutableIdentity": "New child of #54, exact specialist blobs; no merges or branch takeovers",
-    "execution": "Same SHA producer (four modes), OBS v2 archival Kit queued but transport refused, SEC/RAVE; own DNA locked build awaits A4 committed locks and reviewed scope."
+    "immutableIdentity": "New Git commit child of A1 #58; original A3/A4 Git blobs",
+    "execution": "Pending source-bound integration CI; no native lock or approved v2 transport"
   },
   "fileProvenance": {
     "Anchor.toml": {
@@ -389,8 +401,8 @@
     },
     "observer/ci/s0-signed-wire-evidence.mjs": {
       "lane": "OBS",
-      "sha": "ce381e71310b425a70a713699ecde6ceb583b102",
-      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+      "sha": "97260690416b821dbc49f24a45785c24cfaa3816",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
     },
     "observer/docs/GENUINE_SIGNED_WIRE_43577100529_2026-11-14.md": {
       "lane": "OBS",
@@ -509,8 +521,8 @@
     },
     "observer/src/demo-outbox.mjs": {
       "lane": "OBS",
-      "sha": "d48003ed9a2cd25ec8876f9fa2f4dff33466d8ba",
-      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+      "sha": "fa80ac6035b47c2017f5d097360aa54a251a8689",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
     },
     "observer/src/demo-witness-v2.mjs": {
       "lane": "OBS",
@@ -559,8 +571,8 @@
     },
     "observer/test/demo-outbox.test.mjs": {
       "lane": "OBS",
-      "sha": "ca0566208e8bc31c6315310865d2e4a9c0f93b3d",
-      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+      "sha": "325bee81301fff5884cdeb7562f4cdb3cb218a9f",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
     },
     "observer/test/history.test.mjs": {
       "lane": "OBS",
@@ -689,8 +701,8 @@
     },
     "holochain/demo/build.sh": {
       "lane": "RAVE",
-      "sha": "d5e65425439471cdff57e98cebe5eb46562c1367",
-      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+      "sha": "19d55d084f4342668dd9cabaa25943a3a101ebd3",
+      "sourceCommit": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a"
     },
     "holochain/demo/coordinator/Cargo.toml": {
       "lane": "RAVE",
@@ -709,8 +721,8 @@
     },
     "holochain/demo/ham-adapter/Cargo.toml": {
       "lane": "RAVE",
-      "sha": "7bdd4ba154549b9d6803aa34af74d7dc06b40bf5",
-      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+      "sha": "c821812ff1de2adab47634c35e689d5b32a5c303",
+      "sourceCommit": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a"
     },
     "holochain/demo/ham-adapter/src/main.rs": {
       "lane": "RAVE",
@@ -746,6 +758,41 @@
       "lane": "RAVE",
       "sha": "7ea3f297c2b25fc26c1d2b3ec4feaf5733faaf7c",
       "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "observer/docs/OBS_V2_SCHEMA_ALIGNMENT_PR55_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "319a77322bd2db23db225c05ebe3b75c8b235d1a",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "observer/fixtures/pr55-original-source-preflight-2026-11-14.json": {
+      "lane": "OBS",
+      "sha": "fcf405948bad4a4ed4632689ab222ea172259a34",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "observer/fixtures/v2-binding-primitive-vectors.json": {
+      "lane": "OBS",
+      "sha": "714fa07dd767e6d59c2aad7869ba538efc205e5d",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "observer/scripts/verify-pr55-archive-preflight.mjs": {
+      "lane": "OBS",
+      "sha": "7e8922557f4d8e43e3f95a1ef06e625018e4dd73",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "observer/src/v2-binding-review.mjs": {
+      "lane": "OBS",
+      "sha": "9cdf0c7ed6f506839d770773f3837c8fc6babcaa",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "observer/test/v2-binding-review.test.mjs": {
+      "lane": "OBS",
+      "sha": "86e03b06b389ce4041859d11536963a1813d642d",
+      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+    },
+    "holochain/demo/Cargo.lock": {
+      "lane": "RAVE",
+      "sha": "6a0a3da541a6c1333d56367994725e64b2e295a4",
+      "sourceCommit": "990bd4e4d67d0f5f4ab8851ee1397be3ca62f20a"
     }
   },
   "integrationOnlyProvenance": {
@@ -817,5 +864,6 @@
       "RAVE": 21
     },
     "notYetReviewed": "All adopted source is still candidate evidence; authenticated A4/A5 v2 ABI and audit write NOT authorized."
-  }
+  },
+  "sourceDomainPolicy": "Same integrated validator producer and OBS consumer SHA separately recorded. Derive DNA props only from original generated manifest at exact same-run SHA, never freeze historical A2 #55 source identity. Stage4 independent exact tuple approval required."
 }

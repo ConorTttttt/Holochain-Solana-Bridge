@@ -234,7 +234,12 @@ export class DemoOutbox {
     need(obj(expected)&&Object.keys(expected).every(k=>
       ['program','mint','config','vault','scope'].includes(k)),
       'UNTRUSTED_EXPECTED_SHORTCUT');
-    need(args.fetchFn===undefined||process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY==='1',
+    // Production must not gain an arbitrary RPC fetcher merely because an env
+    // variable was accidentally exported. The replay override exists ONLY in
+    // Node's test-runner child context with explicit archive replay opt-in.
+    need(args.fetchFn===undefined||(
+      process.env.NODE_TEST_CONTEXT==='child-v8' &&
+      process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY==='1'),
       'RPC_FETCH_OVERRIDE_FORBIDDEN');
     need(typeof idlText==='string'&&hex64(this.expected.idlSha256)&&
       sha256(Buffer.from(idlText,'utf8'))===this.expected.idlSha256,
