@@ -116,8 +116,10 @@ export function reviewShadow(observation, binding, journal) {
     findings: Object.freeze(findings),
     evidenceId: isText(observation?.id) ? observation.id : null,
     creditEligible: false,
+    independentConsensusVerified: false,
     spendableBaseUnits: '0',
     withdrawalAuthorized: false,
     proofStatus: 'untrusted-rpc-observation',
+    conductorExecuted: false,
   });
 }
