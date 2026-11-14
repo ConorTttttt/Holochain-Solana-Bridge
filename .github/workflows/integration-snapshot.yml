@@ -137,6 +137,18 @@ jobs:
           bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node scripts/ci/a0-demo-domain-kit-v2.mjs
           test -s ci-artifacts/observer-fresh-domain-reviewed-v2-original-signed-localnet.json
           (cd ci-artifacts && sha256sum --check observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
+      # CI-owned preauthorization stage runner repeats the genuine same-SHA
+      # source-owned Kit replay. Its seven-stage report is NOT a Holochain ACK
+      # and stage 4 stays closed absent independent exact-tuple approval.
+      - name: Execute fail-closed A1 seven-stage preauthorization runner (NO Holochain write)
+        if: always()
+        env:
+          A0_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          node --test demo/a0-preauthorization-runner.test.mjs
+          node demo/a0-preauthorization-runner.mjs --out ci-artifacts/a0-preauthorization-seven-stage.json
+          (cd ci-artifacts && sha256sum --check a0-preauthorization-seven-stage.json.sha256)
       - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
         run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
       - name: Emit SHA-bound A0 BLOCKED machine inventory even when a prior step fails
