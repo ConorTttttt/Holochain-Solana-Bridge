@@ -52,6 +52,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p ci-artifacts
+          bash -n scripts/ci/a0-bootstrap-locks.sh
           bash scripts/ci/a0-bootstrap-locks.sh 2>&1 | tee ci-artifacts/a0-bootstrap-resolution.log
       - name: Always retain generated lockfile proposals, first failing command and source evidence
         if: always()
