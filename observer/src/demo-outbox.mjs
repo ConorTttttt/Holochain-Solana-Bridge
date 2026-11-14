@@ -229,8 +229,17 @@ export class DemoOutbox {
       rpcUrl,expected:{...expected,receipt:receiptAddress},
       genesisHash:this.expected.genesisHash,fetchFn,
     })));
-    const evidence=attachReceiptObservation(matched[0],reconcileObservations(...snapshots));
-    return this.#queueInternal({ledger,evidence,rpcTransaction:fetched.rpcTransaction,
+    const fresh=attachReceiptObservation(matched[0],reconcileObservations(...snapshots));
+    // Persisted source is immutable; a later current-state snapshot must NOT
+    // replace its original receipt fingerprint or falsely become historical.
+    const original=ledger?.state?.processed[fresh.id]?.evidence;
+    need(original?.kind==='solana-deposit-evidence-v1','MISSING_DURABLE_SOURCE');
+    for(const field of ['id','occurrenceId','signature','transactionHash','finalizedSlot',
+      'blockhash','program','mint','holochainScope','receiptAddress','depositor',
+      'recipientCore','depositNonce','amountBaseUnits','configAddress','vaultAddress'])
+      need(original[field]===fresh[field],'AUTHENTICATED_SOURCE_MISMATCH_'+field);
+    need(fresh.refundedAtObservation===false,'DEPOSIT_ALREADY_REFUNDED');
+    return this.#queueInternal({ledger,evidence:original,rpcTransaction:fetched.rpcTransaction,
       codeVersion,origin:'observer_reviewed_outbox'});
   }
   /** Explicit test-fixture ingestion only: NEVER upgrades to reviewed OBS origin. */
