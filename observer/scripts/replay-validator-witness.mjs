@@ -84,8 +84,11 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     for(let i=0;i<raw.value.length;i++) {
       const account = snapshot.accounts[i], value = raw.value[i];
       need(value && typeof account.address === 'string' &&
-        value.owner === account.owner && value.data?.[1] === 'base64' &&
+        typeof account.owner === 'string' && value.executable === false &&
+        value.owner === account.owner && Array.isArray(value.data) &&
+        value.data[1] === 'base64' &&
         value.data[0] === account.dataBase64 &&
+        Buffer.from(value.data[0],'base64').toString('base64') === value.data[0] &&
         value.lamports === account.lamports,
         label + ': RPC account bytes/owner/balance mismatch');
     }
@@ -115,8 +118,11 @@ export function preflightValidatorWitness({dir,mode,trusted,idlPath,elfPath}) {
     need(typeof wire === 'string' && wire.length > 0 &&
       Buffer.from(wire,'base64').toString('base64') === wire,
       'truncated/noncanonical signed transaction');
-    need(same(signed.meta?.err,parsed.meta?.err) &&
-      same(signed.meta?.err,witness.meta?.err) &&
+    need(signed.meta && parsed.meta && witness.meta &&
+      Object.hasOwn(signed.meta,'err') && Object.hasOwn(parsed.meta,'err') &&
+      Object.hasOwn(witness.meta,'err') &&
+      same(signed.meta.err,parsed.meta.err) &&
+      same(signed.meta.err,witness.meta.err) &&
       parsed.transaction?.signatures?.includes(witness.signature),
       'parsed/signed execution or signature disagreement');
     need(blockJson.blockhash === witness.blockhash &&
