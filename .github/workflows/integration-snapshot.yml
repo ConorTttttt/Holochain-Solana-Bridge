@@ -127,6 +127,12 @@ jobs:
           test -s ci-artifacts/observer-reviewed-v2-original-signed-localnet.json.sha256
           (cd ci-artifacts && sha256sum --check observer-reviewed-v2-original-signed-localnet.json.sha256)
           node scripts/ci/a0-verify-reviewed-v2.mjs
+      - name: Require fresh SAME SHA SOL demo-domain signed source -> production OBS Kit v2 pending queue (no ACK)
+        run: |
+          set -euo pipefail
+          bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node scripts/ci/a0-demo-domain-kit-v2.mjs
+          test -s ci-artifacts/observer-fresh-domain-reviewed-v2-original-signed-localnet.json
+          (cd ci-artifacts && sha256sum --check observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
       - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
         run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
       - name: Emit SHA-bound A0 BLOCKED machine inventory even when a prior step fails
