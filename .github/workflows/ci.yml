@@ -1,0 +1,282 @@
+name: Sprint 0 CI (fail-closed)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # An immutable commit is one evidence run; later pushes must not cancel it.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  observer:
+    name: Observer unit tests and syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Capture Node tool versions
+        run: |
+          mkdir -p ci-artifacts
+          { node --version; npm --version; } 2>&1 | tee ci-artifacts/node-versions.log
+      - name: Install actual observer SDK dependencies when declared
+        run: bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
+      - name: Observer tests
+        run: bash scripts/ci/record.sh observer-tests npm --prefix observer test
+      - name: Observer syntax checks
+        run: bash scripts/ci/record.sh observer-check npm --prefix observer run check
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: observer-logs
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  dependency-provenance:
+    name: Reviewed committed dependency lockfiles (required)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - name: Verify approved lockfiles are committed source inputs
+        run: bash scripts/ci/record.sh source-locks bash scripts/ci/verify-source-locks.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dependency-provenance
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  repository-guard:
+    name: Commit secret and generated-file guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Positive and adversarial scanner tests
+        run: bash scripts/ci/record.sh guard-tests node --test scripts/ci/guard.test.mjs
+      - name: Examine Git-tracked paths and text
+        run: bash scripts/ci/record.sh guard-scan node scripts/ci/guard.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: guard-logs
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  cross-lane-offline:
+    needs: [anchor-compile]
+    if: always()
+    name: Available SOL layout, SEC and RAVE fixture tests (no on-chain claims)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install observer Solana SDK (if declared by OBS)
+        run: bash scripts/ci/record.sh cross-lane-deps bash scripts/ci/install-node-deps.sh observer
+      - name: Install pinned Solana SDK for required signer regression suite
+        run: |
+          if [ -f tests/solana/package-lock.json ]; then
+            bash scripts/ci/record.sh cross-lane-solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+          elif [ -f ci-integration-snapshot.json ]; then
+            echo 'REQUIRED Solana SDK lock missing from integrated checkout' >&2
+            exit 1
+          else
+            echo 'NOT_PRESENT: specialist Solana tests are required on the integration PR, not the CI-only PR'
+          fi
+      # Anchor's real SBPF/IDL job produces the only accepted IDL. This also
+      # makes the same required IDL check actionable on the integrated PR.
+      # Missing artifacts remain a red required test in integration mode.
+      - name: Retrieve IDL generated by real Anchor build (no synthetic fixture)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: rust-anchor-evidence
+          path: .
+      - name: Run all applicable cross-lane tests; fail on skips when present
+        run: node scripts/ci/run-cross-lane-tests.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: cross-lane-offline-evidence
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  anchor-compile:
+    name: Required Rust host and Anchor SBF compilation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env: {NO_DNA: '1', CARGO_TERM_COLOR: always, RUSTUP_TOOLCHAIN: '1.95.0'}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install exact Rust
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+      - name: Install exact Solana CLI
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install exact Anchor CLI
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
+      - name: Toolchain evidence
+        run: bash scripts/ci/record.sh tool-versions bash scripts/ci/tool-versions.sh
+      - name: Create disposable localnet program keypair and sync only temporary ID
+        run: bash scripts/ci/record.sh prepare-localnet bash scripts/ci/prepare-localnet-program.sh
+      - name: Run both compilations and fail if either fails
+        run: |
+          set +e
+          bash scripts/ci/record.sh cargo-check cargo check --locked --workspace --all-targets
+          cargo_status=$?
+          bash scripts/ci/record.sh cargo-lock-integrity bash scripts/ci/check-lock-digest.sh workspace Cargo.lock
+          cargo_lock_status=$?
+          bash scripts/ci/record.sh anchor-build bash scripts/ci/anchor-build.sh
+          anchor_status=$?
+          set -e
+          echo "cargo check exit=$cargo_status; anchor build exit=$anchor_status" | tee ci-artifacts/compile-status.log
+          echo "Cargo lock integrity exit=$cargo_lock_status" | tee -a ci-artifacts/compile-status.log
+          [ "$cargo_status" -eq 0 ] && [ "$anchor_status" -eq 0 ] && [ "$cargo_lock_status" -eq 0 ]
+      - name: Preserve IDL status, checksums and tool versions
+        if: always()
+        run: |
+          mkdir -p ci-artifacts
+          if [ -s target/idl/deposit_prototype.json ]; then
+            sha256sum target/idl/deposit_prototype.json | tee ci-artifacts/idl.sha256
+          else
+            echo "IDL NOT GENERATED" | tee ci-artifacts/idl-status.log
+          fi
+          if [ -s target/deploy/deposit_prototype.so ]; then
+            sha256sum target/deploy/deposit_prototype.so | tee ci-artifacts/sbpf-binary.sha256
+          else
+            echo "SBPF BINARY NOT GENERATED — compilation gate failed" | tee ci-artifacts/sbpf-binary.status
+          fi
+          if [ -f Cargo.lock ]; then sha256sum Cargo.lock | tee ci-artifacts/cargo-lock.sha256; fi
+          bash scripts/ci/tool-versions.sh > ci-artifacts/tool-versions-final.log 2>&1 || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: rust-anchor-evidence
+          path: |
+            ci-artifacts/
+            target/idl/*.json
+            target/deploy/deposit_prototype.so
+            Cargo.lock
+          if-no-files-found: error
+          retention-days: 14
+
+  validator-smoke:
+    name: Ephemeral Solana validator RPC smoke (no contract tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install exact Solana CLI
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Capture runtime versions
+        run: bash scripts/ci/record.sh validator-versions bash scripts/ci/tool-versions.sh
+      - name: Liveness and invalid-RPC negative case
+        run: bash scripts/ci/record.sh validator-smoke bash scripts/ci/validator-smoke.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: validator-smoke-logs
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
