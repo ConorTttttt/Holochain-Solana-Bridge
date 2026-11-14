@@ -45,6 +45,11 @@ jobs:
         run: |
           bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
           bash scripts/ci/record.sh solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+      - name: Check demo source-only contract (synthetic denials; NOT a Holochain write)
+        run: |
+          node --check demo/observation-contract.mjs
+          node --check demo/observation-contract.test.mjs
+          bash scripts/ci/record.sh demo-contract-denials node --test demo/observation-contract.test.mjs
       # IDL checks are REQUIRED: use genuine build output from the validator job,
       # never a synthetic/fabricated IDL. On missing artifacts, continue to the
       # strict cross-lane runner which reports the IDL skip as FAILURE.
