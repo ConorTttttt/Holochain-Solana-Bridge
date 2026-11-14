@@ -35,3 +35,15 @@ A3's v2 envelope and A4's review-only v2 shape are still incompatible; do not si
 `creditEligible:false` · `independentConsensusVerified:false` · `spendableBaseUnits:"0"` · `withdrawalAuthorized:false`.
 
 **Gate C: NO-GO.**
+
+## Direct original signed-wire checks (local audit, not a live replay)
+
+After the report above was first committed, a local Python `cryptography` Ed25519 audit decoded the *original* SOL #55 `getTransaction-base64` archives for initialize, deposit and refund. The script parsed Solana shortvec signatures, legacy static message account keys, compiled instructions and complete message bytes; verified **every archived Ed25519 signer signature**, checked the first wire signature against the source-domain manifest, bound the compiled target program and exact original slot, and found the signed initialized 32-byte scope inside the initialize instruction data. For each event, the complete byte-identical signed wire occurred **exactly once** in its separately archived original `getBlock-base64` containing block, with `meta.err:null`.
+
+| Original event | Slot | Signed-wire SHA-256 | Result |
+|---|---:|---|---|
+| initialize | 10 | `2640a5817923ab6b89c704b7f61017416c9894b7b990e3e0d34f4142f6d715a4` | Ed25519 PASS, exact block inclusion once |
+| deposit | 42 | `7dd4f34251059c1c13f01c29087ac1e619111a4bc65910de62210c9a77ba02bc` | Ed25519 PASS, exact block inclusion once |
+| refund | 75 | `bc402e98ec949aab6f19ef63e01eabee62f7d17237d03f5838decdc140986d71` | Ed25519 PASS, exact block inclusion once |
+
+These are **three selected archived signed wires**, NOT exhaustive produced-slot history, a validator replay, independent consensus or economic authorization. Source-owned A2 verifier and A3 Kit admission remain separate gates.
