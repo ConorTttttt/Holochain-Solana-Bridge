@@ -20,6 +20,8 @@ function validateRecoveredEntries(state) {
       row.evidence.creditEligible === false &&
       row.evidence.transactionVerified === true &&
       row.evidence.independentConsensusVerified === false &&
+      row.evidence.spendableBaseUnits === '0' &&
+      row.evidence.withdrawalAuthorized === false &&
       row.evidence.id === id &&
       typeof row.occurrenceId === 'string' && row.occurrenceId.length > 0 &&
       row.evidence.occurrenceId === row.occurrenceId &&
@@ -91,6 +93,8 @@ export class DepositLedger {
       need(item?.kind === 'solana-deposit-evidence-v1' &&
         item.creditEligible === false && item.transactionVerified === true &&
         item.independentConsensusVerified === false &&
+        item.spendableBaseUnits === '0' &&
+        item.withdrawalAuthorized === false &&
         typeof item.id === 'string' && typeof item.occurrenceId === 'string',
         'invalid or authoritative deposit evidence');
       const fingerprint=hash(item);
