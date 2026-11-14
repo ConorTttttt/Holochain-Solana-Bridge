@@ -33,12 +33,16 @@ if [[ ${1:-} == '--negative' ]]; then
   }
   negative 'forbidden published app ID' 'PUBLISHED_UNYT_APP_REFUSED' \
     DEMO_APP_ID='unyt-v0117-audit'
+  negative 'uppercase published app ID' 'PUBLISHED_UNYT_APP_REFUSED' \
+    DEMO_APP_ID='UNYT-v0117-audit'
   negative 'unexpected DNA' 'DEMO_DNA_OR_SIGNER_MISMATCH' \
     DEMO_EXPECTED_DNA_HASH='uhC0kWrongDisposableDna'
   negative 'unexpected agent' 'DEMO_DNA_OR_SIGNER_MISMATCH' \
     DEMO_EXPECTED_AGENT='uhCAkWrongDisposableAgent'
   negative 'missing Lair passphrase file' 'LAIR_REQUIRED_OR_INVALID' \
     DEMO_LAIR_PASSPHRASE_FILE='/not-present-a4-readonly-preflight-lair'
+  negative 'missing conductor config' 'LAIR_REQUIRED_OR_INVALID' \
+    DEMO_CONDUCTOR_CONFIG='/not-present-a4-readonly-conductor-config'
   echo 'READ-ONLY negative probes passed; NO mutating call was attempted.'
 elif [[ $# -gt 0 ]]; then
   echo 'USAGE: read-only-probe.sh [--negative] (no deliver command)' >&2
