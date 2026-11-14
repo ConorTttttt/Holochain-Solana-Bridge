@@ -121,7 +121,7 @@ export async function fetchFinalizedTransaction({rpcUrl,signature,genesisHash,fe
   need(found.version === tx.version && sameJSON(found.transaction,tx.transaction) &&
     sameSolanaExecutionMeta(found.meta,tx.meta),
     'getTransaction contradicts containing finalized getBlock');
-  return {rpcTransaction:tx,blockhash:block.blockhash,source:new URL(rpcUrl).host,
+  return {rpcTransaction:tx,containingBlock:block,blockhash:block.blockhash,source:new URL(rpcUrl).host,
     finalizedClaim:true, creditEligible:false,
     independentConsensusVerified:false,spendableBaseUnits:'0',withdrawalAuthorized:false};
 }

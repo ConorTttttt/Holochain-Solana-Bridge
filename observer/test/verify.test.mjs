@@ -98,6 +98,9 @@ test('valid receipt is state-only evidence and never credit authorization', asyn
   assert.equal(got.depositNonce, '42');
   assert.equal(got.state, 'active_refundable');
   assert.equal(got.creditEligible, false);
+  assert.equal(got.independentConsensusVerified, false);
+  assert.equal(got.spendableBaseUnits, '0');
+  assert.equal(got.withdrawalAuthorized, false);
   assert.equal(got.transactionVerified, false);
   assert.equal(got.evidenceTrust, 'untrusted_rpc_snapshot');
   assert.equal(got.finalizedSlot, 5000);
@@ -171,6 +174,8 @@ test('batch rejects a duplicate receipt identity, even if receipt bytes match', 
   assert.equal(assertUniqueObservations([x]).length,1);
   assert.throws(() => assertUniqueObservations([x,x]), /Duplicated receipt/);
   assert.throws(() => assertUniqueObservations([x,{...x,creditEligible:true}]), /Invalid observation/);
+  assert.throws(() => assertUniqueObservations([x,{...x,spendableBaseUnits:'1'}]), /Invalid observation/);
+  assert.throws(() => assertUniqueObservations([x,{...x,withdrawalAuthorized:true}]), /Invalid observation/);
 });
 
 test('two-RPC reconciliation rejects refunded/replayed and contradictory same-slot snapshots', async () => {
@@ -180,6 +185,8 @@ test('two-RPC reconciliation rejects refunded/replayed and contradictory same-sl
   const contradictory = await verified(snapshot({c:config({active:200n}),v:vault({amount:200n})}));
   assert.throws(() => reconcileObservations(active,contradictory), /same slot/);
   assert.throws(() => reconcileObservations(active,{...active,creditEligible:true}), /Invalid untrusted observation/);
+  assert.throws(() => reconcileObservations(active,{...active,independentConsensusVerified:true}), /Invalid untrusted observation/);
+  assert.throws(() => reconcileObservations(active,{...active,withdrawalAuthorized:true}), /Invalid untrusted observation/);
 });
 
 test('two-RPC reconciliation permits different finalized slots with identical receipt bytes', async () => {
@@ -187,6 +194,9 @@ test('two-RPC reconciliation permits different finalized slots with identical re
   const y = await verifySnapshot({snapshot:snapshot({slot:5010,c:config({active:200n}),v:vault({amount:200n})}), expected, genesisHash:a.genesis,source:'other'});
   const joined = reconcileObservations(x,y);
   assert.equal(joined.creditEligible,false); assert.equal(joined.agreement,'receipt_bytes_only');
+  assert.equal(joined.independentConsensusVerified,false);
+  assert.equal(joined.spendableBaseUnits,'0');
+  assert.equal(joined.withdrawalAuthorized,false);
   assert.deepEqual(joined.providerFinalizedSlots,[5000,5010]);
 });
 

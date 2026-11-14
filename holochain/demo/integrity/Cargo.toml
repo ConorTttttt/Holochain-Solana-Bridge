@@ -1,0 +1,12 @@
+[package]
+name = "solana_audit_integrity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[lib]
+crate-type = ["cdylib", "rlib"]
+[dependencies]
+hdi.workspace = true
+serde.workspace = true
+bs58 = "0.5.1"
+rmp-serde = "1.3"

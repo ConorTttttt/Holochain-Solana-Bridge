@@ -279,15 +279,21 @@ export async function verifyDepositCandidates({
     kind:'solana-deposit-transaction-candidate-v1',
     verifiedByRpcClaim:true, transactionVerified:true, independentConsensusVerified:false,
     evidenceTrust:'rpc_finalized_transaction_with_custody_deltas',
-    creditEligible:false,
+    creditEligible:false, spendableBaseUnits:'0', withdrawalAuthorized:false,
   })));
 }
 /** Attach independently decoded canonical receipt-account snapshot to each candidate. */
 export function attachReceiptObservation(candidate, observation) {
   need(candidate?.kind==='solana-deposit-transaction-candidate-v1' &&
-    candidate.creditEligible===false, 'invalid transaction candidate');
+    candidate.creditEligible===false && candidate.transactionVerified===true &&
+    candidate.independentConsensusVerified===false &&
+    candidate.spendableBaseUnits==='0' && candidate.withdrawalAuthorized===false,
+    'invalid transaction candidate');
   need(observation?.kind==='solana-receipt-observation-v1' &&
-    observation.creditEligible===false && observation.transactionVerified===false, 'invalid receipt observation');
+    observation.creditEligible===false && observation.transactionVerified===false &&
+    observation.independentConsensusVerified===false &&
+    observation.spendableBaseUnits==='0' && observation.withdrawalAuthorized===false,
+    'invalid receipt observation');
   for (const [a,b] of [
     ['id','id'],['program','program'],['receiptAddress','receiptAddress'],
     ['configAddress','configAddress'],['vaultAddress','vaultAddress'],['mint','mint'],
@@ -307,6 +313,7 @@ export function attachReceiptObservation(candidate, observation) {
       'Deposits remain refundable; collateral is not economically final',
       'Program upgrades, archival completeness and all Holochain fork rules are not proved',
     ]),
-    creditEligible:false,
+    creditEligible:false, independentConsensusVerified:false,
+    spendableBaseUnits:'0', withdrawalAuthorized:false,
   });
 }

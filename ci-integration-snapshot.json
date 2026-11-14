@@ -1,33 +1,30 @@
 {
   "status": "P0 REVIEW CANDIDATE — production OBS rewards fix source-pinned; not accepted until genuine same-SHA replay, A2/A3/A4/A5 approval",
   "base": {
-    "branch": "agent/ci/11-build-pipeline",
-    "sha": "ce0fe43dbaab4c709a521197693e52b2ea7176ef"
+    "branch": "agent/ci/16-a0-build-pr-preflight-20261114",
+    "sha": "093a7454a36c3a26cc107b06b1334a289940811e"
   },
   "sources": {
     "SOL": {
-      "branch": "claude/solana-independent-fix",
-      "sha": "cca4e9a94b5147efa82ac0106f1f97f75a42251f",
-      "pr": 38,
-      "adoptionTarget": "agent/sol/7-anchor-build",
-      "adoptionPr": 35,
-      "adoptionStatus": "PENDING_AGENT2_SOURCE_OWNERSHIP_AND_SEC_REVIEW"
+      "sha": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284",
+      "pr": 55,
+      "upstream": "PR #50 640714a14ba338c615cf2ada55ca4166646a2d96",
+      "status": "DRAFT_EXACT_HEAD_STANDALONE_VALIDATOR_SUCCESS_SEPARATE_SEC_REVIEW_REQUIRED"
     },
     "OBS": {
-      "branch": "agent/obs/8-observer-validation",
-      "sha": "2931c5fc51736e3c845cb9bedc55c578534b53a1",
-      "pr": 36,
-      "adoptionStatus": "PROVISIONAL_SOURCE_BLOB_COPY_HANDOFF_REQUESTED"
+      "sha": "a2338f965916ffac982527f6dc7696e9c5706345",
+      "pr": 52,
+      "status": "DRAFT_V2_REVIEWED_ORIGIN_TRANSPORT_BLOCKED"
     },
     "RAVE": {
-      "branch": "agent/rave/9-rave-validation",
-      "sha": "17a3623917311fd3ccbe338293f1cd8ce4cb3c7c",
-      "pr": 34
+      "sha": "c7964607a4f42e83474977edc123774a4fb9188b",
+      "pr": 44,
+      "status": "SOURCE_ONLY_LOCKS_AND_SCOPE_MISSING"
     },
     "SEC": {
-      "branch": "agent/sec/10-threat-model",
-      "sha": "a42096495934f42c86f09c36fa0bdc9b48f362e9",
-      "pr": 33
+      "sha": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
+      "pr": 53,
+      "status": "FIXTURE_SYNC_6_OF_6_GREEN_NOT_INDEPENDENT_WRITE_APPROVAL"
     }
   },
   "parentIntegrationCommit": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
@@ -77,7 +74,7 @@
     "tests/holochain/rave-engine/Cargo.lock": "8f9ee713af6e6f05fbc84c04fb72ccf8fdbe35eb031e98c1eaa82ce2ab3eab8c"
   },
   "sourceLockReview": "Preserved four old reviewed lock SHA256 values unchanged; verify SHA and check graph in CI. No cargo regeneration/upgrade. Independent source review still required.",
-  "testPolicy": "Required real 54 finalized signed-wire witnesses across lifecycle 45 (17+28), init-capture 4 (2+2), u64-max 5 (3+2); cryptographic Ed25519/deployed ELF equality; seven real archive tamper negatives per mode both producer and consumer; four original source graph locks; real Observer replay, durable ledger crash/restart/idempotence/contradiction, quarantined active/refund shadow and real RAVE conductor. All at same SHA. No skipped mandatory tests.",
+  "testPolicy": "Require four isolated real SOL validator modes, original source-domain signed evidence, exact SHA generated IDL and ELF, 54 historical scenario signed wires plus fresh demo-domain wires, authentic OBS Kit v2 pending durable queue and explicit transport refusal, SEC, all RAVE regressions; missing artifacts fail, no skipped mandatory checks.",
   "previousFailingExecution": {
     "commit": "4949b5693dccba1ff373a276a75c27db2f045005",
     "ciRun": 43520698081,
@@ -102,7 +99,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "Standalone SOL source cca4e9a run 43577100529 PASS with 54 finalized records/3 modes/7 tamper mutations each. No new candidate workflows run yet; no integrated claim.",
+  "latestExecutionStatus": "UNVERIFIED new candidate: source adoption and dependency bootstrap must be run in Actions at its exact SHA; standalone SOL #55 success is separate.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -215,86 +212,543 @@
     "withdrawalAuthorized": false
   },
   "candidate": {
-    "branch": "integration/demo/2026-11-14-a1-rave5-required-review",
-    "integrationPr": "NEW_DRAFT_REQUIRED",
+    "branch": "integration/demo/2026-11-14-a1-bootstrap-source-v2",
+    "integrationPr": "DRAFT_TO_CREATE",
     "status": "UNVERIFIED_NO_GREEN_CLAIM",
-    "basisCommit": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
+    "basisCommit": "093a7454a36c3a26cc107b06b1334a289940811e",
     "baseCiHead": "ce0fe43dbaab4c709a521197693e52b2ea7176ef",
     "creationDateUtc": "2026-11-14",
-    "immutableIdentity": "Create one review child only; do not rewrite failures or force-push",
-    "execution": "At exactly new SHA: shared 6/6 + real SOL three archives and Observer replay + RAVE five jobs. A0 Holochain signed own-demo-DNA call remains independently BLOCKED."
+    "immutableIdentity": "New child of #54, exact specialist blobs; no merges or branch takeovers",
+    "execution": "Same SHA producer (four modes), OBS v2 archival Kit queued but transport refused, SEC/RAVE; own DNA locked build awaits A4 committed locks and reviewed scope."
   },
   "fileProvenance": {
+    "Anchor.toml": {
+      "lane": "SOL",
+      "sha": "6a890f430895d2b616d8a0513a4b32ec303843e6",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "Cargo.lock": {
+      "lane": "SOL",
+      "sha": "a1b062209cedf7bb517f5e2945a5572d129b12ac",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "Cargo.toml": {
+      "lane": "SOL",
+      "sha": "e974455c2f276b2523fe9c40f8c16e56bd640f10",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "programs/deposit_prototype/Cargo.toml": {
+      "lane": "SOL",
+      "sha": "dc14e6984db05cf4a096d869efda4ad65d9e4171",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "programs/deposit_prototype/src/lib.rs": {
+      "lane": "SOL",
+      "sha": "7d63ee0ae562853feb0671cb2204fa965493f7aa",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/BUILD_EVIDENCE.md": {
+      "lane": "SOL",
+      "sha": "ad8316fc420764c53c0c78b8afd93e0511b31515",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/DEMO_SOURCE_DOMAIN_HANDOFF_2026-11-14.md": {
+      "lane": "SOL",
+      "sha": "059d648385eff52862a617d70f19253811e0a4ba",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/INITIALIZATION_MITIGATION_PROPOSAL.md": {
+      "lane": "SOL",
+      "sha": "aebc14fc5c9101a5fa9afd8d6f6350a7f5e40f3c",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/OBSERVER_HANDOFF.md": {
+      "lane": "SOL",
+      "sha": "c116babf6d23209d04ae3a30e432f28801247bcb",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/README.md": {
+      "lane": "SOL",
+      "sha": "d06463d594e2a757646dcfd4818270ef9d739a7c",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/SEC38_3_4_REMEDIATION_2026-11-14.md": {
+      "lane": "SOL",
+      "sha": "95c3c750521b957b40afe555abd6d60a65ddd815",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/SEC38_REVIEW_HANDOFF.md": {
+      "lane": "SOL",
+      "sha": "326c20dfb694aefa578afdb0a1b34f1903add11d",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/SPRINT1_SECURITY_ASSESSMENT.md": {
+      "lane": "SOL",
+      "sha": "48d5bf17032c7f04d87840ac5a02dba22c2ef163",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/VERIFIED_LOCALNET.md": {
+      "lane": "SOL",
+      "sha": "2e7c5619b246b210927d1de3d94d2afed2c1e7e2",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/confirmation-recovery.mjs": {
+      "lane": "SOL",
+      "sha": "48cddbba00d78e4b054bdbbac4b8a42b8897002c",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/confirmation-recovery.test.mjs": {
+      "lane": "SOL",
+      "sha": "128d643f4d29b7a2eec3c4237e758004011aefc7",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/demo-scope.mjs": {
+      "lane": "SOL",
+      "sha": "74b1b473dcb4ef26f2116e64bc6b44cb5fca96b5",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/demo-scope.test.mjs": {
+      "lane": "SOL",
+      "sha": "d8ddb2b1f59f7751e4a2508c5d5eb412253b496a",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
     "tests/solana/integration.test.mjs": {
       "lane": "SOL",
-      "sha": "1b33504c8f9d143ec2db254f80732ae110bf38af"
+      "sha": "4c577329d6cbb358363ad10fe17f613fbee8ba73",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
     },
-    "tests/solana/verify-witness-bundle.mjs": {
+    "tests/solana/layout.test.mjs": {
       "lane": "SOL",
-      "sha": "2f0be01b37912a13f179b822542712f4212b16f9"
-    },
-    "observer/package.json": {
-      "lane": "OBS",
-      "sha": "a3ac2adacc46c96462a875c8a72f7c256a69ed6c"
-    },
-    "observer/src/indexer.mjs": {
-      "lane": "OBS",
-      "sha": "8f1cdba2790bfd22a7f0235148ccb6a6ac7987e3"
-    },
-    "observer/scripts/replay-validator-witness.mjs": {
-      "lane": "OBS",
-      "sha": "b04cdb678c93ca0c0b44d43616c3186be0b12ad2"
-    },
-    "observer/test/validator-witness.test.mjs": {
-      "lane": "OBS",
-      "sha": "37b6917518f3eeaf25b5fdff0dea2903f3d365d3"
-    },
-    "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md": {
-      "lane": "OBS",
-      "sha": "50088a4998eb34718053d6240bec7e08cc021443"
-    },
-    "tests/holochain/sandbox/inspect-verified-unyt.sh": {
-      "lane": "RAVE",
-      "sha": "33f81b5d941ba94d7e2a6ab052358d4ee455efc1"
-    },
-    "tests/holochain/sandbox/probe-verified-unyt-conductor.sh": {
-      "lane": "RAVE",
-      "sha": "02a893a949d9e74fce2a18154389755a5dfa046c"
-    },
-    "holochain/research/HOLONIX_071_ROOT_CAUSE_AND_CONDUCTOR_GATE.md": {
-      "lane": "RAVE",
-      "sha": "faf7367f80d04cf0f1a2228d8da4e166342d1033"
-    },
-    "holochain/research/UNYT_0117_ACTUAL_BUNDLE_INVENTORY.md": {
-      "lane": "RAVE",
-      "sha": "4fe13618dba6b725913e856867f05b8f9137e269"
-    },
-    "holochain/research/UNYT_0117_REAL_CONDUCTOR_PROOF.md": {
-      "lane": "RAVE",
-      "sha": "5f521035cbd706ccb568ada4a403bca57d28d7fc"
-    },
-    "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md": {
-      "lane": "SEC",
-      "sha": "e878be1fce8481c242f7659f34e04a3498806bae"
+      "sha": "233832f2d90fe8a078a12f3d548c764f6b29660e",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
     },
     "tests/solana/localnet-build.sh": {
       "lane": "SOL",
-      "sha": "450a0e6074fdae684ef1063bedfc7ac9bf275e4d"
+      "sha": "ed89ba378c556b439da4b6d70ac0d979a3ec7b52",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/package-lock.json": {
+      "lane": "SOL",
+      "sha": "e87a00028f72391e8ffe36005289cab1d958ecc2",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/package.json": {
+      "lane": "SOL",
+      "sha": "851daa5cc1c44bc00dcd01428d2e2c1d6e6f2b99",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/restart-reconcile.test.mjs": {
+      "lane": "SOL",
+      "sha": "1f186977f4c99b6c96fa1b3eaa9d292544903bd5",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/restart-validator.sh": {
+      "lane": "SOL",
+      "sha": "3ab955d4f932d854fb2b51d23d52d8db2b4fc307",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/sdk-compat.mjs": {
+      "lane": "SOL",
+      "sha": "1646f99be277eb95c0677bf4e239a6292d8e9869",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/sdk-compat.test.mjs": {
+      "lane": "SOL",
+      "sha": "f26b8ae318a443dc3556942fe470b4b844de6af0",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/signed-message-fixtures.test.mjs": {
+      "lane": "SOL",
+      "sha": "069496b8b98adc9547e9ba47df78d84d788a15ba",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/signed-message.mjs": {
+      "lane": "SOL",
+      "sha": "40d471bd057303b77b33f58e28ff5d9bd3d2cb76",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/verify-demo-domain-tamper.mjs": {
+      "lane": "SOL",
+      "sha": "4904f65e68e1f7000917f4df52e6c7ef392fe969",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/verify-demo-domain.mjs": {
+      "lane": "SOL",
+      "sha": "b1a50f23eed74fd2c5fa3d706ca1268115a0174b",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "tests/solana/verify-witness-bundle.mjs": {
+      "lane": "SOL",
+      "sha": "40f852506d4eca3defb31f1b593841cc388b1d63",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
     },
     "tests/solana/verify-witness-tamper.mjs": {
       "lane": "SOL",
-      "sha": "be52a648d27668b108473ae2e438cb2d0938ee5c"
+      "sha": "8b37707ef89fabd69a8546c01885c5b59e251748",
+      "sourceCommit": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284"
+    },
+    "observer/ci/s0-signed-wire-evidence.mjs": {
+      "lane": "OBS",
+      "sha": "ce381e71310b425a70a713699ecde6ceb583b102",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/GENUINE_SIGNED_WIRE_43577100529_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "f17951b8c608aa52b25687db35ad74a62f382883",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/INDEXER_REQUIREMENTS.md": {
+      "lane": "OBS",
+      "sha": "333f1867eedbd0115773a1b74d243ff542bf98b7",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/OBS_DEMO_OUTBOX_REVIEW_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "5a8be6842f0b087b0457c492f1d67d230013e565",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/OBS_REVIEWED_WITNESS_V2_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "526a4ad3a89e72e86dcc14dddb71b8b382e4abde",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/P0_VALIDATION_2026-11-13.md": {
+      "lane": "OBS",
+      "sha": "84053a4d69def1689c1caf8c8bfa6642ade5c832",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/P0_WITNESS_SECURITY_GATE_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "452c346a4b8295727db6d2f2eeafed261637574c",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/REFUND_HISTORY_MONOTONIC_GATE_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "b86c9ac1c644b58b56c2df7e31ce4cf1f2cf3983",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/S0_TEST_RESULTS.md": {
+      "lane": "OBS",
+      "sha": "44b2bbba8c66fbb400f8902ee9b95a2e996a99c3",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/TRANSACTION_EVIDENCE_V1.md": {
+      "lane": "OBS",
+      "sha": "89e9c5893ba337fa30ced41e77b4c3ccaa1f425d",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/docs/VALIDATOR_WITNESS_REPLAY_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "50088a4998eb34718053d6240bec7e08cc021443",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/fixtures/init-capture-43577100529-TEST-ONLY-pinned-deployment.json": {
+      "lane": "OBS",
+      "sha": "ee05083f9035a1599656892c5a98c1aec8ee64b2",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/fixtures/lifecycle-43577100529-TEST-ONLY-pinned-deployment.json": {
+      "lane": "OBS",
+      "sha": "4394aefd2536eb6346a882423c4577886869b3c0",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/fixtures/localnet-active-receipt.json": {
+      "lane": "OBS",
+      "sha": "2766250ece417d672c9515c5ab3a345bb02465aa",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/fixtures/localnet-refunded-receipt.json": {
+      "lane": "OBS",
+      "sha": "c746982b2f6b206b239c5b94f23f728f63f9408b",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/fixtures/u64-max-43577100529-TEST-ONLY-pinned-deployment.json": {
+      "lane": "OBS",
+      "sha": "5debb80a71d116c74ebe99b7db1fa7d11284aef1",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/package-lock.json": {
+      "lane": "OBS",
+      "sha": "ad4997c2c59aa9129138f8838c79f83752fe5e08",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/package.json": {
+      "lane": "OBS",
+      "sha": "46dcdf81444eed515ddad11c31e9725c39c3b7cd",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/scripts/replay-quarantined-ledger.mjs": {
+      "lane": "OBS",
+      "sha": "e7e7b830e04e0e25367fe9c905df6fbb1abea328",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/scripts/replay-refund-witness.mjs": {
+      "lane": "OBS",
+      "sha": "68e517db35a790f5538fcc37f029fb27e92a7422",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/scripts/replay-validator-witness.mjs": {
+      "lane": "OBS",
+      "sha": "695b281d0420e326e635e86c94eec0616d41497d",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/scripts/verify-idl.mjs": {
+      "lane": "OBS",
+      "sha": "afaa9493b5f01ffdfa6ff43b7a6e9ca3c1502046",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/cli.mjs": {
+      "lane": "OBS",
+      "sha": "e647378f46b6801a4768d6d02ba61057569c5dd4",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/decode.mjs": {
+      "lane": "OBS",
+      "sha": "9c8e950eef7d50e832a3c097257a19d08de86249",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/demo-outbox.mjs": {
+      "lane": "OBS",
+      "sha": "d48003ed9a2cd25ec8876f9fa2f4dff33466d8ba",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/demo-witness-v2.mjs": {
+      "lane": "OBS",
+      "sha": "228754b36de37ac5d018a5a5e01e45728bd0f028",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/history.mjs": {
+      "lane": "OBS",
+      "sha": "cca91709f9ecbf13cdb7d936b982f192dccc2d80",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/indexer.mjs": {
+      "lane": "OBS",
+      "sha": "57dc670496f73ac9658dce5d2f9740dbc7b68851",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/ledger.mjs": {
+      "lane": "OBS",
+      "sha": "0ecac7adf4f98de17062d7ed2097d04b385c5b37",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/pda.mjs": {
+      "lane": "OBS",
+      "sha": "c01cf54293ed4c651f9b4a8d91d422393390be65",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/producer-history-input.mjs": {
+      "lane": "OBS",
+      "sha": "308d55b3a984f62bd989311893aed0b6259bc455",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/refund.mjs": {
+      "lane": "OBS",
+      "sha": "f2d46b400ccde98165d14c57bedd457de752a7af",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/transaction.mjs": {
+      "lane": "OBS",
+      "sha": "6dba578cf3ca512f5366bc53fe48b721eb29208f",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/src/verify.mjs": {
+      "lane": "OBS",
+      "sha": "70ad8499007c316440681d27866560ee73f28f39",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/demo-outbox.test.mjs": {
+      "lane": "OBS",
+      "sha": "ca0566208e8bc31c6315310865d2e4a9c0f93b3d",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/history.test.mjs": {
+      "lane": "OBS",
+      "sha": "34369ab8562322866aa5b4ff0a0be72bc5f8f962",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/idl-contract.test.mjs": {
+      "lane": "OBS",
+      "sha": "3f934d0db7536830c7ad95d87dcaa88b4ac9d358",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/indexer-metadata-handoff.test.mjs": {
+      "lane": "OBS",
+      "sha": "09298fd9499afc66cb908d3dc63c83ad03b70bdc",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/indexer.test.mjs": {
+      "lane": "OBS",
+      "sha": "d29e2a37e02e4343e34cfaca2804089022e90567",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/ledger-authentication-boundary.test.mjs": {
+      "lane": "OBS",
+      "sha": "8c4fbca03f9381669b6fd472c388ff54d1429fe6",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/ledger.test.mjs": {
+      "lane": "OBS",
+      "sha": "c777a29f8677b4738ccbfc2007b0b8d27bdd0655",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/producer-history-input.test.mjs": {
+      "lane": "OBS",
+      "sha": "df7819a2c42af12489fa77cf729e7de10f359e51",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/real-localnet.test.mjs": {
+      "lane": "OBS",
+      "sha": "672988cd3ce66070db78ee3f9db7b7ffe25459db",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/refund-ledger.test.mjs": {
+      "lane": "OBS",
+      "sha": "e68b6980a93821d9905bd6d01c4ea7f2df5f3304",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
     },
     "observer/test/rpc-meta-equivalence.test.mjs": {
       "lane": "OBS",
-      "sha": "07b844a41d9179d249c5e2415ea3ae2734a8355c"
+      "sha": "07b844a41d9179d249c5e2415ea3ae2734a8355c",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/shadow-ledger-economics.test.mjs": {
+      "lane": "OBS",
+      "sha": "d7cce42bbf56f008ca25e3223a92e17cda4213de",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/transaction.test.mjs": {
+      "lane": "OBS",
+      "sha": "e5e3a90346658e739a1b6e88f015d18b8fa2e04c",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/validator-witness.test.mjs": {
+      "lane": "OBS",
+      "sha": "37b6917518f3eeaf25b5fdff0dea2903f3d365d3",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "observer/test/verify.test.mjs": {
+      "lane": "OBS",
+      "sha": "d97677fd1fad685bb49f459cdf214558f51be816",
+      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+    },
+    "security/test/ledger-corruption-boundary.test.mjs": {
+      "lane": "SEC",
+      "sha": "2d48b411af5bf46d83eb6b7d983e117b4484cdcd",
+      "sourceCommit": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35"
+    },
+    "security/test/replay-ledger-adversarial.test.mjs": {
+      "lane": "SEC",
+      "sha": "945afbeb664272d71bc42699cd6a5a2832491c32",
+      "sourceCommit": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35"
+    },
+    "holochain/demo/ABI_PROJECTION_HANDOFF.md": {
+      "lane": "RAVE",
+      "sha": "17c8ec74a4c16271eb0b247c3ae10db6c85ec5e8",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/ABI_V2_REVIEW_PROPOSAL.md": {
+      "lane": "RAVE",
+      "sha": "e0d8252b6fd1ccff6bb4ea45dd7c74e38557a1cc",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/BUILD_EVIDENCE_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "77f06fbfa40f364aa89f9ae88a2fee5578377f1d",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/Cargo.toml": {
+      "lane": "RAVE",
+      "sha": "01bc71aea1c8d6282e2dfcb2055b0ef3b733180e",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/README.md": {
+      "lane": "RAVE",
+      "sha": "650e85bd6c168f7d2f26e3369e09dbe226bd9355",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/REVIEWZOME_071_SOURCE.md": {
+      "lane": "RAVE",
+      "sha": "d0d9b04f39ed690bae5759f419fed0e16756db29",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/SEC_REVIEW_TUPLE.md": {
+      "lane": "RAVE",
+      "sha": "21981072b4d1efc0517384a9b3f5af22898e2975",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/SOURCE_DOMAIN_EVIDENCE_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "0ea7f42103d9dd6a6466028a858ef63062b86713",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/abi/solana-observation-demo-v1.mjs": {
+      "lane": "RAVE",
+      "sha": "e7ca9421befa344eed7c3f11b2c1a31de5702ad0",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/build.sh": {
+      "lane": "RAVE",
+      "sha": "d5e65425439471cdff57e98cebe5eb46562c1367",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/coordinator/Cargo.toml": {
+      "lane": "RAVE",
+      "sha": "259dd2d0ba2eb360036fbe6dbf26f14243730c5e",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/coordinator/src/lib.rs": {
+      "lane": "RAVE",
+      "sha": "5a70b37be792c767d8fdb092e1e8c0c5bdd08f74",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/dna.yaml": {
+      "lane": "RAVE",
+      "sha": "24c3807b0921093f218fdff9af5dd1b885f39448",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/ham-adapter/Cargo.toml": {
+      "lane": "RAVE",
+      "sha": "7bdd4ba154549b9d6803aa34af74d7dc06b40bf5",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/ham-adapter/src/main.rs": {
+      "lane": "RAVE",
+      "sha": "138c1aa4d909abf4d766106c14caf09b9a0f4f33",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/happ.yaml": {
+      "lane": "RAVE",
+      "sha": "0280321d7d9c8258bead9c1f7ee4efad03b603e9",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/integrity/Cargo.toml": {
+      "lane": "RAVE",
+      "sha": "d04eaa18cc234a4c7653a9b30b14270d61411f55",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "holochain/demo/integrity/src/lib.rs": {
+      "lane": "RAVE",
+      "sha": "44d1c6b7672439a028fdcee6c829e6929ffc6dac",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "tests/holochain/demo/demo-abi.test.mjs": {
+      "lane": "RAVE",
+      "sha": "d7c853fc79fa73b117e41d8fd3b1fb9b08862af0",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "tests/holochain/demo/read-only-probe.sh": {
+      "lane": "RAVE",
+      "sha": "16b1a408efeb85539200050e7065dddf0c871344",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "tests/holochain/demo/verify-solana-domain-archive.mjs": {
+      "lane": "RAVE",
+      "sha": "7ea3f297c2b25fc26c1d2b3ec4feaf5733faaf7c",
+      "sourceCommit": "c7964607a4f42e83474977edc123774a4fb9188b"
     }
   },
   "integrationOnlyProvenance": {
-    "observer/test/indexer.test.mjs": {
-      "blobSha": "ab467f9d2c236f88417e174798ac5c1f4a04f310",
-      "reason": "CI corrected second required signer diagnostic regex; OBS newest source still expects only invalid Ed25519"
-    },
     "security/test/transaction-provenance-adversarial.test.mjs": {
       "blobSha": "f16e46136a0c8b40d685c105a402c28037ce06e9",
       "reason": "CI flips decodable wire byte for signature-negative test; SEC source still mutates trailing compact count"
@@ -304,10 +758,10 @@
     }
   },
   "currentAcceptance": {
-    "A0": "PARTIAL SOL/OBS root fixed; own-DNA write and signed real ActionHash blocked on Agent 4/A3/A5",
-    "B1": "BLOCKED (52 selected blocks not complete original two-provider produced-slot history)",
-    "B2": "BLOCKED (published Unyt source/ABI/capability proof absent)",
-    "C": "NO-GO (credit/spend/withdrawal all disabled)"
+    "A0": "BLOCKED_NOT_ACCEPTED pending audited v2 destination, two committed A4 Cargo locks and real source-backed DNA properties",
+    "B1": "BLOCKED incomplete full original two-provider produced-slot history",
+    "B2": "BLOCKED released Unyt coordinator source/capability",
+    "C": "NO-GO economic"
   },
   "nonEconomicPolicy": {
     "creditEligible": false,
@@ -346,5 +800,22 @@
     "change": ".github/workflows/rave-unyt-release.yml push branch allowlist only",
     "status": "UNVERIFIED until five exact-SHA jobs complete",
     "noUnytEconomicCalls": true
+  },
+  "sourceAdoption": {
+    "method": "Git tree entries referencing exact immutable upstream Git blob objects (no specialist source edits or feature branch merge)",
+    "parent": "093a7454a36c3a26cc107b06b1334a289940811e",
+    "heads": {
+      "SOL": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284",
+      "OBS": "a2338f965916ffac982527f6dc7696e9c5706345",
+      "SEC": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
+      "RAVE": "c7964607a4f42e83474977edc123774a4fb9188b"
+    },
+    "counts": {
+      "SOL": 33,
+      "OBS": 49,
+      "SEC": 2,
+      "RAVE": 21
+    },
+    "notYetReviewed": "All adopted source is still candidate evidence; authenticated A4/A5 v2 ABI and audit write NOT authorized."
   }
 }

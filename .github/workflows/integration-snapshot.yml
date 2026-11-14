@@ -89,9 +89,11 @@ jobs:
       - name: Require complete exact-SHA-bound real validator witness bundles
         run: |
           set -euo pipefail
-          for scenario in lifecycle init-capture u64-max; do
+          for scenario in lifecycle init-capture u64-max demo-domain; do
             bash scripts/ci/record.sh "producer-witness-${scenario}" node tests/solana/verify-witness-bundle.mjs "$scenario"
           done
+          bash scripts/ci/record.sh source-domain-identity node tests/solana/verify-demo-domain.mjs
+          bash scripts/ci/record.sh source-domain-tamper node tests/solana/verify-demo-domain-tamper.mjs
       - name: Require complete 54-transaction finalized witness inventory and independently checked tamper denials
         run: |
           set -euo pipefail
@@ -118,6 +120,13 @@ jobs:
         run: bash scripts/ci/record.sh real-rpc-fixture-coherence node --test tests/integration/s0-public-rpc-fixtures.test.mjs
       - name: Verify genuine signed wire bytes and replay finalized blocks through Observer
         run: bash scripts/ci/record.sh real-signed-wire-observer node --test observer/ci/s0-signed-wire-evidence.mjs
+      - name: Require real Kit-reviewed source-rich v2 pending queue and explicit NO-ACK
+        run: |
+          set -euo pipefail
+          test -s ci-artifacts/observer-reviewed-v2-original-signed-localnet.json
+          test -s ci-artifacts/observer-reviewed-v2-original-signed-localnet.json.sha256
+          (cd ci-artifacts && sha256sum --check observer-reviewed-v2-original-signed-localnet.json.sha256)
+          node scripts/ci/a0-verify-reviewed-v2.mjs
       - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
         run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
       - name: Emit SHA-bound A0 BLOCKED machine inventory even when a prior step fails
@@ -198,11 +207,22 @@ jobs:
         run: |
           source scripts/ci/toolchain.env
           bash scripts/ci/record.sh sol-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
-      - name: Install pinned Solana CLI 4.1.2
+      - name: Install SHA256-pinned Agave 4.1.2 archive (no remote installer)
         run: |
-          source scripts/ci/toolchain.env
-          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/solana" ci-artifacts
+          archive="$(mktemp -t agave-4.1.2.XXXXXXXX.tar.bz2)"
+          trap 'rm -f "$archive"' EXIT
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 --retry 3 \
+            https://github.com/anza-xyz/agave/releases/download/v4.1.2/solana-release-x86_64-unknown-linux-gnu.tar.bz2 -o "$archive"
+          printf '%s  %s\n' '5991d027a686eb419a709a479178b33eb83501e8a2bfbf599a81a286bfcbf770' "$archive" | sha256sum --check
+          while IFS= read -r entry; do
+            case "$entry" in solana-release/*) ;; *) echo "UNSAFE_AGAVE_ARCHIVE_PATH: $entry" >&2; exit 1;; esac
+          done < <(tar -tjf "$archive")
+          tar -xjf "$archive" -C "$HOME/.local/share/solana"
+          test -x "$HOME/.local/share/solana/solana-release/bin/solana-test-validator"
+          echo "$HOME/.local/share/solana/solana-release/bin" >> "$GITHUB_PATH"
+          sha256sum "$HOME/.local/share/solana/solana-release/bin/solana" > ci-artifacts/agave-executable.sha256
       - name: Install pinned Anchor CLI from tagged lockfile
         run: |
           source scripts/ci/toolchain.env
@@ -240,7 +260,7 @@ jobs:
           mkdir -p target/localnet-evidence
           git rev-parse HEAD > target/localnet-evidence/source-commit.txt
           (cd target/localnet-evidence &&
-            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name '*.txt' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
+            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name 'demo-source-domain.json' -o -name 'demo-domain-*.json' -o -name '*.txt' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
             sort -z | xargs -0 -r sha256sum) > target/localnet-evidence/evidence-manifest.sha256
       - name: Verify exact published workspace and Solana Node graphs
         run: |
@@ -268,6 +288,9 @@ jobs:
             target/localnet-evidence/sprint1-u64-refunded.json
             target/localnet-evidence/restart-state.json
             target/localnet-evidence/restart-after.json
+            target/localnet-evidence/demo-source-domain.json
+            target/localnet-evidence/demo-domain-active-receipt.json
+            target/localnet-evidence/demo-domain-refunded-receipt.json
             # Captured PUBLIC localhost Solana JSON-RPC, no keypairs or ledger data.
             target/localnet-evidence/*.rpc.json
             target/localnet-evidence/sprint1-*-transactions.json

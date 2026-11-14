@@ -28,6 +28,7 @@ test('SEC-LEDGER-CORRUPT: detectable bit flips vs non-authenticated local histor
     kind:'solana-deposit-evidence-v1', id:'receipt1', occurrenceId:'signature:outer:0',
     transactionHash:'a'.repeat(64), amountBaseUnits:'9007199254740993',
     creditEligible:false, transactionVerified:true, independentConsensusVerified:false,
+    spendableBaseUnits:'0',withdrawalAuthorized:false,
   };
   const read = () => JSON.parse(readFileSync(filename, 'utf8'));
   const save = state => writeFileSync(filename, JSON.stringify(state) + '\n');

@@ -13,7 +13,7 @@ const options={genesisHash:chain,program,trustedDeploymentSlot:20};
 function fixture(receipt,outerIndex=0) {
   return {
     kind:'solana-deposit-evidence-v1',creditEligible:false,transactionVerified:true,
-    independentConsensusVerified:false,
+    independentConsensusVerified:false,spendableBaseUnits:'0',withdrawalAuthorized:false,
     id:chain+':'+program+':receipt'+receipt,
     occurrenceId:chain+':'+program+':signature:outer:'+outerIndex,
     transactionHash:'hash'+receipt,amountBaseUnits:'250000',

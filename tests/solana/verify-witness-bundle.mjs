@@ -1,13 +1,14 @@
 // Fail-closed verification of public-only finalized RPC witness archives.
 // Run after each actual local-validator scenario. This is NOT a transaction test.
 import assert from 'node:assert/strict';
-import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { decodeSignedWire, assertRpcMessage, assertArchiveAttribution, fail } from './signed-message.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const mode = process.argv[2];
-assert.ok(['lifecycle', 'init-capture', 'u64-max'].includes(mode), 'unknown witness mode');
+assert.ok(['lifecycle', 'init-capture', 'u64-max', 'demo-domain'].includes(mode), 'unknown witness mode');
 // WITNESS_DIR exists only so the tamper test can point at a mutated COPY.
 const dir = process.env.WITNESS_DIR ?? 'target/localnet-evidence';
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -17,8 +18,13 @@ const expected = {
   sourceCommitSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   idlSha256: digest('target/idl/deposit_prototype.json'),
   elfSha256: digest('target/deploy/deposit_prototype.so'),
+  postSyncSourceSha256: digest(join(dir, 'tracked-post-sync.sha256')),
   programId: idl.address,
 };
+// Only the current local tracked checkout is independently checked here.
+// Archived local RPC genesis/deployment data are observations, not consensus.
+execFileSync('sha256sum', ['--check', join(dir, 'tracked-post-sync.sha256')],
+  { stdio: 'pipe' });
 const checkBinding = (object, label) => {
   for (const [key, value] of Object.entries(expected)) {
     assert.equal(object[key], value, label + ': incorrect ' + key);
@@ -26,9 +32,23 @@ const checkBinding = (object, label) => {
   assert.match(object.genesisHash, /^[1-9A-HJ-NP-Za-km-z]+$/,
     label + ': missing/invalid genesis identity');
 };
-const openRpc = (name) => {
+const openRpc = (name, containingBlock = false) => {
+  if (containingBlock && (typeof name !== 'string' || !name)) {
+    fail('WITNESS_BLOCK_MISSING', 'no containing-block RPC filename');
+  }
   assert.match(name, /^[A-Za-z0-9-]+\.rpc\.json$/, 'unsafe witness path');
-  const response = readJson(join(dir, name));
+  let response;
+  try {
+    response = readJson(join(dir, name));
+  } catch (error) {
+    if (containingBlock && error?.code === 'ENOENT') {
+      fail('WITNESS_BLOCK_MISSING', name + ': original containing-block RPC file absent');
+    }
+    throw error; // Corrupt JSON and non-block IO errors are not missing-block claims.
+  }
+  if (containingBlock && (response?.result === null || response?.result === undefined)) {
+    fail('WITNESS_BLOCK_MISSING', name + ': original containing-block result absent');
+  }
   assert.equal(response.jsonrpc, '2.0', name + ': missing JSON-RPC version');
   assert.equal(response.error, undefined, name + ': RPC error');
   assert.ok(response.result, name + ': empty RPC result');
@@ -44,41 +64,6 @@ function base58(bytes) {
   while (n > 0n) { out = B58[Number(n % 58n)] + out; n /= 58n; }
   for (const byte of bytes) { if (byte !== 0) break; out = '1' + out; }
   return out;
-}
-function compactU16(buf, offset) {
-  let value = 0;
-  for (let i = 0; i < 3; i++) {
-    const byte = buf[offset + i];
-    assert.ok(byte !== undefined, 'truncated compact-u16');
-    value |= (byte & 0x7f) << (7 * i);
-    if ((byte & 0x80) === 0) return [value, offset + i + 1];
-  }
-  throw new Error('invalid compact-u16');
-}
-const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
-function verifySignedTransaction(bytes, label) {
-  const [count, sigStart] = compactU16(bytes, 0);
-  assert.ok(count > 0, label + ': no signatures');
-  const signatures = [];
-  for (let i = 0; i < count; i++) {
-    signatures.push(bytes.subarray(sigStart + 64 * i, sigStart + 64 * (i + 1)));
-  }
-  const message = bytes.subarray(sigStart + 64 * count);
-  let cursor = (message[0] & 0x80) ? 1 : 0; // v0+ messages carry a version prefix
-  const required = message[cursor];
-  cursor += 3;
-  const [keyCount, keyStart] = compactU16(message, cursor);
-  assert.equal(required, count, label + ': signature count != required signers');
-  assert.ok(keyCount >= required, label + ': fewer account keys than signers');
-  signatures.forEach((signature, i) => {
-    assert.equal(signature.length, 64, label + ': truncated signature');
-    const key = message.subarray(keyStart + 32 * i, keyStart + 32 * (i + 1));
-    const publicKey = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, key]),
-      format: 'der', type: 'spki' });
-    assert.ok(verifySignature(null, message, publicKey, signature),
-      label + ': ed25519 signature ' + i + ' does not verify over the archived message');
-  });
-  return base58(signatures[0]);
 }
 function errorEmitter(logs) {
   return (logs ?? []).map(line =>
@@ -115,13 +100,15 @@ for (const witness of bundle.finalized) {
   signatures.add(witness.signature);
   const parsed = openRpc(witness.getTransactionRawFile);
   const signed = openRpc(witness.getTransactionBase64RawFile);
-  const block = openRpc(witness.getBlockRawFile);
-  const signedBlock = openRpc(witness.getBlockBase64RawFile);
+  const block = openRpc(witness.getBlockRawFile, true);
+  const signedBlock = openRpc(witness.getBlockBase64RawFile, true);
   assert.equal(parsed.slot, witness.slot, 'parsed transaction slot mismatch');
   assert.equal(signed.slot, witness.slot, 'signed transaction slot mismatch');
   assert.equal(block.blockhash, witness.blockhash, 'containing blockhash mismatch');
   assert.equal(signedBlock.blockhash, witness.blockhash, 'signed blockhash mismatch');
-  assert.ok(Array.isArray(signedBlock.transactions), 'signed block must include all transactions');
+  if (!Array.isArray(signedBlock.transactions) || !Array.isArray(block.transactions)) {
+    fail('WITNESS_BLOCK_MISSING', 'containing-block transaction evidence absent');
+  }
   assert.equal(signedBlock.transactions.length, block.transactions.length,
     'signed and decoded blocks have different transaction counts');
   assert.deepEqual(parsed.meta?.err, witness.meta.err, 'parsed transaction error mismatch');
@@ -135,15 +122,16 @@ for (const witness of bundle.finalized) {
   assert.ok(signedBytes.length > 64, 'truncated signed transaction');
   assert.equal(signedBytes.toString('base64'), signed.transaction[0],
     'noncanonical signed base64');
-  assert.equal(verifySignedTransaction(signedBytes, witness.signature), witness.signature,
+  const decoded = decodeSignedWire(signedBytes, witness.signature);
+  assert.equal(decoded.signatures[0], witness.signature,
     'archived signed bytes do not carry the witnessed transaction signature');
+  const records = recordsBySignature.get(witness.signature);
+  const submitted = assertArchiveAttribution(decoded, records, witness, parsed, idl);
+  assert.ok(submitted.equals(signedBytes),
+    'WIRE_FINALIZED_TRANSACTION: original submitted wire differs from getTransaction');
   assert.deepEqual(witness.meta.logMessages, parsed.meta?.logMessages,
     'witness logs differ from finalized getTransaction logs');
-  for (const record of recordsBySignature.get(witness.signature)) {
-    if (typeof record.signedWireBase64 === 'string') {
-      assert.equal(signed.transaction[0], record.signedWireBase64,
-        'finalized bytes differ from originally submitted wire bytes: ' + witness.signature);
-    }
+  for (const record of records) {
     if ('error' in record) {
       assert.deepEqual(record.error, witness.meta.err,
         'recorded execution result disagrees with finalized ledger: ' + record.label);
@@ -153,10 +141,12 @@ for (const witness of bundle.finalized) {
         'recorded failing program disagrees with finalized logs: ' + record.label);
     }
   }
-  assert.ok(Array.isArray(block.transactions), 'full containing block is missing');
+  // Both containing-block formats were already checked for transaction arrays.
   const included = block.transactions.find((entry) =>
     entry.transaction?.signatures?.includes(witness.signature));
-  assert.ok(included, 'signed transaction absent from containing block');
+  if (!included) fail('WITNESS_BLOCK_MISSING',
+    witness.signature + ': signed transaction absent from containing block');
+  assertRpcMessage(decoded, parsed, included, witness.signature);
   assert.deepEqual(included.meta?.err, witness.meta.err,
     'containing block execution disagrees with transaction');
   const index = block.transactions.indexOf(included);
@@ -165,6 +155,8 @@ for (const witness of bundle.finalized) {
     signedIncluded.transaction[1] === 'base64', 'matching signed block entry missing');
   assert.equal(signedIncluded.transaction[0], signed.transaction[0],
     'getBlock transaction bytes disagree with signed getTransaction bytes');
+  assert.ok(submitted.equals(Buffer.from(signedIncluded.transaction[0], 'base64')),
+    'WIRE_FINALIZED_BLOCK: original submitted wire differs from getBlock');
   assert.deepEqual(signedIncluded.meta?.err, witness.meta.err,
     'signed block execution disagrees with transaction');
   if (witness.meta.err === null) accepted += 1;
@@ -178,6 +170,7 @@ const fixtures = {
     'two-refunded-receipts', 'sprint1-two-wallets-live'],
   'init-capture': ['sprint1-initializer-capture'],
   'u64-max': ['sprint1-u64-refunded'],
+  'demo-domain': ['demo-domain-active-receipt', 'demo-domain-refunded-receipt'],
 };
 for (const name of fixtures[mode]) {
   const snapshot = readJson(join(dir, name + '.json'));
@@ -227,4 +220,7 @@ assert.ok(programData.subarray(45 + elf.length).every((byte) => byte === 0),
 console.log('PASS: ' + mode + ' genesis/source/IDL/ELF-bound witnesses: ' +
   accepted + ' accepted, ' + rejected + ' included rejected, ' +
   fixtures[mode].length + ' finalized account snapshots; all signatures ed25519-verified; ' +
-  'deployed ELF byte-identical (' + expected.elfSha256 + ')');
+  'deployed ELF byte-identical (' + expected.elfSha256 + '); ' +
+  'ProgramData=' + deploymentRecord.programDataAddress + '; ' +
+  'observed upgradeAuthority=' + deploymentRecord.upgradeAuthority + '; ' +
+  'local RPC evidence only, NOT independently authenticated consensus');

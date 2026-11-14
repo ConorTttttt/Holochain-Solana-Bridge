@@ -80,6 +80,9 @@ export async function verifySnapshot({ snapshot, expected, genesisHash, source =
     refunded: r.refunded,
     state: r.refunded ? 'refunded' : 'active_refundable',
     transactionVerified: false,
+    independentConsensusVerified: false,
+    spendableBaseUnits: '0',
+    withdrawalAuthorized: false,
     evidenceTrust: 'untrusted_rpc_snapshot',
     /** HARD GATE: no observation ever grants Holochain economic authorization. */
     creditEligible: false,
@@ -91,7 +94,9 @@ export function assertUniqueObservations(observations) {
   requireThat(Array.isArray(observations), 'Expected observation array');
   const ids = new Set();
   for (const item of observations) {
-    requireThat(item && item.kind === 'solana-receipt-observation-v1' && item.creditEligible === false && typeof item.id === 'string', 'Invalid observation');
+    requireThat(item && item.kind === 'solana-receipt-observation-v1' && item.creditEligible === false &&
+      item.independentConsensusVerified === false && item.spendableBaseUnits === '0' &&
+      item.withdrawalAuthorized === false && typeof item.id === 'string', 'Invalid observation');
     requireThat(!ids.has(item.id), 'Duplicated receipt observation');
     ids.add(item.id);
   }
@@ -101,7 +106,9 @@ export function assertUniqueObservations(observations) {
 /** Compare RPC-reported observations; neither provider is an independent consensus proof. */
 export function reconcileObservations(a, b) {
   for (const obs of [a, b]) {
-    requireThat(obs && obs.kind === 'solana-receipt-observation-v1' && obs.creditEligible === false && obs.transactionVerified === false, 'Invalid untrusted observation');
+    requireThat(obs && obs.kind === 'solana-receipt-observation-v1' && obs.creditEligible === false &&
+      obs.transactionVerified === false && obs.independentConsensusVerified === false &&
+      obs.spendableBaseUnits === '0' && obs.withdrawalAuthorized === false, 'Invalid untrusted observation');
   }
   for (const field of ['id', 'genesisHash', 'program', 'receiptAddress', 'configAddress', 'vaultAddress', 'mint', 'depositor', 'recipientCore', 'holochainScope', 'depositNonce', 'amountBaseUnits', 'receiptDigest', 'refunded']) {
     requireThat(a[field] === b[field], `RPC providers disagree about ${field}`);
@@ -117,6 +124,9 @@ export function reconcileObservations(a, b) {
     providerFinalizedSlots: Object.freeze([a.finalizedSlot, b.finalizedSlot]),
     agreement: a.finalizedSlot === b.finalizedSlot ? 'same_slot_bytes' : 'receipt_bytes_only',
     transactionVerified: false,
+    independentConsensusVerified: false,
+    spendableBaseUnits: '0',
+    withdrawalAuthorized: false,
     evidenceTrust: 'untrusted_rpc_snapshot',
     creditEligible: false,
   });

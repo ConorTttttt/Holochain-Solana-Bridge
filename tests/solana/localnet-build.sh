@@ -30,7 +30,22 @@ solana-keygen new --no-bip39-passphrase --silent \
   -o target/deploy/deposit_prototype-keypair.json >/dev/null 2>&1
 solana-keygen new --no-bip39-passphrase --silent -o "$ANCHOR_WALLET" >/dev/null 2>&1
 solana config set --url localhost --keypair "$ANCHOR_WALLET" >/dev/null 2>&1
+
+# The immutable Git SHA denotes the initial checkout. Anchor keys sync changes
+# tracked public ID sources: preserve the full diff and hash EVERY tracked file
+# before and after, so the actually compiled input tree is auditable.
+test -z "$(git status --porcelain --untracked-files=no)" || {
+  echo "Refusing dirty tracked checkout before anchor keys sync" >&2; exit 1;
+}
+git ls-files -z | xargs -0 sha256sum > target/localnet-evidence/tracked-pre-sync.sha256
 anchor keys sync
+git diff --binary > target/localnet-evidence/anchor-keys-sync.patch
+git diff --name-only > target/localnet-evidence/anchor-keys-sync-tracked-changes.txt
+git diff --check
+git ls-files -z | xargs -0 sha256sum > target/localnet-evidence/tracked-post-sync.sha256
+sha256sum Cargo.lock Cargo.toml Anchor.toml programs/deposit_prototype/Cargo.toml \
+  programs/deposit_prototype/src/lib.rs > target/localnet-evidence/build-inputs.sha256
+sha256sum Cargo.lock > target/localnet-evidence/cargo-lock.sha256
 
 program_id="$(solana-keygen pubkey target/deploy/deposit_prototype-keypair.json)"
 test "$program_id" != "Fg6PaFpoGXkYsidMpWxTWqYhcuud1Qpw7wC6G7n5dFS"
@@ -46,6 +61,13 @@ npm --version
 # Do not accept IDL from a previous build.
 rm -f target/idl/deposit_prototype.json target/deploy/deposit_prototype.so
 NO_DNA=1 anchor build --tools-version v1.57 --arch v3
+# Anchor invokes nested Cargo/SBPF tooling. Enforce unchanged resolved lock
+# and tracked source content even when the nested CLI lacks --locked.
+sha256sum --check target/localnet-evidence/cargo-lock.sha256
+sha256sum --check target/localnet-evidence/tracked-post-sync.sha256 > /dev/null
+test -z "$(git diff --name-only -- Cargo.lock)" || {
+  echo "Anchor modified the reviewed Cargo.lock" >&2; exit 1;
+}
 test -s target/idl/deposit_prototype.json
 test -s target/deploy/deposit_prototype.so
 
@@ -74,7 +96,7 @@ npm --prefix tests/solana test
 # singleton: the first-initializer attack and full-u64 mint cannot run after
 # normal initialization. Anchor legacy test starts/resets its own validator.
 # The tests explicitly fail if config unexpectedly persists between runs.
-for scenario in lifecycle init-capture u64-max; do
+for scenario in lifecycle init-capture u64-max demo-domain; do
   echo "Executing isolated validator scenario: $scenario"
   BRIDGE_TEST_MODE="$scenario" NO_DNA=1 anchor test --skip-build --validator legacy \
     --provider.cluster localnet --provider.wallet "$ANCHOR_WALLET"
@@ -82,9 +104,13 @@ for scenario in lifecycle init-capture u64-max; do
   node tests/solana/verify-witness-bundle.mjs "$scenario"
   # The verifier must also REJECT tampered/incomplete copies of this archive.
   node tests/solana/verify-witness-tamper.mjs "$scenario"
+  if [ "$scenario" = demo-domain ]; then
+    node tests/solana/verify-demo-domain.mjs
+    node tests/solana/verify-demo-domain-tamper.mjs
+  fi
 done
 # Separate two-process retained-ledger restart: it deploys the same compiled
 # ELF into a brand new disposable ledger, leaves a positive liability, kills
 # the validator, restarts WITHOUT --reset and reconstructs live receipts.
 bash tests/solana/restart-validator.sh
-echo "LOCALNET BUILD, THREE TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"
+echo "LOCALNET BUILD, FOUR TRANSACTION SCENARIOS AND RETAINED-LEDGER RESTART PASSED"
