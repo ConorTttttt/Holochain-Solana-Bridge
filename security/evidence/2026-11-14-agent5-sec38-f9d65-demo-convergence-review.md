@@ -1,6 +1,6 @@
 # Agent 5 — exact-SHA SEC-38 and non-economic demo convergence review (2026-11-14)
 
-**Decision:** **CHANGES REQUIRED** for unconditional SOL #43 source adoption, Observer outbox admission, demo-DNA write authorization and integrated demo acceptance. Narrow signed-message checks have passed a real validator workflow and are acceptable as **non-economic localnet TEST EVIDENCE** only within the stated bounds. **SEC Gate C: NO-GO.** This is a source-and-CI-log review, **not** a separately run validator, artifact-byte extraction, financial safety audit, or a formal independent GitHub approval.
+**Decision:** **CHANGES REQUIRED** for unconditional SOL #43 source adoption, Observer outbox admission, demo-DNA write authorization and integrated demo acceptance. Narrow signed-message checks have passed a real validator workflow and are acceptable as **non-economic localnet TEST EVIDENCE** only within the stated bounds. **SEC Gate C: NO-GO.** This is an independently performed source, CI-log **and original artifact-byte cryptographic audit**, **not** a separately run validator, full source-consensus audit, financial safety review, or a formal independent GitHub approval.
 
 **Source pins read:** SOL [#43](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/43) HEAD `f9d65f1935f679d0052e19bc23960d5b2461452d` (base #40 `b4d776320f291d4eb526026a33aff2443ae48310`); RAVE [#44](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/44) `4990d2bf2408b99c3da6739d3072dd722cbe7cbc`; OBS [#36](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/36) `2931c5fc51736e3c845cb9bedc55c578534b53a1`; integration [#45](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/45) `80f79e6c0499122f3b36762f63eac990dab50111`; custody research [#42](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/42) `f2491e0311e51879f8f22aad4d322b3e8f5946b7`; this SEC parent [#33](https://github.com/ConorTttttt/Holochain-Solana-Bridge/pull/33) was `3b74d362da7874269ff8fe82f189e50b533a1584` before this report. These are independent branch heads, **not** one merged candidate.
 
@@ -83,3 +83,25 @@ PR #36 at `2931c5fc...` has **no committed `observer/src/outbox` or outbox test 
 ## 7. Concurrent A4 delta inspected after initial review
 
 **New RAVE #44 HEAD:** `c7ce569b281e5e189f4f5d95d64aa0696b9f9f45` (3 follow-up commits after `4990d2...`), source-diff rechecked. `holochain/demo/integrity/src/lib.rs` now **denies** `evidence_origin:"observer_reviewed_outbox"` at the DNA integrity boundary and accepts only `test_only_fixture`, explicitly mirroring HAM's restriction. Source also caps `finalized_slot <= 2^53-1`; JS ABI's new negatives reject slot overflow, malformed/wrong source, unapproved outbox origins, proof additions and numeric amounts. This closes the earlier observation that DNA *label* admission was broader than HAM, but does **not** add cryptographic source proof, real WASM compilation or signed Holochain action. The stronger boundary makes the present DNA intentionally **fixture-only** and explicitly **not** yet an Observer→DNA integration target. Exact source-and-CI posture remains **NO AUTHORIZED REAL CALL** until the frozen source/identity tuple, real runtime and next ABI are reviewed. No workflow run for `c7ce569...` was returned by the PR-filtered commit-run lookup at this review time. The main report's #44 `4990d2...` is an immutable inspection baseline, and this appendix is the incremental delta.
+
+
+## 8. Independent direct artifact-byte audit (performed after original SEC report)
+
+Downloaded the actual [artifact 14112679385](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/43592157300/artifacts/14112679385) for run `43592157300` from GitHub, not a reconstructed sample. Local independent Python ZIP/hash/Ed25519 audit, using `cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PublicKey` rather than the repository JavaScript verifier, produced the following observations:
+
+| Independent check | Direct result |
+|---|---|
+| ZIP bytes | **833,375 B**, SHA-256 `d001f67b581ba61ca671f5caa5f6a54bf612328e887eeec72ba26b57bc2f5879` exactly matches Actions upload |
+| ZIP entries | **258** total: 255 manifest-listed evidence files, evidence manifest, generated Anchor IDL, generated ELF |
+| Evidence manifest | **255/255 SHA-256 hashes match**, no missing/extra/duplicate evidence member; IDL and ELF checked separately |
+| Lifecycle witnesses | **45** originals, **17 successful / 28 included failed**, original Ed25519 signature and original submitted-wire/RPC/block identity matched |
+| Init-capture witnesses | **4** originals, **2 successful / 2 included failed**, same independently checked identities |
+| U64-max witnesses | **5** originals, **3 successful / 2 included failed**, same independently checked identities |
+| Totals | **54 distinct original signed transactions, 54/54 Ed25519 verified**, fee payer/required signers/recent blockhash and signed version/header parsed independently, `getTransaction` parsed/base64 and containing original `getBlock` parsed/base64 linked, all submitted wires present and byte-identical |
+| Generated IDL SHA-256 | `a1ff1b761f9274c07bebcecf8f9525451c013af0710b85caf687e1ed3843163a` |
+| Generated ELF SHA-256 | `337196bbe5713341774467470de9dd5e7360b4b5fe50055a74a69e43d35ac536` |
+| Actual deployed ProgramData bytes | **3/3 scenario originals** contain a ProgramData account whose ELF section exactly equals the uploaded 221,624-byte ELF, all remaining padding zero; bundle's IDL/ELF hashes agree |
+| Reported source SHA | `f9d65f1935f679d0052e19bc23960d5b2461452d` exactly in uploaded `source-commit.txt` and all three manifests |
+| Upgrade authority | ProgramData option byte `1`; observed authority field is `11111111111111111111111111111111`; this is an observed public value, **not** an independently established governed/immutable upgrade-control arrangement |
+
+This audit independently checks original signature cryptography and cross-archive identity but **does not** make the single validator's RPC history an independent consensus witness; it does **not** independently authenticate all externally downloaded tool installers or independently rerun the live validator. The accepted evidence remains selected signed transactions and their containing blocks, not gap-free produced-slot history. **SEC-38-1 and SEC-38-2 narrower non-economic evidence dispositions are further supported; SEC-38-3/4, B1/B2/C and independent formal GitHub reviewer remain OPEN.**
