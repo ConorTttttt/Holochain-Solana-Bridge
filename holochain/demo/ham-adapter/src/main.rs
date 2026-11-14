@@ -60,7 +60,9 @@ fn check_record(r: &Record) -> Result<()> {
         &r.spendable_base_units,r.withdrawal_authorized) {
         return Err(anyhow!("DEMO_RECORD_ECONOMIC_ESCALATION"));
     }
-    Ok(())
+    // Readback is NOT blindly trusted. Revalidate nested denials and scope,
+    // but reading an existing test-only record does not require write opt-in.
+    check_payload(&r.observation, false)
 }
 
 fn mandatory(name: &str) -> Result<String> {
@@ -72,7 +74,15 @@ fn env_port(name: &str) -> Result<u16> { Ok(mandatory(name)?.parse()?) }
 fn denials(a: bool, b: bool, units: &str, c: bool) -> bool {
     !a && !b && units == "0" && !c
 }
-fn check_observation(o: &Observation) -> Result<()> {
+fn valid_hex_64(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+fn positive_u64(s: &str) -> bool {
+    !s.starts_with('0') && !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+        && s.parse::<u64>().ok().is_some_and(|v| v > 0)
+}
+fn check_observation(o: &Observation) -> Result<()> { check_payload(o, true) }
+fn check_payload(o: &Observation, delivery: bool) -> Result<()> {
     if o.kind != KIND || o.schema_version != SCHEMA || o.source.schema_version != SCHEMA
         || !denials(o.credit_eligible,o.independent_consensus_verified,&o.spendable_base_units,o.withdrawal_authorized)
         || !denials(o.source.credit_eligible,o.source.independent_consensus_verified,&o.source.spendable_base_units,o.source.withdrawal_authorized)
@@ -92,11 +102,21 @@ fn check_observation(o: &Observation) -> Result<()> {
             o.source.genesis_hash,o.source.program,o.source.signature,o.source.instruction_index) {
         return Err(anyhow!("OBS_SOURCE_ID_REFUSED"));
     }
-    // Until Agent 3 exports an approved authenticated outbox format, only
-    // explicitly marked schema/test fixtures may be passed to the demo DNA.
-    if o.proof.evidence_origin != "test_only_fixture"
-        || env::var("DEMO_ALLOW_TEST_ONLY_FIXTURE").as_deref() != Ok("1") {
+    // Validate exact amount and digest before any network action. The DNA
+    // rechecks the same invariants and additionally checks base58 key lengths.
+    if !positive_u64(&o.source.amount_base_units)
+        || !valid_hex_64(&o.source.witness_digest)
+        || o.source.finalized_slot == 0 || o.source.finalized_slot > 9_007_199_254_740_991
+        || o.source.code_version.is_empty() || o.source.code_version.len() > 96 {
+        return Err(anyhow!("OBS_WITNESS_OR_U64_REFUSED"));
+    }
+    // Until an authenticated, source-owned Observer outbox and separate
+    // reviewed capability exists, EVERY path is fixture-only, even readback.
+    if o.proof.evidence_origin != "test_only_fixture" {
         return Err(anyhow!("OBS_OUTBOX_NOT_YET_APPROVED"));
+    }
+    if delivery && env::var("DEMO_ALLOW_TEST_ONLY_FIXTURE").as_deref() != Ok("1") {
+        return Err(anyhow!("TEST_ONLY_DELIVERY_OPT_IN_REQUIRED"));
     }
     Ok(())
 }
