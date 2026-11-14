@@ -38,3 +38,18 @@ test('real owned-DNA installer is separately gated behind successful locked buil
   assert.match(install,/source-commit\.sha/);
   assert.match(install,/a0-own-dna-install-readonly\.sh/);
 });
+
+test('same-run SOL/Observer source-bound job retains failures instead of skipping them',()=>{
+  const ci=readFileSync('.github/workflows/integration-snapshot.yml','utf8');
+  const job=ci.split('\n  own-dna-same-run-build-readonly:\n')[1];
+  assert.ok(job,'same-run source-bound Holochain job missing');
+  assert.match(job,/needs: \[solana-lifecycle, cross-lane-js\]/);
+  assert.match(job,/if: always\(\)/);
+  assert.match(job,/SOL_JOB_RESULT: \$\{\{ needs\.solana-lifecycle\.result \}\}/);
+  assert.match(job,/OBS_JOB_RESULT: \$\{\{ needs\.cross-lane-js\.result \}\}/);
+  assert.match(job,/a0-same-run-prerequisites\.json/);
+  assert.match(job,/a0-bind-same-run-dna\.mjs/);
+  assert.match(job,/a0-report-installed-readonly\.mjs/);
+  assert.match(job,/scripts\/ci\/a0-own-dna-install-readonly\.sh/);
+  assert.doesNotMatch(job,/\b(record_observation|grant_capability|execute_rave)\b/);
+});
