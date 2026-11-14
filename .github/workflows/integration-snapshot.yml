@@ -39,6 +39,8 @@ jobs:
           printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
           test -s ci-integration-snapshot.json
           node -e 'const m=require("./ci-integration-snapshot.json"); if(!m.sources?.SOL || !m.sources?.OBS || !m.sources?.SEC || !m.sources?.RAVE)process.exit(1); console.log(JSON.stringify(m.sources))'
+      - name: Verify frozen specialist blob provenance and four dependency locks
+        run: bash scripts/ci/record.sh integration-source-provenance node scripts/ci/verify-integration-provenance.mjs
       - name: Install actual Observer and Solana Node dependencies and record lock graph
         run: |
           bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
