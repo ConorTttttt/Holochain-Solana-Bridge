@@ -70,7 +70,7 @@ const evidenceDirectory = new URL('../../target/localnet-evidence/', import.meta
 function persistOperations() {
   mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
   writeFileSync(new URL('sprint1-' + mode + '-operations.json', evidenceDirectory),
-    JSON.stringify({ mode, ...artifactBinding, operations: operationJournal }, null, 2) + '\n',
+    JSON.stringify({ mode, ...artifactBinding, ...ECONOMIC_DENIAL, operations: operationJournal }, null, 2) + '\n',
     { mode: 0o600 });
 }
 function errorEmitter(logs) {
@@ -329,7 +329,7 @@ async function saveTransactionEvidence() {
       JSON.stringify({
         kind: 'localnet-rpc-finalized-transaction-and-block-evidence-NOT-consensus-proof',
         mode, genesisHash: await connection.getGenesisHash(), programId: programId.toBase58(),
-        ...artifactBinding, complete: finalized.length === signatures.size,
+        ...artifactBinding, ...ECONOMIC_DENIAL, complete: finalized.length === signatures.size,
         transactions: transactionEvidence, finalized,
       }, null, 2) + '\n', { mode: 0o600 });
   }
@@ -347,6 +347,7 @@ async function capturePublicAccountFixture(label, keys, signatures) {
   const fixture = {
     kind: 'localnet-finalized-rpc-account-snapshot-not-consensus-proof',
     label,
+    ...ECONOMIC_DENIAL,
     genesisHash: await connection.getGenesisHash(),
     programId: programId.toBase58(),
     ...artifactBinding,
