@@ -1,0 +1,263 @@
+name: S0 cross-agent integration snapshot (NOT production)
+
+on:
+  pull_request:
+    branches: [agent/ci/11-build-pipeline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # The PR event freezes a source SHA. Do not cancel expensive validator jobs
+  # if a developer pushes another snapshot before this one finishes.
+  group: s0-integration-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  cross-lane-js:
+    needs: [solana-lifecycle]
+    if: always()
+    name: Required SOL layout / SEC adversarial / RAVE shadow fixtures (real SDK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Assert immutable source snapshot and record the checkout SHA
+        run: |
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+          test -s ci-integration-snapshot.json
+          node -e 'const m=require("./ci-integration-snapshot.json"); if(!m.sources?.SOL || !m.sources?.OBS || !m.sources?.SEC || !m.sources?.RAVE)process.exit(1); console.log(JSON.stringify(m.sources))'
+      - name: Verify frozen specialist blob provenance and four dependency locks
+        run: bash scripts/ci/record.sh integration-source-provenance node scripts/ci/verify-integration-provenance.mjs
+      - name: Install actual Observer and Solana Node dependencies and record lock graph
+        run: |
+          bash scripts/ci/record.sh observer-deps bash scripts/ci/install-node-deps.sh observer
+          bash scripts/ci/record.sh solana-deps bash scripts/ci/install-node-deps.sh tests/solana
+      # IDL checks are REQUIRED: use genuine build output from the validator job,
+      # never a synthetic/fabricated IDL. On missing artifacts, continue to the
+      # strict cross-lane runner which reports the IDL skip as FAILURE.
+      - name: Retrieve generated Anchor IDL from real localnet build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: .
+      - name: Verify genuine compiler artifacts and Anchor IDL against disposable program ID
+        run: |
+          set -euo pipefail
+          test -s target/deploy/deposit_prototype.so
+          test -s target/idl/deposit_prototype.json
+          test -s target/localnet-evidence/program-id.txt
+          readelf -h target/deploy/deposit_prototype.so | grep -E 'Machine:.*(Linux BPF|BPF)'
+          trusted_id="$(cat target/localnet-evidence/program-id.txt)"
+          bash scripts/ci/record.sh generated-idl-contract node observer/scripts/verify-idl.mjs target/idl/deposit_prototype.json "$trusted_id"
+      - name: Execute all offline cross-lane suites; never accept hidden skips
+        run: bash scripts/ci/record.sh cross-lane-suites node scripts/ci/run-cross-lane-tests.mjs
+      # The downstream job checks ORIGINAL archives from this same workflow's
+      # SOL producer. The SOL source verifier binds every mode to git HEAD,
+      # generated IDL, compiled SBPF and disposable-validator genesis; fail
+      # when ANY required scenario or public snapshot was not uploaded.
+      - name: Reject incomplete public evidence download, wrong source SHA or tampered uploaded files
+        run: |
+          set -euo pipefail
+          test -s target/localnet-evidence/source-commit.txt
+          test "$(cat target/localnet-evidence/source-commit.txt)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          test -s target/localnet-evidence/evidence-manifest.sha256
+          (cd target/localnet-evidence && sha256sum -c evidence-manifest.sha256)
+      - name: Require complete exact-SHA-bound real validator witness bundles
+        run: |
+          set -euo pipefail
+          for scenario in lifecycle init-capture u64-max; do
+            bash scripts/ci/record.sh "producer-witness-${scenario}" node tests/solana/verify-witness-bundle.mjs "$scenario"
+          done
+      - name: Require complete 54-transaction finalized witness inventory and independently checked tamper denials
+        run: |
+          set -euo pipefail
+          bash scripts/ci/record.sh count-original-signed-witnesses node --input-type=module -e '
+            import {readFileSync} from "node:fs";
+            import assert from "node:assert/strict";
+            const expected={"lifecycle":[17,28],"init-capture":[2,2],"u64-max":[3,2]};
+            let total=0;
+            for(const [mode,[accepted,rejected]] of Object.entries(expected)){
+              const index=JSON.parse(readFileSync("target/localnet-evidence/sprint1-"+mode+"-transactions.json","utf8"));
+              assert.equal(index.complete,true,mode+" incomplete");
+              const actualOk=index.finalized.filter(x=>x.meta?.err===null).length;
+              const actualBad=index.finalized.filter(x=>x.meta?.err!==null).length;
+              assert.deepEqual([actualOk,actualBad],[accepted,rejected],mode+" 54-witness distribution drift");
+              total+=index.finalized.length;
+            }
+            assert.equal(total,54,"not exactly 54 authentic finalized indexed witness records");
+            console.log("PASS: exactly 54 original finalized records in three scenarios");
+          '
+          for scenario in lifecycle init-capture u64-max; do
+            bash scripts/ci/record.sh "consumer-tamper-$scenario" node tests/solana/verify-witness-tamper.mjs "$scenario"
+          done
+      - name: Require original public Solana RPC transaction/block/account witnesses
+        run: bash scripts/ci/record.sh real-rpc-fixture-coherence node --test tests/integration/s0-public-rpc-fixtures.test.mjs
+      - name: Verify genuine signed wire bytes and replay finalized blocks through Observer
+        run: bash scripts/ci/record.sh real-signed-wire-observer node --test observer/ci/s0-signed-wire-evidence.mjs
+      - name: Replay real finalized account snapshots into OBS and quarantine-only shadow mode
+        run: bash scripts/ci/record.sh real-snapshot-shadow-handoff node --test tests/integration/s0-shadow-handoff.test.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-cross-lane-js
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  rave-rust:
+    name: RAVE 0.15.0 real crate tests (NOT deployed DNA)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTUP_TOOLCHAIN: '1.95.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned Rust
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh rave-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustc --version
+      - name: Verify downloaded published rave_engine 0.15.0 crate integrity
+        run: bash scripts/ci/record.sh rave-crate-integrity bash tests/holochain/rave-engine/verify-crate.sh
+      - name: Run actual published-crate API harness outside root workspace
+        run: |
+          set -euo pipefail
+          test -s tests/holochain/rave-engine/Cargo.toml
+          mkdir -p ci-artifacts
+          tmp="$(mktemp -d -t rave-engine-s0.XXXXXXXX)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          cp -R tests/holochain/rave-engine/. "$tmp/"
+          bash scripts/ci/record.sh rave-rust-tests cargo test --locked --manifest-path "$tmp/Cargo.toml" --all-targets
+          test -s "$tmp/Cargo.lock"
+          cp "$tmp/Cargo.lock" ci-artifacts/rave-engine-Cargo.lock
+          sha256sum ci-artifacts/rave-engine-Cargo.lock | tee ci-artifacts/rave-engine-lock.sha256
+          bash scripts/ci/record.sh rave-lock-integrity bash scripts/ci/check-lock-digest.sh rave ci-artifacts/rave-engine-Cargo.lock
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-rave-rust
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  solana-lifecycle:
+    name: Real local-validator Anchor lifecycle (SOL runner; disposable only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      RUSTUP_TOOLCHAIN: '1.95.0'
+      NO_DNA: '1'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Never test an automatically advanced PR merge ref as an alleged frozen snapshot.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Install host Rust 1.95.0
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh sol-rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
+      - name: Install pinned Solana CLI 4.1.2
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install pinned Anchor CLI from tagged lockfile
+        run: |
+          source scripts/ci/toolchain.env
+          bash scripts/ci/record.sh anchor-setup cargo install --git https://github.com/otter-sec/anchor --rev "8d9d1488d9b8af41b266d7513eea2e668adf15a2" anchor-cli --locked
+      - name: Capture pinned runtime versions
+        run: bash scripts/ci/record.sh integration-versions bash scripts/ci/tool-versions.sh
+      - name: Run real localnet build, deploy and transaction assertions (SOL-owned script)
+        run: bash scripts/ci/record.sh localnet-build bash tests/solana/localnet-build.sh
+      - name: Record public artifact SHA and build status (never keys)
+        if: always()
+        run: |
+          mkdir -p ci-artifacts
+          if [ -s target/idl/deposit_prototype.json ]; then
+            sha256sum target/idl/deposit_prototype.json | tee ci-artifacts/localnet-idl.sha256
+          else
+            echo "NOT GENERATED: localnet IDL" | tee ci-artifacts/localnet-idl.status
+          fi
+          if [ -s target/deploy/deposit_prototype.so ]; then
+            sha256sum target/deploy/deposit_prototype.so | tee ci-artifacts/localnet-program.sha256
+          else
+            echo "NOT GENERATED: SBPF program binary" | tee ci-artifacts/localnet-program.status
+          fi
+          if [ -s Cargo.lock ]; then
+            sha256sum Cargo.lock | tee ci-artifacts/localnet-Cargo-lock.sha256
+            cp Cargo.lock ci-artifacts/localnet-Cargo.lock
+          fi
+          if [ -s tests/solana/package-lock.json ]; then
+            sha256sum tests/solana/package-lock.json | tee ci-artifacts/solana-package-lock.sha256
+            cp tests/solana/package-lock.json ci-artifacts/solana-package-lock.json
+          fi
+      - name: Retain exact checked-out SHA and public-only file manifest (including partial witnesses)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p target/localnet-evidence
+          git rev-parse HEAD > target/localnet-evidence/source-commit.txt
+          (cd target/localnet-evidence &&
+            find . -maxdepth 1 -type f \( -name '*.rpc.json' -o -name 'sprint1-*-transactions.json' -o -name '*-receipt.json' -o -name '*-receipts.json' -o -name 'sprint1-two-wallets-live.json' -o -name 'sprint1-initializer-capture.json' -o -name 'sprint1-u64-refunded.json' -o -name 'restart-state.json' -o -name 'restart-after.json' -o -name '*.txt' -o -name 'restart-validator-*.log' -o -name 'unexpected-onchain-*.json' \) -print0 |
+            sort -z | xargs -0 -r sha256sum) > target/localnet-evidence/evidence-manifest.sha256
+      - name: Verify exact published workspace and Solana Node graphs
+        run: |
+          bash scripts/ci/record.sh sol-workspace-lock bash scripts/ci/check-lock-digest.sh workspace Cargo.lock
+          bash scripts/ci/record.sh sol-node-lock bash scripts/ci/check-lock-digest.sh solana tests/solana/package-lock.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: integration-localnet-evidence-NO-KEYS
+          path: |
+            ci-artifacts/
+            target/idl/deposit_prototype.json
+            target/deploy/deposit_prototype.so
+            target/localnet-evidence/*.txt
+            target/localnet-evidence/evidence-manifest.sha256
+            target/localnet-evidence/active-receipt.json
+            target/localnet-evidence/refunded-receipt.json
+            target/localnet-evidence/two-active-receipts.json
+            target/localnet-evidence/two-refunded-receipts.json
+            # SOL's verifier requires these genuine finalized account
+            # snapshots in the three isolated local-validator scenarios.
+            # Do not upload unreviewed secrets or use broad JSON globs.
+            target/localnet-evidence/sprint1-two-wallets-live.json
+            target/localnet-evidence/sprint1-initializer-capture.json
+            target/localnet-evidence/sprint1-u64-refunded.json
+            target/localnet-evidence/restart-state.json
+            target/localnet-evidence/restart-after.json
+            # Captured PUBLIC localhost Solana JSON-RPC, no keypairs or ledger data.
+            target/localnet-evidence/*.rpc.json
+            target/localnet-evidence/sprint1-*-transactions.json
+            # Source-owned SOL diagnostics include public instruction bytes,
+            # ordered account addresses and execution logs but never keys.
+            # Preserve on unexpected on-chain failure without pretending PASS.
+            target/localnet-evidence/unexpected-onchain-*.json
+            target/localnet-evidence/restart-validator-before.log
+            target/localnet-evidence/restart-validator-after.log
+          if-no-files-found: error
+          retention-days: 14

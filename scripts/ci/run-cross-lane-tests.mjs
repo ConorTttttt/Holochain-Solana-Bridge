@@ -11,6 +11,7 @@ const cases = [
   ['observer-finalized-indexer', 'observer/test/indexer.test.mjs'],
   ['observer-durable-ledger', 'observer/test/ledger.test.mjs'],
   ['observer-real-localnet-fixtures', 'observer/test/real-localnet.test.mjs'],
+  ['observer-validator-witness-rejection', 'observer/test/validator-witness.test.mjs'],
   ['sol-layout', 'tests/solana/layout.test.mjs'],
   ['sol-sdk-signature-regressions', 'tests/solana/sdk-compat.test.mjs'],
   ['security-adversarial', 'security/test/adversarial.test.mjs'],
