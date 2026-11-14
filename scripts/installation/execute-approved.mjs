@@ -41,7 +41,10 @@ async function main(){
  assert.equal(request.originalBuildArtifactId,14136370324);
  assert.equal(request.hostFingerprint,policy.hostFingerprint,'REQUEST_TARGET_HOST_MISMATCH');
  assert.equal(request.executorId,policy.executorId);assert.equal(requestDigest(request),policy.approvedRequestDigest);
- assert.equal(request.operation,'install-only');assert.deepEqual(request.allowSignedZomeCalls,false);
+ assert.equal(request.operation,'install-only');
+ assert.equal(request.creditEligible,false);assert.equal(request.independentConsensusVerified,false);
+ assert.equal(request.spendableBaseUnits,'0');assert.equal(request.withdrawalAuthorized,false);
+ assert.equal(request.dnaHash,'uhC0kCn-ld2PREMKI6nDVq4XssTKHgs8QHOszCC3a32pXCZjowgXt');assert.deepEqual(request.allowSignedZomeCalls,false);
  assert.deepEqual(request.allowCapabilityGrants,false);assert.equal(request.v2TransportApproved,false);
  // Every executable/input/code path is independently provisioned read-only by
  // the administrator, not taken on trust from a signed JSON boolean.
@@ -51,6 +54,7 @@ async function main(){
  for(const path of [realpathSync(process.argv[1]),realpathSync(new URL('../../demo/installation/authorization.mjs',import.meta.url))])
   assert.equal(request.protectedFiles[path],digest(readFileSync(path)),'EXECUTOR_CODE_NOT_BOUND');
  const tools=request.runtimeExecutables;
+ assert.deepEqual(Object.keys(tools).sort(),['hc','holochain','lair-keystore']);
  for(const p of Object.values(tools))assert.ok(request.protectedFiles[p],'UNBOUND_RUNTIME_EXECUTABLE');
  assert.equal(realpathSync(process.execPath),request.nodeExecutable,'UNAPPROVED_NODE_EXECUTABLE');
  assert.equal(process.version,request.nodeVersion,'UNAPPROVED_NODE_VERSION');
@@ -61,7 +65,9 @@ async function main(){
  assert.equal(spawnSync(hc,['dna','hash',request.dnaPath],{encoding:'utf8'}).stdout.trim(),request.dnaHash,'ORIGINAL_DNA_ID_DRIFT');
  const root='/var/lib/hsc-audit-installation/attempts/'+request.installationId;
  assert.match(request.installationId,/^[a-f0-9]{32}$/);assert.equal(request.runtimeRoot,root);
- const happ=request.happPath;assert.ok(request.protectedFiles[happ],'UNBOUND_HAPP');
+ const happ=request.happPath;
+ assert.equal(request.protectedFiles[happ],'a68826c9f5e6bc007c5e22cb34e4a856265ec07be78b624a26efd433e9d98050','ONLY_ORIGINAL_HAPP_ALLOWED');
+ assert.equal(request.protectedFiles[request.dnaPath],'a9bc44fb3477ea4d056f420c821a34cb88a8b0517297da1b4570d02f75fec627','ONLY_ORIGINAL_DNA_ALLOWED');assert.ok(request.protectedFiles[happ],'UNBOUND_HAPP');
  assert.equal(request.appId,'hsc-audit-demo-readonly');
  const expected=['sandbox','--piped','generate','--app-id',request.appId,'--root',root,'--directories','agent-a',happ,'network','mem'];
  assert.deepEqual(request.argv,expected,'UNAPPROVED_COMMAND');

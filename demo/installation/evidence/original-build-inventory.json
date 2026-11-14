@@ -1,63 +1,85 @@
 {
+  "actionHash": null,
   "artifacts": {
-    "holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter": {
-      "sha256": "e3e40f1c3d50959082569206a0f5cd6e1f72a3c20751ec9a26dbe13aba60b5b9",
-      "bytes": 12972424
-    },
-    "holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm": {
-      "sha256": "1e5bbdf9eeec4edfea66748e65bd539b5d69a17c3122c0ec361c8e212f46b4ca",
-      "bytes": 2110819
-    },
-    "holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm": {
-      "sha256": "552d0392d33004e18e8f0533866a470c7e03afce4eabac4c19717a48e6f7a7ba",
-      "bytes": 3761973
-    },
-    "holochain/demo/holochain_solana_audit_demo.dna": {
-      "sha256": "a9bc44fb3477ea4d056f420c821a34cb88a8b0517297da1b4570d02f75fec627",
-      "bytes": 1179551
-    },
-    "holochain/demo/holochain_solana_audit_demo.happ": {
-      "sha256": "a68826c9f5e6bc007c5e22cb34e4a856265ec07be78b624a26efd433e9d98050",
-      "bytes": 1174345
-    },
     "holochain/demo/Cargo.lock": {
-      "sha256": "c5774a18ba821005d80e51c7bf1663062817ce06e585a2bc2245e09da3b4d6c6",
-      "bytes": 30553
+      "bytes": 30553,
+      "sha256": "c5774a18ba821005d80e51c7bf1663062817ce06e585a2bc2245e09da3b4d6c6"
     },
     "holochain/demo/ham-adapter/Cargo.lock": {
-      "sha256": "08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399",
-      "bytes": 102990
+      "bytes": 102990,
+      "sha256": "08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399"
+    },
+    "holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter": {
+      "bytes": 12972424,
+      "sha256": "e3e40f1c3d50959082569206a0f5cd6e1f72a3c20751ec9a26dbe13aba60b5b9"
+    },
+    "holochain/demo/holochain_solana_audit_demo.dna": {
+      "bytes": 1179551,
+      "sha256": "a9bc44fb3477ea4d056f420c821a34cb88a8b0517297da1b4570d02f75fec627"
+    },
+    "holochain/demo/holochain_solana_audit_demo.happ": {
+      "bytes": 1174345,
+      "sha256": "a68826c9f5e6bc007c5e22cb34e4a856265ec07be78b624a26efd433e9d98050"
+    },
+    "holochain/demo/target/wasm32-unknown-unknown/release/solana_audit.wasm": {
+      "bytes": 3761973,
+      "sha256": "552d0392d33004e18e8f0533866a470c7e03afce4eabac4c19717a48e6f7a7ba"
+    },
+    "holochain/demo/target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm": {
+      "bytes": 2110819,
+      "sha256": "1e5bbdf9eeec4edfea66748e65bd539b5d69a17c3122c0ec361c8e212f46b4ca"
     }
   },
+  "buildJobId": 132616979053,
+  "ciVerification": {
+    "buildJob": 132616979053,
+    "installationSkipped": true,
+    "runId": 43648980986,
+    "sharedRunId": 43648981038,
+    "sourceCommit": "03b567a992bcd31930b49d08f594a4ef7ff58680"
+  },
+  "compilerLogSha256": "eab07e9d78b14e12529725acbf33f833d2933b15ab96e225d8dfef73406a7f96",
   "dnaHash": "uhC0kCn-ld2PREMKI6nDVq4XssTKHgs8QHOszCC3a32pXCZjowgXt",
+  "hamRevision": "fbb4b6eb8a79a507e9453b709ed00f15c5618fb4",
+  "holochain": "0.7.1",
+  "holonixRevision": "a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da",
+  "installed": false,
+  "originalSignedWireSha256": "3622bbc742b61ebc1c29ca547e8365ba081b136b221dcef460a1178bc377a719",
+  "repository": "ConorTttttt/Holochain-Solana-Bridge",
+  "runId": 43648980986,
+  "rust": "1.95.0",
+  "schema": "hsc-original-artifact-independent-inventory-v1",
+  "sharedRunId": 43648981038,
   "sourceBinding": {
-    "schema": "hsc-a0-same-run-derived-dna-source-v1",
-    "evidenceGrade": "EXECUTED_SAME_SHA_SOL_KIT_SOURCE_PROPERTIES_NOT_INSTALLED",
-    "sourceProducerCommitSha": "03b567a992bcd31930b49d08f594a4ef7ff58680",
-    "observerReplayConsumerCommitSha": "03b567a992bcd31930b49d08f594a4ef7ff58680",
-    "originalSourceManifestSha256": "8657c75b0bdd09d0bb8a5a6bd16d22be8fe44eb1763742cc330293d392eeddfb",
-    "originalArchiveManifestSha256": "91ae71514fda6e6281d847991c92cf75181b13d735b17d9312cbda72a7829028",
-    "originalKitReplayArtifactSha256": "8a41a0d9ee05f06403625e630503a59a73c1f0adc57bcee9878fbb0fbcaa316e",
-    "originalSignedDepositWireSha256": "3622bbc742b61ebc1c29ca547e8365ba081b136b221dcef460a1178bc377a719",
-    "signedDepositSignature": "5RZHL2eU2yTriVYJU9GZWkjSo552XUnEefEtNiQksT1Ay5CeN2832Ng8ZTCzHTRA49SpGLc76fBtXn2R7SLcr1YD",
-    "sourceGenesisHash": "7qXnTQCcrjsr1DSdCkc64Gcme8wTe77X5up11yzbhPT8",
-    "sourceProgram": "6qEpJ5yCkXgh3kTAf2x4kjyejXj4rVJnGzLmqvCL4Kfh",
-    "sourceMint": "6xhjzMvUp7tvDamcxzJMqvxgUpwTnSdqW3oRf1GE8Zxw",
-    "initializedHolochainScope": "d07373a84e9ab70d2063a7dd09506721db68f0cfea52779cbcd7a930ba4f0992",
-    "originalDnaTemplateSha256": "105803b00dfa5f140bd1b594d0ae35fe92e65090f149864ca49367e9ca0c08f6",
+    "actionHash": null,
+    "approvedZomeWrite": false,
+    "bindingState": "SOURCE_PROPERTIES_MATCH_ONLY_NO_RUNTIME_CLAIM",
+    "creditEligible": false,
     "derivedDnaSourceSha256": "55c0bb138d1af547cf113af6366ba030b923292ed52c4b0e5c7474181a767527",
     "deterministicPublicDemoNetworkSeed": "hsc-a0-d569894f00d70877413ed72cc6286828b2e34fb6b9bd1b0b9a664d4d03bdfe14",
-    "bindingState": "SOURCE_PROPERTIES_MATCH_ONLY_NO_RUNTIME_CLAIM",
-    "historyComplete": false,
-    "observerTransport": "NOT_APPROVED",
     "dnaBuilt": false,
     "dnaInstalled": false,
+    "evidenceGrade": "EXECUTED_SAME_SHA_SOL_KIT_SOURCE_PROPERTIES_NOT_INSTALLED",
     "externalLairVerified": false,
-    "approvedZomeWrite": false,
-    "actionHash": null,
-    "creditEligible": false,
+    "historyComplete": false,
     "independentConsensusVerified": false,
+    "initializedHolochainScope": "d07373a84e9ab70d2063a7dd09506721db68f0cfea52779cbcd7a930ba4f0992",
+    "observerReplayConsumerCommitSha": "03b567a992bcd31930b49d08f594a4ef7ff58680",
+    "observerTransport": "NOT_APPROVED",
+    "originalArchiveManifestSha256": "91ae71514fda6e6281d847991c92cf75181b13d735b17d9312cbda72a7829028",
+    "originalDnaTemplateSha256": "105803b00dfa5f140bd1b594d0ae35fe92e65090f149864ca49367e9ca0c08f6",
+    "originalKitReplayArtifactSha256": "8a41a0d9ee05f06403625e630503a59a73c1f0adc57bcee9878fbb0fbcaa316e",
+    "originalSignedDepositWireSha256": "3622bbc742b61ebc1c29ca547e8365ba081b136b221dcef460a1178bc377a719",
+    "originalSourceManifestSha256": "8657c75b0bdd09d0bb8a5a6bd16d22be8fe44eb1763742cc330293d392eeddfb",
+    "schema": "hsc-a0-same-run-derived-dna-source-v1",
+    "signedDepositSignature": "5RZHL2eU2yTriVYJU9GZWkjSo552XUnEefEtNiQksT1Ay5CeN2832Ng8ZTCzHTRA49SpGLc76fBtXn2R7SLcr1YD",
+    "sourceGenesisHash": "7qXnTQCcrjsr1DSdCkc64Gcme8wTe77X5up11yzbhPT8",
+    "sourceMint": "6xhjzMvUp7tvDamcxzJMqvxgUpwTnSdqW3oRf1GE8Zxw",
+    "sourceProducerCommitSha": "03b567a992bcd31930b49d08f594a4ef7ff58680",
+    "sourceProgram": "6qEpJ5yCkXgh3kTAf2x4kjyejXj4rVJnGzLmqvCL4Kfh",
     "spendableBaseUnits": "0",
     "withdrawalAuthorized": false
-  }
+  },
+  "sourceCommit": "03b567a992bcd31930b49d08f594a4ef7ff58680",
+  "verification": "ORIGINAL_ZIP_AND_EMBEDDED_BINARY_BYTES_CHECKED"
 }
