@@ -135,3 +135,30 @@ Mandatory non-economic literals:
 ```
 
 **Overall security disposition:** LOCALNET SOURCE TECHNICAL ACCEPT (#60 stage 1/2, with bounded RPC-claim trust); **NOT ACCEPTED** source-bound installed own DNA; **CHANGES REQUIRED** generated-source CI verification and complete v2 ABI; **DENY** independent exact-call approval; **ECONOMIC NO-GO**. This report is not an authorizing credential.
+
+
+## 8. Subsequent live-head addendum — 2026-11-14, later than the immutable reviews above
+
+**Important: previous exact-head findings remain historically true.** During this SEC review, A1 and A4 pushed newer commits. Source changes and queued workflows must not be retroactively credited as passing earlier SHAs.
+
+### A4 #44 NEW HEAD `734f3a8c4b006454eed962a6229773b4affceb9f`
+
+Compare from prior `01241af206288e7d8f2b69008eff2fbf3abcc7c9` reports **two commits**, adding `holochain/demo/ham-adapter/Cargo.lock` and `.github/workflows/agent4-real-build.yml`. Direct exact-new-head file fetch **CONFIRMS the native lock now exists**: 102,990 bytes, Git blob `6a2ef82e2187cc388e9fa30c94a0791c8ba6d574`, exactly matching the original proposal's published Git blob `6a2ef82e2187cc388e9fa30c94a0791c8ba6d574`; pinned HAM revision is present. Expected original full-byte SHA-256 remains `08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399` from A4's recorded artifact review. **This upgrades the gate from MISSING_COMMITTED_NATIVE_LOCK to COMMITTED_NATIVE_LOCK_SOURCE_PRESENT, NOT yet a completed native resolver/build.**
+
+New `agent4-real-build.yml` defines original ZIP hash verification, full locked Cargo metadata and both tree checks, native and both WASM builds, Nix/Holochain packaging, artifact hashes and `hc dna hash`. These are **workflow source**, NOT observed step successes. GitHub commit-attached pull-request run lookup returned no runs for this A4 head; the connector indexes PR-triggered runs only, so this does not disprove possible push/workflow_dispatch runs elsewhere. **No real native/WASM compile/pack output was independently inspected at this new SHA and no own-DNA install/CellId/Lair verified.** Notably the new build workflow has `contents: write`, checkout `persist-credentials: true`, and a step designed to commit/push a missing lock in the same execution. A security acceptance build SHOULD freeze immutable source before compilation, disable in-build source commits/write credentials, and report any new commit under its own new SHA/run. In the **new already-committed lock** checkout the commit branch should be a no-op, but retain the stricter rule: no self-certifying exact-SHA build by mutating its source during a run.
+
+### A1 #61 NEW HEAD `baa9f164cf9fa39b34ae1d1d0c3007c7e9197dc1`
+
+Compare from original `fc0cc94e17e7dbb4c6f3c8c9d6086fe3ae23e249`: **one new commit**, modifying eight CI/demo/provenance files (including `.github/workflows/integration-snapshot.yml`, `scripts/ci/verify-integration-provenance.mjs`, source-domain manifest seed/test files) and adding the A1 canonical integration evidence register.
+
+Exact-new-head source inspection confirms:
+- The frozen-source verifier first checks each original upstream Git blob at `HEAD:path` (immutable committed source), while separately comparing worktree to those hashes in prepatch mode.
+- In postpatch mode it excludes worktree matching only for the two explicitly allowed dynamically patched paths, insists `git diff --name-only` equals **exactly** `Anchor.toml` and `programs/deposit_prototype/src/lib.rs`, requires reverse-applicability of the original patch, rechecks the original archived manifest/full post-sync SHA-256 tree, A2 producer patch digest, both original pre/post manifest digests and original build-input/Cargo digests; emits a digest-manifested `a0-postpatch-provenance.json` with authorization false.
+- The observer replay now runs `node --test scripts/ci/a0-demo-domain-kit-v2.mjs` inside A3's explicit test-only `child-v8` boundary. The underlying `observer/src/demo-outbox.mjs` production guard was **not modified** by this new commit.
+- The source-derived CI network seed now includes producer SHA and original signed-source/archive manifest digests, and still says `dnaBuilt:false`, `dnaInstalled:false`, `approvedZomeWrite:false`.
+
+**Technical remediation review: source-level approach ACCEPTABLE IN PRINCIPLE, not exact-head CI ACCEPTED yet.** Four new exact-head runs were returned: shared `43645044071` IN PROGRESS, cross-agent `43645043998` IN PROGRESS, own-DNA gate `43645044029` already FAILURE, and non-authorizing resolver `43645044016` SUCCESS. Do not claim a full same-SHA pass from these incomplete results.
+
+**Updated canonical investigation selection: #61 `baa9f164...`**, now that it combines explicit produced-source postpatch provenance checks, Node child-v8 Observer replay, same-run source-bound DNA staging and Holochain prerequisite dependency ordering. This is **ONE provisional engineering candidate, not an accepted audit runtime**. Retain #60 `b869da9...` as independently examined historical replay comparator; require actual full new #61 exact-head workflow green plus independent source/native/destination verification before accepting.
+
+The separate audit authorization decisions remain **Milestone A DENY**, **Milestone B DENY**, **Economic C NO-GO**. The connected implementation author still cannot become their own independent approver.
