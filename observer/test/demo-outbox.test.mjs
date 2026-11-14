@@ -388,3 +388,18 @@ test('37 original RPC metadata canonical digest retains finite display uiAmount'
   assert.throws(()=>canonicalJSON({wrong:Infinity}),/NON_CANONICAL_NUMBER/);
   assert.throws(()=>canonicalJSON({wrong:9007199254740992}),/NON_CANONICAL_NUMBER/);
 });
+
+test('38 nested expected history or digest flags are not silently treated as source authorization',async t=>{
+  const {outbox,ledger,evidence}=make(t);
+  for(const extra of [{historyComplete:true},{transactionVerified:true},
+    {historyCoveredByTwoRpcClaims:true},{witnessDigest:'f'.repeat(64)}]){
+    await assert.rejects(outbox.queueVerified({ledger,
+      rpcUrls:['http://a.invalid','http://b.invalid'],
+      signature:evidence.signature,receiptAddress:evidence.receiptAddress,
+      expected:{program,mint,scope:holochainScope,config:'1'.repeat(32),
+        vault:'1'.repeat(32),...extra},
+      idlText:'not-real',codeVersion:'0'.repeat(40)}),
+    /UNTRUSTED_EXPECTED_SHORTCUT/);
+  }
+  assert.deepEqual(outbox.status.rows,{});
+});

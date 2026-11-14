@@ -1,5 +1,6 @@
 /** A2 PR #47 source-sidecars are UNTRUSTED. Synthetic importer tests only. */
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
@@ -46,7 +47,16 @@ function sample(t){
     ...DENIALS,archive:{kind:'observer-original-two-provider-history-v1',
       fromSlot:17,toSlot:17,genesisHash,providers},
     sourceFiles:files,gaps:[{classification:'HISTORICAL_REFUND_STATE_PROOF_NOT_ESTABLISHED'}]};
-  const save=()=>writeFileSync(join(dir,'produced-slot-handoff.json'),JSON.stringify(handoff));
+  const save=()=>{
+    writeFileSync(join(dir,'produced-slot-handoff.json'),JSON.stringify(handoff));
+    writeFileSync(join(dir,'observer-history-candidate.json'),JSON.stringify(handoff.archive));
+    writeFileSync(join(dir,'capture-status.json'),JSON.stringify({status:'BLOCKED_PARTIAL'}));
+    const names=[...files,'produced-slot-handoff.json','observer-history-candidate.json',
+      'capture-status.json'];
+    const lines=names.map(name=>createHash('sha256').update(readFileSync(join(dir,name)))
+      .digest('hex')+'  '+name).join('\n')+'\n';
+    writeFileSync(join(dir,'evidence-manifest.sha256'),lines);
+  };
   save();
   const verify=()=>verifyProducerHistoryInput({directory:dir,expectedGenesisHash:genesisHash,
     expectedFromSlot:17,expectedToSlot:17});
@@ -71,18 +81,18 @@ test('03 original getBlock content mismatch is refused',async t=>{
   const x=sample(t),file=join(x.dir,'rpc/a-getBlock-17.rpc.json');
   const source=JSON.parse(readFileSync(file,'utf8'));
   source.response.result.blockhash='forged';
-  writeFileSync(file,JSON.stringify(source));
+  writeFileSync(file,JSON.stringify(source));x.save();
   await assert.rejects(x.verify(),/RAW_FULL_BLOCK_CONFLICT/);
 });
 test('04 missing raw sidecar cannot be replaced by a producer summary',async t=>{
   const x=sample(t);x.handoff.sourceFiles=x.files.filter(x=>!x.includes('a-getBlocks-17-17'));x.save();
-  await assert.rejects(x.verify(),/MISSING_ORIGINAL_SIDECAR_getBlocks/);
+  await assert.rejects(x.verify(),/SOURCE_MANIFEST_RPC_INVENTORY_MISMATCH/);
 });
 test('05 raw request method or commitment mutation is refused',async t=>{
   const x=sample(t),file=join(x.dir,'rpc/b-getBlock-17.rpc.json');
   const source=JSON.parse(readFileSync(file,'utf8'));
   source.request.params[1].commitment='processed';
-  writeFileSync(file,JSON.stringify(source));
+  writeFileSync(file,JSON.stringify(source));x.save();
   await assert.rejects(x.verify(),/INVALID_ORIGINAL_SIDECAR_getBlock/);
 });
 test('06 wrong independently pinned genesis refuses the producer',async t=>{
@@ -95,6 +105,26 @@ test('07 original RPC error is not promoted into full-history proof',async t=>{
   const x=sample(t),file=join(x.dir,'rpc/a-finalized-tip.rpc.json');
   const source=JSON.parse(readFileSync(file,'utf8'));
   source.response.error={code:-32000,message:'unavailable'};
-  writeFileSync(file,JSON.stringify(source));
+  writeFileSync(file,JSON.stringify(source));x.save();
   await assert.rejects(x.verify(),/INVALID_ORIGINAL_SIDECAR_getSlot/);
+});
+
+test('08 original PR47 SHA-256 capture manifest detects unsanctioned sidecar changes',async t=>{
+  const x=sample(t),file=join(x.dir,'rpc/a-getBlock-17.rpc.json');
+  const source=JSON.parse(readFileSync(file,'utf8'));
+  source.response.result.blockhash='tamper-no-manifest-rehash';
+  writeFileSync(file,JSON.stringify(source));
+  await assert.rejects(x.verify(),/SOURCE_MANIFEST_DIGEST_MISMATCH/);
+});
+test('09 archive candidate cannot contradict the original producer handoff',async t=>{
+  const x=sample(t),file=join(x.dir,'observer-history-candidate.json');
+  const candidate=JSON.parse(readFileSync(file,'utf8'));
+  candidate.toSlot=18;
+  writeFileSync(file,JSON.stringify(candidate));
+  const names=[...x.files,'produced-slot-handoff.json',
+    'observer-history-candidate.json','capture-status.json'];
+  writeFileSync(join(x.dir,'evidence-manifest.sha256'),
+    names.map(name=>createHash('sha256').update(readFileSync(join(x.dir,name)))
+      .digest('hex')+'  '+name).join('\n')+'\n');
+  await assert.rejects(x.verify(),/SOURCE_ARCHIVE_CANDIDATE_MISMATCH/);
 });

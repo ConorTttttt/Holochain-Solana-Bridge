@@ -229,6 +229,11 @@ export class DemoOutbox {
       'codeVersion','fetchFn'].includes(k)),'UNTRUSTED_AUTH_SHORTCUT');
     const {ledger,rpcUrls,signature,receiptAddress,expected,idlText,codeVersion}=args;
     const fetchFn=args.fetchFn??fetch;
+    // Reject misleading caller booleans/hashes even when nested in the
+    // deployment manifest, rather than silently ignoring them.
+    need(obj(expected)&&Object.keys(expected).every(k=>
+      ['program','mint','config','vault','scope'].includes(k)),
+      'UNTRUSTED_EXPECTED_SHORTCUT');
     need(args.fetchFn===undefined||process.env.OBS_ALLOW_ARCHIVED_RPC_REPLAY==='1',
       'RPC_FETCH_OVERRIDE_FORBIDDEN');
     need(typeof idlText==='string'&&hex64(this.expected.idlSha256)&&

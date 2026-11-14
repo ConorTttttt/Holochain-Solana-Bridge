@@ -5,6 +5,7 @@
  * and invokes OBS's Kit-backed verifier only when the raw source is complete.
  * No output upgrades the refund history, consensus or economic gates.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { canonicalJSON, DENIALS } from './demo-outbox.mjs';
@@ -14,6 +15,31 @@ const need=(ok,code)=>{if(!ok)fail(code)};
 const same=(a,b)=>canonicalJSON(a)===canonicalJSON(b);
 const slot=n=>Number.isSafeInteger(n)&&n>=0;
 const safeId=x=>typeof x==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(x);
+const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
+function authenticateLocalSourceManifest(base,sourceFiles,handoff){
+  // A2 producer creates this manifest over ORIGINAL raw sidecar bytes.
+  // Rechecking it detects ordinary capture corruption; its checksum is
+  // NOT externally authenticated and cannot detect a hostile coherent rewrite.
+  const text=readFileSync(join(base,'evidence-manifest.sha256'),'utf8');
+  need(text.endsWith('\n')&&text.length>0,'SOURCE_MANIFEST_FORMAT');
+  const lines=text.trimEnd().split('\n');
+  const inventory=new Set();
+  for(const line of lines){
+    const match=/^([0-9a-f]{64})  (rpc\/[A-Za-z0-9_-]+\.rpc\.json|observer-history-candidate\.json|produced-slot-handoff\.json|capture-status\.json|refund-(?:pre|post)-four-accounts\.json)$/.exec(line);
+    need(match!==null,'SOURCE_MANIFEST_PATH_OR_HASH');
+    const [,digest,name]=match;
+    need(!inventory.has(name),'SOURCE_MANIFEST_DUPLICATE');
+    inventory.add(name);
+    const actual=sha256(readFileSync(join(base,name)));
+    need(actual===digest,'SOURCE_MANIFEST_DIGEST_MISMATCH');
+  }
+  for(const file of ['observer-history-candidate.json','produced-slot-handoff.json','capture-status.json'])
+    need(inventory.has(file),'SOURCE_MANIFEST_REQUIRED_FILE');
+  const fromManifest=[...inventory].filter(x=>x.startsWith('rpc/')).sort();
+  need(same(fromManifest,[...sourceFiles].sort()),'SOURCE_MANIFEST_RPC_INVENTORY_MISMATCH');
+  const candidate=JSON.parse(readFileSync(join(base,'observer-history-candidate.json'),'utf8'));
+  need(same(candidate,handoff.archive),'SOURCE_ARCHIVE_CANDIDATE_MISMATCH');
+}
 const blockOpts={commitment:'finalized',encoding:'base64',transactionDetails:'full',
   rewards:false,maxSupportedTransactionVersion:1};
 function readJson(base,name){
@@ -64,6 +90,7 @@ export async function verifyProducerHistoryInput({directory,expectedGenesisHash,
     new Set(handoff.sourceFiles).size===handoff.sourceFiles.length,
     'ORIGINAL_FILE_INVENTORY');
   const files=new Set(handoff.sourceFiles);
+  authenticateLocalSourceManifest(base,files,handoff);
   for(const provider of archive.providers){
     const id=provider.providerId;need(safeId(id),'PROVIDER_ID');
     need(originalResult(base,files,id,'genesis','getGenesisHash',[])===
