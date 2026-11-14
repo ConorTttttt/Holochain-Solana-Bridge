@@ -51,7 +51,8 @@ fn local_records() -> ExternResult<Vec<AuditRecord>> {
         .include_entries(true))?;
     let mut out = Vec::new();
     for record in records {
-        if let Some(observation) = record.entry().to_app_option::<AuditObservation>()? {
+        if let Some(observation) = record.entry().to_app_option::<AuditObservation>()
+            .map_err(|err| wasm_error!(err))? {
             out.push(audit_record(record.action_address().clone(), observation));
         }
     }
