@@ -26,6 +26,75 @@ const u64=x=>typeof x==='string'&&/^(0|[1-9][0-9]*)$/.test(x)&&
 const sha=x=>createHash('sha256').update(x).digest('hex');
 
 /**
+ * Audit raw original RPC JSON without losing ambiguity during JSON.parse.
+ * A raw sidecar hash alone does not eliminate duplicate-object-key attacks:
+ * JavaScript keeps only the last value, while other decoders may keep first.
+ * This scanner compares decoded keys (including Unicode escapes) at EVERY depth.
+ * It is an integrity guard, NOT an RPC provenance or signer verification.
+ */
+export function assertUniqueRawJsonObjectMembers(raw){
+  if(typeof raw!=='string'||raw.length>32*1024*1024)
+    fail('RAW_JSON_UNAVAILABLE_OR_TOO_LARGE');
+  let pos=0;
+  const space=()=>{while(pos<raw.length&&' \t\r\n'.includes(raw[pos]))pos++};
+  const quote=()=>{
+    const begin=pos++;
+    let escaped=false;
+    while(pos<raw.length){
+      const c=raw[pos++];
+      if(escaped){escaped=false;continue}
+      if(c==='\\'){escaped=true;continue}
+      if(c==='"'){
+        try{return JSON.parse(raw.slice(begin,pos))}
+        catch{fail('RAW_JSON_SYNTAX')}
+      }
+    }
+    fail('RAW_JSON_SYNTAX');
+  };
+  const value=depth=>{
+    if(depth>100)fail('RAW_JSON_DEPTH');
+    space();
+    if(raw[pos]==='{'){
+      pos++;space();
+      const seen=new Set();
+      if(raw[pos]==='}'){pos++;return}
+      while(true){
+        space();if(raw[pos]!=='"')fail('RAW_JSON_SYNTAX');
+        const key=quote();
+        if(seen.has(key))fail('RAW_JSON_DUPLICATE_KEY');
+        if(['__proto__','constructor','prototype'].includes(key))
+          fail('RAW_JSON_PROTOTYPE_KEY');
+        seen.add(key);
+        space();if(raw[pos++]!==':')fail('RAW_JSON_SYNTAX');
+        value(depth+1);space();
+        const next=raw[pos++];
+        if(next==='}')return;
+        if(next!==',')fail('RAW_JSON_SYNTAX');
+      }
+    }
+    if(raw[pos]==='['){
+      pos++;space();
+      if(raw[pos]===']'){pos++;return}
+      while(true){
+        value(depth+1);space();
+        const next=raw[pos++];
+        if(next===']')return;
+        if(next!==',')fail('RAW_JSON_SYNTAX');
+      }
+    }
+    if(raw[pos]==='"'){quote();return}
+    const start=pos;
+    while(pos<raw.length&&!(',}]'.includes(raw[pos])))pos++;
+    if(pos===start)fail('RAW_JSON_SYNTAX');
+  };
+  value(0);space();
+  if(pos!==raw.length)fail('RAW_JSON_TRAILING');
+  try{JSON.parse(raw)}catch{fail('RAW_JSON_SYNTAX')}
+  return true;
+}
+
+
+/**
  * Canonical ASCII-key sorted JSON, arrays in original order, UTF-8 strings.
  * Forbid JS roundoff of u64 and prototype pollution. RPC display-only floats
  * belong inside the *raw UTF-8 string*, never in this typed outer record.
@@ -165,6 +234,7 @@ function assertReviewShape(record){
   // Structural A3 verification remains NON-AUTHENTICATING (unkeyed digest).
   let raw,originalRpc;
   try{
+    assertUniqueRawJsonObjectMembers(record.proof.originalObserverWitnessCanonicalJson);
     raw=JSON.parse(record.proof.originalObserverWitnessCanonicalJson);
     if(canonicalObserverJSON(raw)!==record.proof.originalObserverWitnessCanonicalJson)
       fail('NONCANONICAL_OBSERVER_WITNESS_PREIMAGE');
@@ -198,6 +268,7 @@ function assertReviewShape(record){
   // Bind original four-account byte strings to the committed source snapshot
   // digest, rather than treating a separately submitted sidecar as source truth.
   try{
+    assertUniqueRawJsonObjectMembers(record.proof.originalFourAccountRpcUtf8);
     originalRpc=JSON.parse(record.proof.originalFourAccountRpcUtf8);
     const values=originalRpc?.result?.value;
     if(!Array.isArray(values)||values.length!==4||
