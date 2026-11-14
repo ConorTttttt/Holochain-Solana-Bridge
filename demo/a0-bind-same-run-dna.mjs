@@ -23,14 +23,19 @@ function exactlyOneLine(yaml,key,value,indent='    '){
   assert.match(value,/^[a-zA-Z0-9_-]+$/,'A0_SOURCE_PROPERTY_UNSAFE:'+key);
   return yaml.replace(re,indent+key+': '+value);
 }
-export function renderBoundDna(template,source){
+export function renderBoundDna(template,source,originalManifests){
   assertDemoDomainShape(source);
+  for(const key of ['sourceManifestSha256','archiveManifestSha256'])
+    assert.match(originalManifests?.[key]??'',/^[a-f0-9]{64}$/,'A0_ORIGINAL_MANIFEST_DIGEST_REQUIRED:'+key);
+  assert.match(source.sourceCommitSha,/^[a-f0-9]{40}$/,'A0_SOURCE_PRODUCER_SHA_REQUIRED');
   assert.equal((template.match(/^    demoOnly: true$/gm)||[]).length,1,'A0_NOT_AUDIT_ONLY_DNA');
   assert.equal((template.match(/^name: holochain_solana_audit_demo$/gm)||[]).length,1,'A0_WRONG_DEMO_DNA');
   const props={genesisHash:source.genesisHash,program:source.programId,
     mint:source.mint,holochainScope:source.initializedScopeHex};
-  const seedDigest=sha256(Buffer.from('HSC/a0-same-run-audit-dna/v1\0'+
-    [source.genesisHash,source.programId,source.mint,source.scopeHex].join('\0')));
+  const seedDigest=sha256(Buffer.from('HSC/a0-same-run-audit-dna/v2\0'+
+    [source.genesisHash,source.programId,source.mint,source.scopeHex,
+      source.sourceCommitSha,originalManifests.sourceManifestSha256,
+      originalManifests.archiveManifestSha256].join('\0')));
   const seed='hsc-a0-'+seedDigest;
   let staged=exactlyOneLine(template,'network_seed',seed,'  ');
   for(const [key,value] of Object.entries(props))
@@ -86,19 +91,23 @@ function main(){
       source.idlSha256,'A0_ORIGINAL_IDL_BYTES_MISMATCH');
     assert.equal(sha256(readFileSync('target/deploy/deposit_prototype.so')),
       source.elfSha256,'A0_ORIGINAL_ELF_BYTES_MISMATCH');
-    const archiveManifest=readFileSync('target/localnet-evidence/evidence-manifest.sha256','utf8');
+    const archiveManifestBytes=readFileSync('target/localnet-evidence/evidence-manifest.sha256');
+    const archiveManifest=archiveManifestBytes.toString('utf8');
     assert.ok(archiveManifest.split(/\r?\n/).includes(sha256(sourceBytes)+'  ./demo-source-domain.json'),
       'A0_SOURCE_NOT_IN_ORIGINAL_SOL_ARCHIVE_MANIFEST');
     const yamlPath='holochain/demo/dna.yaml';
     const original=readFileSync(yamlPath,'utf8');
     const tracked=execFileSync('git',['show','HEAD:'+yamlPath],{encoding:'utf8'});
     assert.equal(original,tracked,'A0_DNA_TEMPLATE_WAS_MODIFIED_BEFORE_SOURCE_BINDING');
-    const {staged,seed,binding}=renderBoundDna(original,source);
+    const {staged,seed,binding}=renderBoundDna(original,source,{
+      sourceManifestSha256:sha256(sourceBytes),
+      archiveManifestSha256:sha256(archiveManifestBytes)});
     const report={schema:'hsc-a0-same-run-derived-dna-source-v1',
       evidenceGrade:'EXECUTED_SAME_SHA_SOL_KIT_SOURCE_PROPERTIES_NOT_INSTALLED',
       sourceProducerCommitSha:source.sourceCommitSha,
       observerReplayConsumerCommitSha:checkout,
       originalSourceManifestSha256:sha256(sourceBytes),
+      originalArchiveManifestSha256:sha256(archiveManifestBytes),
       originalKitReplayArtifactSha256:sha256(observerBytes),
       originalSignedDepositWireSha256:verified.originalSignedWireSha256,
       signedDepositSignature:source.transactions.deposit.signature,

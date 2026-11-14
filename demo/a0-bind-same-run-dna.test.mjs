@@ -5,6 +5,7 @@ import {deriveDemoScope,ECONOMIC_DENIAL,DEMO_SCOPE_TAG,DEMO_SCHEMA} from '../tes
 import {renderBoundDna,confirmSourceAndWitness} from './a0-bind-same-run-dna.mjs';
 
 const sha='2bc6887b1c373311f2fbddea530bd533067dad84';
+const manifests={sourceManifestSha256:'e'.repeat(64),archiveManifestSha256:'f'.repeat(64)};
 const b58='11111111111111111111111111111111';
 const domain={genesisHash:b58,programId:'22222222222222222222222222222222',
   mint:'33333333333333333333333333333333'};
@@ -38,7 +39,7 @@ const template=[
  "      hash: null",
  ""].join('\n');
 test('synthetic same-source deterministic DNA properties without runtime claim',()=>{
- const a=renderBoundDna(template,source),b=renderBoundDna(template,source);
+ const a=renderBoundDna(template,source,manifests),b=renderBoundDna(template,source,manifests);
  assert.equal(a.staged,b.staged);
  assert.match(a.staged,new RegExp('genesisHash: '+domain.genesisHash));
  assert.match(a.staged,new RegExp('program: '+domain.programId));
@@ -48,13 +49,13 @@ test('synthetic same-source deterministic DNA properties without runtime claim',
  assert.doesNotMatch(a.staged,/DEMO-ONLY-REPLACE/);
 });
 test('duplicates and missing identity fields refuse before source binding',()=>{
- assert.throws(()=>renderBoundDna(template+'    program: DIFFERENT\n',source),/CARDINALITY:program/);
- assert.throws(()=>renderBoundDna(template.replace('    genesisHash: OLD','    genesis: OLD'),source),/CARDINALITY:genesisHash/);
- assert.throws(()=>renderBoundDna(template.replace('demoOnly: true','demoOnly: false'),source),/NOT_AUDIT_ONLY/);
+ assert.throws(()=>renderBoundDna(template+'    program: DIFFERENT\n',source,manifests),/CARDINALITY:program/);
+ assert.throws(()=>renderBoundDna(template.replace('    genesisHash: OLD','    genesis: OLD'),source,manifests),/CARDINALITY:genesisHash/);
+ assert.throws(()=>renderBoundDna(template.replace('demoOnly: true','demoOnly: false'),source,manifests),/NOT_AUDIT_ONLY/);
 });
 test('substituted initialized scope and economic authorization refuse',()=>{
- assert.throws(()=>renderBoundDna(template,{...source,initializedScopeHex:'f'.repeat(64)}),/executed config scope disagrees/);
- assert.throws(()=>renderBoundDna(template,{...source,withdrawalAuthorized:true}),/economic denial changed/);
+ assert.throws(()=>renderBoundDna(template,{...source,initializedScopeHex:'f'.repeat(64)},manifests),/executed config scope disagrees/);
+ assert.throws(()=>renderBoundDna(template,{...source,withdrawalAuthorized:true},manifests),/economic denial changed/);
 });
 test('source/Kit original manifest mismatch is rejected, not re-labelled',()=>{
  const original={schema:'hsc-a1-same-sha-fresh-signed-source-v2-queued-not-delivered',
@@ -73,4 +74,14 @@ test('source/Kit original manifest mismatch is rejected, not re-labelled',()=>{
  assert.throws(()=>confirmSourceAndWitness({...source,mint:b58},original,bytes,digest,sha),/scope is not derived/);
  assert.throws(()=>confirmSourceAndWitness(source,{...original,originalSolanaDomain:{...source,programId:b58}},bytes,digest,sha),
    /ORIGINAL_SOL_MANIFEST_SUBSTITUTED/);
+});
+
+test('DNA network seed cryptographically separates original source SHA and both manifest digests',()=>{
+ const first=renderBoundDna(template,source,manifests);
+ const otherSource=renderBoundDna(template,{...source,sourceCommitSha:'0'.repeat(40)},manifests);
+ const otherManifest=renderBoundDna(template,source,{...manifests,sourceManifestSha256:'a'.repeat(64)});
+ const otherArchive=renderBoundDna(template,source,{...manifests,archiveManifestSha256:'b'.repeat(64)});
+ for(const x of [otherSource,otherManifest,otherArchive])assert.notEqual(x.seed,first.seed);
+ assert.throws(()=>renderBoundDna(template,source,{...manifests,archiveManifestSha256:'incorrect'}),
+  /A0_ORIGINAL_MANIFEST_DIGEST_REQUIRED/);
 });

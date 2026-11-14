@@ -96,6 +96,12 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/ci/record.sh original-post-sync-anchor-source node scripts/ci/a0-replay-source-patch.mjs
+      - name: Verify original source Git blobs AND actual post-sync generated tree (no provenance bypass)
+        run: |
+          set -euo pipefail
+          bash scripts/ci/record.sh integration-postpatch-provenance node scripts/ci/verify-integration-provenance.mjs --post-original-anchor-sync
+          test -s ci-artifacts/a0-postpatch-provenance.json
+          (cd ci-artifacts && sha256sum --check a0-postpatch-provenance.json.sha256)
       - name: Require complete exact-SHA-bound real validator witness bundles
         run: |
           set -euo pipefail
@@ -140,7 +146,9 @@ jobs:
       - name: Require fresh SAME SHA SOL demo-domain signed source -> production OBS Kit v2 pending queue (no ACK)
         run: |
           set -euo pipefail
-          bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node scripts/ci/a0-demo-domain-kit-v2.mjs
+          # OBS-owned guard requires Node's child-v8 test context + explicit opt-in inside the archived replay.
+          # Do not export an RPC override globally or weaken observer/src/demo-outbox.mjs.
+          bash scripts/ci/record.sh genuine-fresh-solana-domain-obs-v2 node --test scripts/ci/a0-demo-domain-kit-v2.mjs
           test -s ci-artifacts/observer-fresh-domain-reviewed-v2-original-signed-localnet.json
           (cd ci-artifacts && sha256sum --check observer-fresh-domain-reviewed-v2-original-signed-localnet.json.sha256)
       # CI-owned preauthorization stage runner repeats the genuine same-SHA
