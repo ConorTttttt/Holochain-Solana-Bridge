@@ -18,6 +18,8 @@ test('bootstrap is independent of reviewed locked DNA build gate',()=>{
  assert.match(wf,/git ls-files --error-unmatch -- holochain\/demo\/Cargo\.lock/);
  assert.match(wf,/holochain\/demo\/Cargo\.lock/);
  assert.match(wf,/holochain\/demo\/ham-adapter\/Cargo\.lock/);
+ assert.match(wf,/ci-artifacts\/a0-native-Cargo\.lock\.UNREVIEWED/);
+ assert.match(script,/cp "\$ham_tmp\/Cargo\.lock" ci-artifacts\/a0-native-Cargo\.lock\.UNREVIEWED/);
  assert.match(script,/WASM_SOURCE_LOCK_VERIFIED_NATIVE_ONLY_UNREVIEWED_PROPOSAL/);
  assert.doesNotMatch(script,/^\s*cargo \+1\.95\.0 (build|check|test|run)\b/m);
  assert.doesNotMatch(wf,/\bhc dna pack\b|record_observation|cap-grant/);

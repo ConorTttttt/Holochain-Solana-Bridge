@@ -62,7 +62,10 @@ jobs:
           name: a0-unreviewed-lock-proposals-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             ci-artifacts/a0-bootstrap-*
+            # Exact native proposal bytes from the isolated temp workspace.
+            # CI ONLY; NOT Agent 4 source ownership or a reviewed lock.
+            ci-artifacts/a0-native-Cargo.lock.UNREVIEWED
+            # Original exact A4 source-reviewed WASM lock, not generated here.
             holochain/demo/Cargo.lock
-            holochain/demo/ham-adapter/Cargo.lock
           if-no-files-found: warn
           retention-days: 14
