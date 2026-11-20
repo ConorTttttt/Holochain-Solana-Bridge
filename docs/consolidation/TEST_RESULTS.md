@@ -29,7 +29,7 @@ Read from CI job logs, not from configuration:
 | Workflow | Run | Result | Jobs |
 |---|---|---|---|
 | Sprint 0 CI (fail-closed) | [44772038807](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038807) | ✅ **success** | **7/7** |
-| S0 cross-agent integration snapshot (same-run) | [44772038779](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038779) | ⏳ **in progress** at the time of this commit | 3/4 ✅ so far: SOL lifecycle (job 136411937554), RAVE crate (136411937829), cross-lane-js (136419026862). The Holochain build job (136419484328) was still compiling; its result is recorded in the next commit / PR #68 description |
+| S0 cross-agent integration snapshot (same-run) | [44772038779](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038779) | ✅ **success** | **4/4**: SOL lifecycle (job 136411937554), RAVE crate (136411937829), cross-lane-js (136419026862) and Holochain build (136419484328). Install and seven-stage publish steps were **skipped** (`if: ${{ false }}`) |
 | Original #66 evidence preservation and restore check (new) | [44772038825](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038825) | ✅ **success** | 1/1 |
 | Original installation evidence and authorization denials | [44772038977](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038977) | ✅ **success** | 1/1 |
 | A0 non-authorizing Cargo dependency bootstrap | [44772038834](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038834) | ✅ **success** | 1/1 |
@@ -47,6 +47,20 @@ Key evidence at `96bf5b7`, read from job logs:
 | Cross-lane fixture tests (job 136417290682) | `CROSS_LANE_MODE: INTEGRATED_REQUIRED`; 31 declared suites, unchanged since `8bf0d74`, 204 tests. The runner fails on any skip or failure, and the job passed |
 | Preservation (job 136411927278) | `ORIGINAL_ARCHIVES_VERIFIED 4/4`; `sha256sum -c` 4× `OK`; interim artifact 14648401319 (`sha256:0f9c3f06…`, 9,031,141 B, expires 2027-02-18, **not durable**); `RESTORED_ORIGINAL_BYTES_REPRODUCE_COMMITTED_INVENTORY uhC0kCn-ld2PREMKI6nDVq4XssTKHgs8QHOszCC3a32pXCZjowgXt 7` |
 | Installation preparation (job 136411927105) | **41/41** (34 installation + 7 preservation; includes the 2 A0 refusal files); new **unapproved** candidate request artifact 14647028398 (`sha256:310faf4f…`), not committed |
+| Same-run Holochain 0.7.1 build (job 136419484328) | Prerequisites passed: this run's SOL/OBS artifacts, original bytes, source domain, derived-DNA binding negatives, and both reviewed locks committed. Locked native HAM + integrity/coordinator WASM (`Finished release … in 47.75s` for WASM); `hc` packed the source-bound DNA and hApp; all 7 digests re-checked `OK`. Then `STOPPED_BEFORE_ANY_HOLOCHAIN_MUTATION`. Artifact `a0-same-run-source-bound-own-dna-96bf5b7…` 14648712656 (`sha256:9dc310c33c1502b891fb520045d9f08a740f372f1c535117618ccea040e430a5`, expires 2026-12-04) |
+
+Same-run build outputs at `96bf5b7`:
+
+| Artifact | SHA-256 | vs `8bf0d74` |
+|---|---|---|
+| native HAM `solana-audit-ham-adapter` | `e3e40f1c3d50959082569206a0f5cd6e1f72a3c20751ec9a26dbe13aba60b5b9` | **identical** (reproducible; HAM/zome source unchanged) |
+| `solana_audit_integrity.wasm` | `1e5bbdf9eeec4edfea66748e65bd539b5d69a17c3122c0ec361c8e212f46b4ca` | **identical** |
+| `solana_audit.wasm` (coordinator) | `552d0392d33004e18e8f0533866a470c7e03afce4eabac4c19717a48e6f7a7ba` | **identical** |
+| `holochain_solana_audit_demo.dna` | `1591e6a8c9c13991dabdaf822a619354c9135a1ce8c1739362207de943b65a37` | differs **by design**: DNA properties are bound to this run's disposable Solana execution |
+| `holochain_solana_audit_demo.happ` | `bde181b3803d3f00b88220c8ed15fe5444bab6354f36169f745cff3e18b20598` | differs by design (contains the DNA) |
+| `holochain/demo/Cargo.lock`, `ham-adapter/Cargo.lock` | `c5774a18…`, `08347c32…` | identical (reviewed) |
+
+- **Holochain DNA ID at `96bf5b7`:** `uhC0khEERsLEHsXJriCe2QFiCNUwDyK5DyoEg3t6FF55SJCM8GTCr`. It is not installed. No grant or request for this DNA, the `8bf0d74` DNA or the historical #66 DNA applies to either of the others.
 
 ## Local execution at `b6b0711` (code identical to `96bf5b7` except a YAML name quote and docs)
 
