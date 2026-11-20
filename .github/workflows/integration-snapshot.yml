@@ -2,7 +2,7 @@ name: S0 cross-agent integration snapshot (NOT production)
 
 on:
   pull_request:
-    branches: [agent/ci/11-build-pipeline]
+    branches: [main, agent/ci/11-build-pipeline]
   workflow_dispatch:
 
 permissions:

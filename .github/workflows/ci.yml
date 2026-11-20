@@ -280,3 +280,48 @@ jobs:
           path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14
+
+  preserved-original-evidence:
+    # Consolidation 2026-11-20: replaces the SOL-branch-only push workflows.
+    # Read-only re-verification of the exact original PR55 GitHub artifact
+    # bytes committed by SOL #64 and the #63 verifier. Archived RPC
+    # testimony only: NOT consensus, deployment-epoch or economic proof.
+    name: Preserved original PR55 Solana evidence (read-only, non-economic)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: |
+          set -euo pipefail
+          mkdir -p ci-artifacts
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          printf '%s\n' "$actual" | tee ci-artifacts/source-commit.sha
+      - name: Install Ubuntu-archive python3-cryptography (signed apt source)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-cryptography
+          dpkg-query -W python3-cryptography | tee ci-artifacts/python3-cryptography.version
+      - name: Exact byte digest of the committed original ZIP
+        run: |
+          set -euo pipefail
+          zip=security/evidence/solana-pr55-original-43604140724/artifact-14118166967-original.zip
+          test "$(stat -c %s "$zip")" = 968887
+          printf '%s  %s\n' 33a56159b1ab680cbfc36bffb365a1195a54fbddafb89082d8efcee012c2a018 "$zip" \
+            | sha256sum -c - | tee ci-artifacts/pr55-original-zip.sha256-check
+      - name: Offline manifest, IDL/ELF/ProgramData and Ed25519 wire verification
+        run: |
+          bash scripts/ci/record.sh pr55-original-verify python3 -I tests/solana/verify-pr55-original-zip.py \
+            security/evidence/solana-pr55-original-43604140724/artifact-14118166967-original.zip
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: preserved-original-evidence
+          path: ci-artifacts/
+          if-no-files-found: error
+          retention-days: 14

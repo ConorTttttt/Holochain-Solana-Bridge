@@ -2,7 +2,7 @@ name: A0 non-authorizing Cargo dependency bootstrap (review proposals ONLY)
 
 on:
   pull_request:
-    branches: [agent/ci/11-build-pipeline]
+    branches: [main, agent/ci/11-build-pipeline]
     paths:
       - 'holochain/demo/**'
       - '.github/workflows/a0-dependency-bootstrap.yml'

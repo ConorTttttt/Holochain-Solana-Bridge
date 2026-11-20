@@ -30,6 +30,14 @@ const cases = [
   ['rave-test-only-adapter', 'tests/holochain/test-only-adapter.test.mjs'],
   ['rave-transaction-shadow', 'tests/holochain/transaction-shadow.test.mjs'],
   ['rave-provenance-journal', 'tests/holochain/transaction-provenance-journal.test.mjs'],
+  // Consolidation 2026-11-20: suites adopted from specialist branches (or
+  // previously never executed by any workflow). Offline/synthetic only.
+  ['rave-scale-guard', 'tests/holochain/scale-guard.test.mjs'],
+  ['rave-two-conductor-preflight', 'tests/holochain/two-conductor-preflight.test.mjs'],
+  ['security-external-checkpoint-reference', 'security/test/external-checkpoint-reference.test.mjs'],
+  ['sol-confirmation-recovery', 'tests/solana/confirmation-recovery.test.mjs'],
+  ['sol-demo-scope', 'tests/solana/demo-scope.test.mjs'],
+  ['sol-archive-producer-mock-rpc', 'tests/solana/produce-history-archive.test.mjs'],
 ];
 const integrated = existsSync('ci-integration-snapshot.json');
 mkdirSync('ci-artifacts', { recursive: true });
