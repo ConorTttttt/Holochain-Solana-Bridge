@@ -1,3 +1,5 @@
+> **Status note (consolidation 2026-11-20, prepended; original text below unchanged):** this was the original manual guide. On-chain builds *have* since run: the authoritative, CI-executed procedure is [`tests/solana/localnet-build.sh`](../tests/solana/localnet-build.sh) (see [`tests/solana/README.md`](../tests/solana/README.md)), and results at the consolidation SHA are in [`docs/consolidation/TEST_RESULTS.md`](consolidation/TEST_RESULTS.md). The safety rules below (localnet only, no committed keys, no freeze authority) still apply.
+
 # Localnet build / validation guide
 
 **No on-chain build has been run by the authoring environment.** This is the next reproducibility task, not a completed test. Commands may need adjustment to your installed Anchor/Solana toolchain.

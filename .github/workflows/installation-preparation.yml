@@ -1,0 +1,51 @@
+name: Original installation evidence and authorization denials (NO MUTATION)
+on:
+  pull_request:
+    paths: ['demo/installation/**', 'scripts/installation/**', '.github/workflows/installation-preparation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  original-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Verify original archive bytes, embedded bundles and same-run source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/installation/fetch-originals.py
+          node demo/installation/verify-originals.mjs
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b
+        with:
+          extra_nix_config: |
+            substituters = https://cache.nixos.org https://holochain-ci.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= holochain-ci.cachix.org-1:5IUSkZc0aoRS53rfkvH9Kid40NpyjwCMCzwRTXy+QN8=
+      - name: Independently compute original DNA hash and inventory runtime executables only
+        run: |
+          set -euo pipefail
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command bash scripts/installation/runtime-inventory.sh
+      - name: Prepare exact installation arguments and binary/code hashes (NO AUTHORITY)
+        run: node scripts/installation/prepare-request.mjs
+      - name: Test authorization refusals (synthetic keys; no real approvals or conductor)
+        run: node --test demo/installation/*.test.mjs demo/a0-mutation-boundary.test.mjs demo/a0-runtime-gate.test.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: installation-independent-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            work/installation-originals/baseline-api-verification.json
+            work/installation-originals/verified-inventory.json
+            work/installation-originals/runtime-inventory.json
+            work/installation-originals/authorization-request.json
+          if-no-files-found: warn

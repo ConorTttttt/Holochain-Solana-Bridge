@@ -1,0 +1,16 @@
+{
+  "repository":"ConorTttttt/Holochain-Solana-Bridge",
+  "sourceCommit":"03b567a992bcd31930b49d08f594a4ef7ff58680",
+  "runId":43648980986,
+  "buildJobId":132616979053,
+  "sharedRunId":43648981038,
+  "artifacts":{
+    "build":{"id":14136370324,"sha256":"5b28358b65c18eceda3f7162dae20d60c2c9f55b83f4dcbed7561d257a0c9f06"},
+    "sol":{"id":14135563715,"sha256":"3868dec9c708a656e5d127e902836b9170a81bc5c87fd13a51076182bdcef35b"},
+    "obs":{"id":14135966104,"sha256":"736e21680925f046c45e269d512585f6192b258db9b2e241827fbaf33238e438"}
+  },
+  "holonixRevision":"a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da",
+  "rust":"1.95.0",
+  "holochain":"0.7.1",
+  "hamRevision":"fbb4b6eb8a79a507e9453b709ed00f15c5618fb4"
+}

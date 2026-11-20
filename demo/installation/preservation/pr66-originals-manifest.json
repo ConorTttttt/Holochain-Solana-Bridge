@@ -1,0 +1,62 @@
+{
+  "schema": "hsc-original-artifact-preservation-manifest-v1",
+  "purpose": "Pins the exact ORIGINAL GitHub Actions archive bytes of #66 same-run run 43648980986 so they can be preserved and later restored without rebuilding or substitution. Metadata only: no archive bytes are stored in this public repository.",
+  "repository": "ConorTttttt/Holochain-Solana-Bridge",
+  "sourceCommit": "03b567a992bcd31930b49d08f594a4ef7ff58680",
+  "runId": 43648980986,
+  "runWorkflow": ".github/workflows/integration-snapshot.yml",
+  "sharedRunId": 43648981038,
+  "buildJobId": 132616979053,
+  "mustBeSkippedBuildSteps": [
+    "Install disposable OWN audit DNA and independently read actual CellId by Admin API",
+    "Publish seven-stage report ONLY after actual installed identity proof"
+  ],
+  "artifacts": [
+    {
+      "kind": "build",
+      "artifactId": 14136370324,
+      "name": "a0-same-run-source-bound-own-dna-03b567a992bcd31930b49d08f594a4ef7ff58680",
+      "archiveBytes": 7871538,
+      "archiveSha256": "5b28358b65c18eceda3f7162dae20d60c2c9f55b83f4dcbed7561d257a0c9f06",
+      "zipEntries": 17,
+      "githubExpiresAt": "2026-11-28T22:58:31Z",
+      "inInstallationBaseline": true
+    },
+    {
+      "kind": "sol",
+      "artifactId": 14135563715,
+      "name": "integration-localnet-evidence-NO-KEYS",
+      "archiveBytes": 1003860,
+      "archiveSha256": "3868dec9c708a656e5d127e902836b9170a81bc5c87fd13a51076182bdcef35b",
+      "zipEntries": 286,
+      "githubExpiresAt": "2026-11-28T22:51:00Z",
+      "inInstallationBaseline": true
+    },
+    {
+      "kind": "obs",
+      "artifactId": 14135966104,
+      "name": "integration-cross-lane-js",
+      "archiveBytes": 133821,
+      "archiveSha256": "736e21680925f046c45e269d512585f6192b258db9b2e241827fbaf33238e438",
+      "zipEntries": 85,
+      "githubExpiresAt": "2026-11-28T22:51:40Z",
+      "inInstallationBaseline": true
+    },
+    {
+      "kind": "rave",
+      "artifactId": 14135311169,
+      "name": "integration-rave-rust",
+      "archiveBytes": 13164,
+      "archiveSha256": "ab32fdd27e4f997af43cec308fd71042980fe2bf651f6f51980f4fbbf38337b0",
+      "zipEntries": 7,
+      "githubExpiresAt": "2026-11-28T22:37:19Z",
+      "inInstallationBaseline": false
+    }
+  ],
+  "nonEconomicPolicy": {
+    "creditEligible": false,
+    "independentConsensusVerified": false,
+    "spendableBaseUnits": "0",
+    "withdrawalAuthorized": false
+  }
+}

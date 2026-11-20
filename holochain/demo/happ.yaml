@@ -1,0 +1,17 @@
+manifest_version: '0'
+name: holochain_solana_audit_demo
+# This app is wholly independent from the publisher-signed Unyt v0.117.0 app.
+description: Controlled audit-only Holochain interaction for disposable Solana localnet evidence
+roles:
+  - name: audit
+    provisioning:
+      strategy: create
+      deferred: false
+    dna:
+      path: ./holochain_solana_audit_demo.dna
+      modifiers:
+        network_seed: null
+        properties: null
+      installed_hash: null
+      clone_limit: 0
+allow_deferred_memproofs: false
