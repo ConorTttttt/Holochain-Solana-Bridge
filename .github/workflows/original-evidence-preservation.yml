@@ -1,0 +1,80 @@
+name: Original #66 evidence preservation and restore check (NO MUTATION)
+
+# Downloads the ORIGINAL #66 run 43648980986 archives through the authenticated
+# Actions API, verifies their exact SHA-256 / size / CRC against
+# demo/installation/preservation/pr66-originals-manifest.json, restores them and
+# runs the UNCHANGED demo/installation/verify-originals.mjs, then requires the
+# result to equal the committed original-build-inventory.json.
+#
+# The uploaded copy is an INTERIM 90-day Actions artifact with the same access as
+# the originals. It is NOT durable preservation (see
+# demo/installation/preservation/README.md). After the originals expire
+# (2026-11-28) the download step fails closed by design.
+# No conductor, keystore, signing, installation or zome call exists here.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'demo/installation/**'
+      - 'scripts/installation/**'
+      - '.github/workflows/original-evidence-preservation.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: original-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  preserve-verify-restore:
+    name: Verify, interim-copy and restore ORIGINAL #66 archives (not durable; no mutation)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact workflow source SHA (never PR merge ref)
+        run: test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Download ORIGINAL archives via authenticated API and seal (fails closed once expired)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/installation/preserve-originals.py download --out preserved-pr66-originals
+      - name: Independently re-verify sealed bytes
+        run: |
+          set -euo pipefail
+          python3 -I scripts/installation/preserve-originals.py verify --dir preserved-pr66-originals
+          (cd preserved-pr66-originals && sha256sum -c SHA256SUMS)
+      - name: INTERIM 90-day copy of the exact original archives (NOT durable preservation)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr66-original-archives-INTERIM-90D-NOT-DURABLE-${{ github.event.pull_request.head.sha || github.sha }}
+          path: preserved-pr66-originals/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Restore sealed copy and run the UNCHANGED installation verifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf work
+          python3 -I scripts/installation/preserve-originals.py restore --dir preserved-pr66-originals --metadata api
+          node demo/installation/verify-originals.mjs > /dev/null
+          python3 -I -c '
+          import json
+          a = json.load(open("work/installation-originals/verified-inventory.json"))
+          b = json.load(open("demo/installation/evidence/original-build-inventory.json"))
+          diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+          assert not diff, "RESTORED_INVENTORY_DIFFERS:" + ",".join(diff)
+          assert a["installed"] is False and a["actionHash"] is None
+          print("RESTORED_ORIGINAL_BYTES_REPRODUCE_COMMITTED_INVENTORY", a["dnaHash"], len(a["artifacts"]))
+          '

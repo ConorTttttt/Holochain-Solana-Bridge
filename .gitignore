@@ -8,3 +8,6 @@
 **/*-keypair.json
 **/*.pem
 **/*.key
+
+# Installation/preservation scratch (extracted original binaries); never commit
+work/
