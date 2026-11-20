@@ -102,6 +102,46 @@ jobs:
           RUSTFLAGS='--cfg getrandom_backend="custom"' cargo +1.95.0 build --locked --manifest-path Cargo.toml -p solana_audit_integrity -p solana_audit --release --target wasm32-unknown-unknown 2>&1 | tee ../../ci-artifacts/a4/wasm-build.log
           sha256sum target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm target/wasm32-unknown-unknown/release/solana_audit.wasm | tee ../../ci-artifacts/a4/wasm-sha256.txt
           sha256sum Cargo.lock ham-adapter/Cargo.lock | tee ../../ci-artifacts/a4/compiled-lock-sha256.txt
+      - name: Independently verify SOL55 archived source and four DNA properties
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/ConorTttttt/Holochain-Solana-Bridge/actions/artifacts/14118166967/zip > "$RUNNER_TEMP/a4-sol55-original.zip"
+          echo "33a56159b1ab680cbfc36bffb365a1195a54fbddafb89082d8efcee012c2a018  $RUNNER_TEMP/a4-sol55-original.zip" | sha256sum --check
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, zipfile
+          archive=pathlib.Path(os.environ['RUNNER_TEMP'])/'a4-sol55-original.zip'
+          with zipfile.ZipFile(archive) as z:
+              raw=z.read('localnet-evidence/demo-source-domain.json')
+              digest=hashlib.sha256(raw).hexdigest()
+              assert digest=='dcbee3b3402fac226a85281ea844e395d5a7d010844a34f4d53ed5860a502136'
+              domain=json.loads(raw)
+              assert domain['sourceCommitSha']=='c071e4c98e7b2dd04a18374f3792c0a90ce4b284'
+              assert domain['historyComplete'] is False and domain['economicAuthorization']=='DENIED'
+              assert domain['creditEligible'] is False and domain['independentConsensusVerified'] is False
+              assert domain['spendableBaseUnits']=='0' and domain['withdrawalAuthorized'] is False
+              manifest=z.read('localnet-evidence/evidence-manifest.sha256').decode().splitlines()
+              checked=0
+              for line in manifest:
+                  if not line.strip():continue
+                  expected,path=line.split('  ',1)
+                  actual=hashlib.sha256(z.read('localnet-evidence/'+path.lstrip('./'))).hexdigest()
+                  assert actual==expected, 'archive-manifest-file-corruption:'+path
+                  checked+=1
+              assert checked==280
+              expected={'genesisHash':domain['genesisHash'],'program':domain['programId'],
+                        'mint':domain['mint'],'holochainScope':domain['scopeHex']}
+              dna=pathlib.Path('holochain/demo/dna.yaml').read_text()
+              properties={}
+              for line in dna.splitlines():
+                  m=re.fullmatch(r'    (genesisHash|program|mint|holochainScope): (.+)',line)
+                  if m: properties[m[1]]=m[2].strip().strip("'\"")
+              assert properties==expected, 'dna-properties-mismatch-authenticated-source'
+              pathlib.Path('ci-artifacts/a4/source-manifest-sha256.txt').write_text(digest+'  localnet-evidence/demo-source-domain.json\n')
+              print('ARCHIVED_SOL55_SOURCE_MATCH 280/280 file digests, four source properties exact')
+              print('NOT same-run integrated source or independent Solana consensus')
+          PY
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           extra_nix_config: |
@@ -119,7 +159,24 @@ jobs:
             sha256sum holochain_solana_audit_demo.dna holochain_solana_audit_demo.happ Cargo.lock ham-adapter/Cargo.lock | tee ../../ci-artifacts/a4/actual-bundle-lock-sha256.txt
             hc dna hash holochain_solana_audit_demo.dna | tee ../../ci-artifacts/a4/actual-holochain-dna-hash.txt
           ' 2>&1 | tee ci-artifacts/a4/hc-pack.log
-          echo 'ARCHIVED SOL-55 ONLY: not same-run source; no installation, signed write, credit or withdrawal approval' | tee ci-artifacts/a4/limitations.txt
+          echo 'ARCHIVED SOL-55 ONLY: not same-run source; no signed write, credit or withdrawal approval' | tee ci-artifacts/a4/limitations.txt
+      - name: Install own archived-source audit DNA with external Lair + read-only HAM
+        env:
+          SOLANA_GENESIS: BvMfXydfN4vFMSkWzDhBb5mwM1cJYyXswzsFFhrZ5dVv
+          SOLANA_PROGRAM: 387eqrHkQHuZG82k8s4cGA3v5U8f433C2iWQe9x8LYG1
+          SOLANA_MINT: 3V3vun9zdKfaVtW6i89kdagbBnTvACMCVmdWRtcsg8ig
+          SOLANA_SCOPE: 85738d0a1b3e751bfa70c94700b1f0b2ef8a881839cb585071219962c9616fe7
+        run: |
+          set -euo pipefail
+          bash -n holochain/demo/a4-install-readonly.sh
+          export A4_HAM_BINARY="$PWD/holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter"
+          nix develop 'github:holochain/holonix/a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da' --command \
+            bash holochain/demo/a4-install-readonly.sh \
+              "$PWD/holochain/demo/holochain_solana_audit_demo.happ" \
+              "$PWD/holochain/demo/holochain_solana_audit_demo.dna" \
+              "$PWD/ci-artifacts/a4/read-only-install" \
+            2>&1 | tee ci-artifacts/a4/read-only-install.log
+          echo 'ARCHIVED SOURCE ONLY, no mutating zome call or A1 same-run identity approval'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
