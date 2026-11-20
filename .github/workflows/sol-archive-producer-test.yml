@@ -1,0 +1,30 @@
+# Disposable audit-only mock HTTP RPC coverage. No validator state is manufactured.
+name: SOL archive producer fail-closed mock CI
+on:
+  push:
+    branches:
+      - agent/sol/obs-archive-producer-20261114
+    paths:
+      - tests/solana/produce-history-archive.mjs
+      - tests/solana/produce-history-archive.test.mjs
+      - .github/workflows/sol-archive-producer-test.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  archive-producer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22.16.0'
+          package-manager-cache: false
+      - name: Syntax and network-isolated mocked original-RPC checks
+        run: |
+          node --check tests/solana/produce-history-archive.mjs
+          node --check tests/solana/produce-history-archive.test.mjs
+          node --test tests/solana/produce-history-archive.test.mjs
