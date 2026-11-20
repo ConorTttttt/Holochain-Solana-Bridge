@@ -4,10 +4,11 @@
 
 | Item | Value |
 |---|---|
-| Validated code commit (current) | **`96bf5b7d7260a4177507cf5e3763e19e982a9c3d`** (P0 follow-up: preservation tooling, #48 port, Agave pin, release-workflow lock; branch `claude/holochain-solana-consolidation-3l2lqm`, PR #68) |
+| Validated code commit (current) | **`bf009225d4fb3dda26171fc086ae820b1c58ef4e`**: `96bf5b7` plus the `preserve-originals.py` transient-API retry fix (branch `claude/holochain-solana-consolidation-3l2lqm`, PR #68) |
+| Validated code commit (previous) | `96bf5b7d7260a4177507cf5e3763e19e982a9c3d` (P0 follow-up: preservation tooling, #48 port, Agave pin, release-workflow lock); results kept below |
 | Validated code commit (initial consolidation) | `8bf0d7411a05380e76284db2356d1555ab97f636`; its results are kept below as history |
 | Base | `main` `e1651fec77f1ed5c5f8e760e486c8757adc5e69c` |
-| Commits after `96bf5b7` | documentation / `.gitignore` only. Their own CI runs are listed in the PR #68 description |
+| Commits after `bf00922` | documentation only. Their own CI runs are listed in the PR #68 description |
 | Historical evidence | #66 `03b567a` / #67 `d0409a1` runs are **not** cited as evidence for this commit |
 
 ## Toolchain at the validated commit
@@ -24,7 +25,34 @@ Read from CI job logs, not from configuration:
 | Runner | ubuntu-24.04 (24.04.5) | job logs |
 | Local (this session) | Node v22.23.5, Python 3.13.18 (`cryptography` 50.0.1); no Anchor / Solana / hc locally | local shell |
 
-## GitHub Actions at `96bf5b7` (current validated code commit)
+## GitHub Actions at `bf00922` (current validated code commit)
+
+| Workflow | Run | Result |
+|---|---|---|
+| Sprint 0 CI | [44776795864](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776795864) | ✅ **7/7** |
+| S0 same-run integration | [44776796449](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776796449) | ✅ **4/4 on attempt 2** (attempt 1: see flakes below) |
+| Original #66 preservation | [44776795777](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776795777) | ✅ |
+| Installation preparation | [44776795775](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776795775) | ✅ **44/44 on attempt 2** (attempt 1: GitHub HTTP 503) |
+| A0 dependency bootstrap | [44776795914](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776795914) | ✅ |
+| A0 own-DNA gate | [44776795709](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44776795709) | ❌ **INTENTIONALLY BLOCKED** (job 136428827375: `BLOCKED_NOT_ACCEPTED`, same five blockers, exit 3) |
+
+Same-run Holochain build at `bf00922` (job 136443267786):
+- Native HAM `e3e40f1c…` and both WASMs `1e5bbdf9…` / `552d0392…` are **byte-identical** to `96bf5b7` and `8bf0d74`.
+- DNA bundle `c9969ab59938b760a322ffdcfeb5deade2b85d38a7182ea21f36a09c7d3822cf` and hApp `78b18171d1471b6b98d5c443568026daa6bb6d2fe2e070eefb2fc98706f57eeb` differ by design, because they are bound to this run's Solana execution.
+- DNA ID `uhC0keJum-Va0EyZ7rbRT4OBoqTpX1UYR2GTUOkkY3nnOcnCuqd7r`.
+- Ended with `STOPPED_BEFORE_ANY_HOLOCHAIN_MUTATION`. Install and seven-stage publish were skipped. Artifact 14652363501.
+
+### Transient / flaky failures observed (all recorded, none hidden)
+
+| Head | Job | Failure | Classification | Action |
+|---|---|---|---|---|
+| `d3ba41a` | preservation (136426413746) | `gh: HTTP 503` on `actions/artifacts/14136370324/zip`, unhandled traceback | GitHub API outage; failed closed | **fixed** in `bf00922` (bounded retry for 429/5xx; 4xx never retried; 3 new tests) |
+| `bf00922` | installation-preparation (136428634626) | `gh: HTTP 503` on `actions/artifacts/14135563715/zip` in the existing `fetch-originals.py` | GitHub API outage; failed closed | re-ran the failed job → 44/44. Adding a retry to `fetch-originals.py` is a CI-lane follow-up (SEC review) |
+| `bf00922` | SOL lifecycle (136428637122) | after a **real** validator restart, `restart-reconcile.test.mjs:51` "must deploy compiled SBPF to actual validator" 0.3 s after `restart-validator.sh` reported ready | readiness race in the **SOL-owned** harness: readiness = `solana cluster-version` only. Same job passed at `8bf0d74` and `96bf5b7`, and on re-run at `bf00922` | re-ran → ✅. SOL-lane follow-up: wait until the retained ledger has replayed (PR comment 7045508456). The test's state-loss assertion stays unchanged |
+
+The installation-preparation **41 → 44** change is the 3 new preservation tests. The preservation suite is now 10 tests.
+
+## GitHub Actions at `96bf5b7` (previous validated code commit)
 
 | Workflow | Run | Result | Jobs |
 |---|---|---|---|
