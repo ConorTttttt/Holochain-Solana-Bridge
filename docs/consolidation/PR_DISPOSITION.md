@@ -14,7 +14,7 @@ Classes: INCLUDED_IN_CONSOLIDATION · PARTIALLY_INCLUDED · REQUIRES_INDEPENDENT
 - **34** PR heads are Git ancestors of #68: every PR except #48 and the closed #60.
   - Content-wise, 33 of these are fully included.
   - #44 is PARTIALLY_INCLUDED by deliberate exclusion: its install workflow and script, plus its coordinator variant.
-- **1** partially incorporated without ancestry (#48): its early commits reached #68 through #52.
+- **1** partially incorporated without ancestry (#48): its early commits reached #68 through #52. Its two later fixes (durable returned ActionHash with terminal HOLD, and path-scoped `uiAmount`) were **ported** by the integration in `98db651` (2026-11-20). They are pending OBS + SEC review.
 - **1** closed and superseded (#60).
 - **Fully or partially incorporated: 35 of 36.**
 
@@ -33,7 +33,7 @@ Classes: INCLUDED_IN_CONSOLIDATION · PARTIALLY_INCLUDED · REQUIRES_INDEPENDENT
 | #43 SEC-38 flags | SUPERSEDED (included) | ancestor | none | close |
 | #44 RAVE audit DNA + HAM | **PARTIALLY_INCLUDED** + REQUIRES_INDEPENDENT_REVIEW | merged `d1df64b` (ancestor) | **Not adopted:** coordinator variant `16b60ea` (redacting error); `.github/workflows/agent4-real-build.yml`; `holochain/demo/a4-install-readonly.sh` (retired in `3501e84`). Historical A4 run 43647150236 performed a disposable external-Lair sandbox install; SEC should review whether that was authorized | RAVE/SEC decide the coordinator variant; SEC reviews the historical install; then close |
 | #47 Archive producer | HISTORICAL_RESEARCH (included) | merged `0f6aa1c` | its branch-only workflow (retired; suite now in shared CI) | close |
-| #48 OBS v1 outbox | **PARTIALLY_INCLUDED** + REQUIRES_INDEPENDENT_REVIEW / STILL_ACTIVE | commits ≤ `220d5aa` via #52; **not an ancestor** | `63403b8` + `cafc19e` (durable returned ActionHash, terminal HOLD); `b29e469`, `3288d11`, `2802d95` (path-scoped `uiAmount`); v2-proof-contract `37f6101` / `c01f761` / `c14719a` / `a441364` / `3258cb9` (superseded by #62's typed v2) | **Keep open.** OBS ports the two fixes onto the Kit v2 outbox in a new PR against `main`; SEC reviews. Close #48 after that PR lands |
+| #48 OBS v1 outbox | **INCLUDED_BY_PORT** (fixes) + REQUIRES_INDEPENDENT_REVIEW | commits ≤ `220d5aa` via #52; fixes `63403b8`/`cafc19e` and `b29e469`/`3288d11`/`2802d95` **re-implemented** on the Kit v2 outbox in `98db651` (not cherry-picked; blob-pinned as integration-only provenance); **not an ancestor** | v2-proof-contract `37f6101` / `c01f761` / `c14719a` / `a441364` / `3258cb9` (superseded by #62's typed v2) | **Keep open until OBS reviews the port** (and SEC reviews it as security-critical). If OBS accepts it, close #48 as superseded; if OBS rejects it, OBS lands its own port and the integration patch is reverted |
 | #50 SOL SEC-38-3/4 | SUPERSEDED (included) | ancestor | none | close |
 | #52 OBS Kit outbox | INCLUDED_IN_CONSOLIDATION | ancestor via #62 merge `b904c88` | none | close |
 | #53 SEC fixture sync | INCLUDED_IN_CONSOLIDATION | merged `2b10aa0` | none | close |
@@ -62,20 +62,21 @@ Classes: INCLUDED_IN_CONSOLIDATION · PARTIALLY_INCLUDED · REQUIRES_INDEPENDENT
 These are BLOCKED independent of any PR. None can be unblocked by merging code.
 
 - **Installation** of the audit DNA and any signed audit write: no independently authorized exact request exists.
-- **v2 transport activation:** the ABI is not ratified, and #48's durable-ActionHash fix is not ported.
+- **v2 transport activation:** the ABI is not ratified, and #48's durable-ActionHash port (`98db651`) awaits OBS + SEC review.
 - **Deployment-epoch identity and complete produced-slot history:** HOLD (SOL #63 / #64 reviews).
 - **Economic gate C:** NO-GO.
 
 ## Recommended merge / close order
 
 1. Human review of #68 (SOL, OBS, RAVE, SEC owners plus a distinct security reviewer). Decide the open items in INTEGRATION_REPORT §3 B/C and §4.
-2. Before **2026-11-28 22:37 UTC**, preserve the original #66 artifacts (DEMO_READINESS.md §4).
-3. Merge #68 into `main` with a merge commit (not squash), so every specialist head stays reachable from `main`.
-4. Open the follow-up PRs against `main`:
-   1. OBS port of #48's fixes.
+2. Before **2026-11-28 22:37 UTC**, the **owner** makes the durable copy of the original #66 artifacts and records it (DEMO_READINESS.md §5, `demo/installation/preservation/README.md`). The download, verification and restore tooling is in this PR and has been exercised; only the owner-authorized storage step is missing.
+3. Owner disables `rave-unyt-release.yml` in *Settings → Actions*, or locks its seven historical branches (MAINLINE_MAINTENANCE.md §5), **before** the file reaches `main`.
+4. Merge #68 into `main` with a merge commit (not squash), so every specialist head stays reachable from `main`. Only an independent reviewer approves it, never the author.
+5. Open the follow-up PRs against `main`:
+   1. OBS review of the #48 port (`98db651`); OBS back-ports it to its own lane or replaces it.
    2. SEC back-port of `f16e461`.
    3. RAVE / SEC coordinator decision.
-5. Close superseded **integration/demo** PRs: #37, #39, #41, #45, #46, #49, #51, #54, #56, #58, #61, then #66 and #67.
-6. Close **specialist** PRs once each owner confirms: #32, #34, #35, #36, #38, #40, #43, #50, #52, #53, #55, #57, #59, #62, #63, #64, #65, #42, #47.
-7. Then #33 (after the SEC back-port decision), #44 (after the RAVE / SEC decisions) and #48 (after the OBS port lands).
-8. Retarget any still-active work so it branches from the new `main`, using the rules in MAINLINE_MAINTENANCE.md.
+6. Close superseded **integration/demo** PRs: #37, #39, #41, #45, #46, #49, #51, #54, #56, #58, #61, then #66 and #67.
+7. Close **specialist** PRs once each owner confirms: #32, #34, #35, #36, #38, #40, #43, #50, #52, #53, #55, #57, #59, #62, #63, #64, #65, #42, #47.
+8. Then #33 (after the SEC back-port decision), #44 (after the RAVE / SEC decisions) and #48 (after OBS accepts or replaces the port).
+9. Retarget any still-active work so it branches from the new `main`, using the rules in MAINLINE_MAINTENANCE.md.

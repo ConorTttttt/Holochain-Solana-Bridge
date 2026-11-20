@@ -74,7 +74,7 @@ When a PR changes a pinned specialist file, it updates its `fileProvenance` entr
 | Lane | Additional obligations |
 |---|---|
 | **SOL** | `anchor build` and the four isolated validator modes must pass in the same-run job. Never reuse IDL / ELF hashes across disposable program IDs. Any change to account layout, PDAs, authorities or arithmetic needs SEC review and an OBS contract update in the same PR. Never regenerate committed original evidence |
-| **OBS** | Run `npm --prefix observer test` and the cross-lane runner. Keep the four denial literals at every layer. Changing the v2 ABI requires A4 (RAVE) ratification first. Port #48's durable-ActionHash and `uiAmount` fixes (INTEGRATION_REPORT §4) before any transport work |
+| **OBS** | Run `npm --prefix observer test` and the cross-lane runner. Keep the four denial literals at every layer. Changing the v2 ABI requires A4 (RAVE) ratification first. Review the integration port of #48's durable-ActionHash and `uiAmount` fixes (`98db651`, INTEGRATION_REPORT §4) and either adopt it into the OBS lane or replace it, before any transport work |
 | **RAVE** | Locked native and WASM builds must pass in the same-run job. A change to integrity zomes changes the DNA hash; state it in the PR. `evidence-gate.mjs` is maintainer-only. No install / genesis / zome-call workflow (see §5) |
 | **SEC** | Review PRs. Do not author the economic changes you approve. Fixture changes that track another lane land with, or immediately after, that lane's PR. Back-port `f16e461` (INTEGRATION_REPORT §3C) |
 | **CI** | Workflows trigger on PRs into `main`. Never convert an intentional denial into a pass. Retire branch-only workflows rather than accumulating them. Same-run evidence is per-SHA; never cite an older run as current |
@@ -91,9 +91,14 @@ When a PR changes a pinned specialist file, it updates its `fileProvenance` entr
 - `ci-integration-snapshot.json › nonEconomicPolicy` = all four denials; `candidate.status` = `UNVERIFIED_NO_GREEN_CLAIM`.
 - Same-run install steps are `if: ${{ false }}`, A0's install job is `if: ${{ false }}`, and the A0 build gate refuses with exit 3.
 - `scripts/installation/execute-approved.mjs` is invoked by no workflow. It needs an admin-owned policy, an independently held Ed25519 authority and a one-use broker redemption.
-- `rave-unyt-release.yml` still contains a job (`actual-non-economic-conductor-probe`) that installs the third-party Unyt hApp into a disposable sandbox conductor. Its push triggers name only historical branches, but it is `workflow_dispatch`-able.
-  - **Owner decision needed:** move that job behind a GitHub Environment with required reviewers, or remove the dispatch trigger.
-  - This consolidation did not run it.
+- `rave-unyt-release.yml` (since `b6b0711`): `workflow_dispatch` is **removed** and `actual-non-economic-conductor-probe` is **hard-disabled** (`if: ${{ false }}`). `scripts/ci/workflow-install-gates.test.mjs`, run in shared CI, refuses any workflow step that can install or start a conductor, install an app or call a mutating zome without exactly `if: ${{ false }}`. It also refuses re-added dispatch, schedule, `pull_request` or `workflow_call` triggers on that file.
+  - **Residual (owner action, checked 2026-11-20):** all seven historical branches named in its `push` trigger carry their **own, older** copies of the file, with the probe **enabled** and `workflow_dispatch` present. Those branches are `agent/rave/9-rave-validation` `e34e0f8`, `integration/s0/11-all-agent-snapshot` and `…/2026-11-14-agent1-candidate` `6a50081`, `…/2026-11-14-sol38-review-pending` `6a41501`, `integration/demo/2026-11-14-a1-rave5-required-review` `a51e335`, `…/a1-a0-evidence-gated` `101e6ec`, and `…/a1-bootstrap-source-v2` `b737976`.
+    - A push to any of them runs that branch's old probe.
+    - Once this file exists on `main`, a dispatch with `--ref <historical branch>` may also run the old copy, because GitHub executes the workflow file at the dispatched ref.
+    - **Before or at the merge of #68**, disable the workflow in *Settings → Actions* (or `gh workflow disable rave-unyt-release.yml`), and delete or lock those seven branches once their PRs are closed.
+    - This session cannot change repository settings or delete branches.
+  - Re-enabling the probe requires a reviewed PR with RAVE + SEC approval and an exact-call authorization path, for example a GitHub Environment with required reviewers who are not the author.
+  - Neither this consolidation nor its follow-ups ran it.
 
 ## 6. Dependency locking (current state, verified by CI at the PR SHA)
 
@@ -113,4 +118,11 @@ Toolchains are pinned in-repo:
 - Holonix `a6cdfbd31afd2094b7ccc9b3bd7cf9442ec055da`, HAM `fbb4b6eb8a79a507e9453b709ed00f15c5618fb4`.
 - Actions pinned by commit SHA.
 
-**Known pinning gap (not changed here):** shared `ci.yml` (`anchor-compile`, `validator-smoke`) installs Solana with `sh -c "$(curl -fsSL https://release.anza.xyz/v${SOLANA_VERSION}/install)"`. That is version-pinned but **not digest-pinned**. The same-run `integration-snapshot.yml` job instead downloads the Agave 4.1.2 release archive and checks a pinned SHA-256. SEC's #38 review raised the same point. Recommendation: CI owner switches shared CI to the SHA-256-pinned archive in a dedicated PR with SEC review.
+**Pinning gap closed (`8b22ac4`, SEC review requested):** shared `ci.yml` (`anchor-compile`, `validator-smoke`) used to run `sh -c "$(curl -fsSL https://release.anza.xyz/v${SOLANA_VERSION}/install)"`, which was version-pinned only. It now runs `scripts/ci/install-agave.sh`, which:
+- downloads the exact upstream archive over HTTPS (TLS ≥ 1.2);
+- verifies `AGAVE_ARCHIVE_SHA256=5991d027a686eb419a709a479178b33eb83501e8a2bfbf599a81a286bfcbf770` (`scripts/ci/toolchain.env`) **before** extraction;
+- rejects archive paths outside `solana-release/`;
+- checks `solana --version`;
+- records archive and executable digests.
+
+This is the same digest the same-run `integration-snapshot.yml` job uses. It was re-verified on 2026-11-20 by an independent download (218,318,551 bytes). This resolves the point SEC raised in #38.

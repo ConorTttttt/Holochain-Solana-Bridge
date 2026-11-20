@@ -72,11 +72,11 @@ No test was deleted, skipped or weakened. No assertion was relaxed to make a mer
 
 ## 4. Not merged (explicitly deferred)
 
-### PR #48 `3258cb9` (OBS v1 outbox): PARTIALLY_INCLUDED
+### PR #48 `3258cb9` (OBS v1 outbox): PARTIALLY_INCLUDED; fixes PORTED in `98db651` (2026-11-20)
 
 - **Included through #52:** commits up to `220d5aa` (12:41 on 14 Nov), including `046f0eb`, `5acc481` and `96be966`. All are present in `observer/src/demo-outbox.mjs`.
 - **Superseded:** the v2 proof contract (`37f6101`, `c01f761`, `c14719a`, `a441364`, `3258cb9`). The OBS lane's own #62 decision register adopts a **single strict typed v2** (`AuditObservationV2`). Merging #48 would introduce a second, competing v2 schema.
-- **Durable returned ActionHash / terminal HOLD (`63403b8` + test `cafc19e`): NOT included.** `git cherry-pick -x 63403b8` conflicts in `observer/src/demo-outbox.mjs`. Applying only the test (`cafc19e`) on the consolidated outbox gave **156/158**: `not ok 18 … ActionHash contradiction is durable HOLD` and `not ok 46 … restart retains returned ActionHash …`. The consolidated outbox therefore **lacks** this protection.
+- **Original consolidation finding (kept for the record): durable returned ActionHash / terminal HOLD (`63403b8` + test `cafc19e`) was NOT included.** `git cherry-pick -x 63403b8` conflicts in `observer/src/demo-outbox.mjs`. Applying only the test (`cafc19e`) on the consolidated outbox gave **156/158**: `not ok 18 … ActionHash contradiction is durable HOLD` and `not ok 46 … restart retains returned ActionHash …`. The consolidated outbox therefore **lacks** this protection.
   - Runtime impact today: none. `client.write` is never reached, because transport is refused and no Holochain write is authorized.
   - It is a **hard precondition before any v2 transport activation**. Owner: OBS. Reviewer: SEC.
 - **Path-scoped `uiAmount` (`b29e469`, `3288d11`, `2802d95`): NOT included.**
@@ -84,6 +84,22 @@ No test was deleted, skipped or weakened. No assertion was relaxed to make a mer
   - #48's (13:53) keeps generic canonical JSON integer-only and allows fractions **only** at `uiTokenAmount.uiAmount`, rejecting −0.
   - A cherry-pick applies textually but does not restore the generic strictness, so it would be an incomplete port. Owner: OBS. Reviewer: SEC.
 - #48's head has **no CI run**.
+
+**Port (`98db651`, integration-authored; OBS + SEC review required).** The two fixes were re-implemented on the consolidated Kit v2 outbox. They were not cherry-picked, because `63403b8` conflicts.
+
+| Concern | Consolidated outbox before | After port | Tests (all in `observer/test/demo-outbox.test.mjs`) |
+|---|---|---|---|
+| Returned ActionHash authenticity | the write response's hash was not persisted; a later readback could ACK a different hash | the returned hash is persisted (`returnedActionHash`) **before** readback; ACK requires `readback == returned`; reuse of a hash already held by another row is refused | 18 (strengthened: contradiction → durable HOLD), 47 (matching hash ACKs after restart: positive control), 50 (hash substituted from another source) |
+| Durable ACK / restart | a contradiction could be retried after a restart | the contradiction survives a restart → HOLD, with **no second write** | 46 |
+| Terminal HOLD | `#reconcile` could re-evaluate a held row | `hold` is terminal, including across restart | 48 |
+| Malformed response | not checked | `''`, >255 chars, object, number or `null` → HOLD. **Stricter than #48**: review item for OBS | 49 |
+| Substituted payload | covered by digest checks | still refused, now with a returned hash in play | 51 |
+| Tampered journal | partial | `RETURNED_ACTION_FORMAT`, `PENDING_HAS_REMOTE_ACTION` and `RETURNED_ACTION_CONFLICT` refuse on load | 52 |
+| `uiAmount` ambiguity | any finite non-integer accepted **anywhere** in canonical JSON | integers must be safe integers everywhere; fractions **only** at `…uiTokenAmount.uiAmount`, which must be ≥ 0 and ≤ 2^53−1; −0 refused everywhere | 53 (includes a canonical-digest pin computed with the **pre-port** encoder, proving unchanged bytes for valid witnesses) |
+
+- **Results.** 164/164 Observer tests pass. Against the pre-port source, tests 18, 46, 48, 49, 50, 52 and 53 fail, so each one detects the defect it targets. Every one of the 156 pre-existing tests still passes, except test 18, which was intentionally strengthened.
+- **Transport stays refused.** `REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED`, `deliveryAuthorized:false`. `client.write` remains unreachable in any workflow. No ActionHash is fabricated: tests use local fake clients only.
+- **Provenance.** Both files moved from `fileProvenance` (upstream OBS blobs) to blob-pinned `integrationOnlyProvenance`. That records the prior upstream blob (`fa80ac60` @ `38847cf`; test `9001a088` @ `e70a178`), the #48 commits, and `reviewRequired: [OBS, SEC]`.
 
 ### PR #60 `b869da9` (closed)
 
@@ -121,6 +137,17 @@ Superseded by #61's `demo/a0-bind-same-run-dna.mjs`, which is included. Its 9 un
 
 - **Evidence gate unchanged.** `holochain/evidence-gate.mjs` is byte-identical to `main` (`ffd7a081`), and both functions throw unconditionally.
 - **Policy fields unchanged.** `ci-integration-snapshot.json › nonEconomicPolicy` = `{creditEligible:false, independentConsensusVerified:false, spendableBaseUnits:"0", withdrawalAuthorized:false}`, enforced by `verify-integration-provenance.mjs`. `candidate.status` stays `UNVERIFIED_NO_GREEN_CLAIM`.
-- **No new path can mutate Holochain.** The remaining install script (`scripts/ci/a0-own-dna-install-readonly.sh`) is reachable only from jobs and steps hard-disabled with `if: ${{ false }}`. `scripts/installation/execute-approved.mjs` requires a verified, independently signed one-use grant and is invoked by no workflow.
+- **No new path can mutate Holochain.** The install scripts (`scripts/ci/a0-own-dna-install-readonly.sh`, `tests/holochain/sandbox/probe-verified-unyt-conductor.sh`) are reachable only from jobs and steps hard-disabled with `if: ${{ false }}`. Since `b6b0711` this is enforced for **every** workflow by `scripts/ci/workflow-install-gates.test.mjs` in shared CI, and `rave-unyt-release.yml` is no longer `workflow_dispatch`-able. `scripts/installation/execute-approved.mjs` requires a verified, independently signed one-use grant and is invoked by no workflow.
 - **Historical authorization material unchanged.** `demo/installation/evidence/installation-request.prepared.json` is unchanged, `requestState: CODE_AND_ARGUMENTS_PREPARED_HOST_POLICY_REQUIRED`.
 - **No secret material added.** The repository guard passes (TEST_RESULTS.md).
+
+## 8. Follow-up changes after the initial consolidation (2026-11-20, P0)
+
+| Commit | Lane touched | Change | Why | Review needed |
+|---|---|---|---|---|
+| `199dfe2` | CI / installation tooling | Original #66 preservation tooling: manifest, `preserve-originals.py`, 7 adversarial tests and `original-evidence-preservation.yml` | archives expire 2026-11-28; the restore path feeds the **unchanged** `verify-originals.mjs` | SEC (evidence handling) |
+| `98db651` | OBS (integration-authored) | #48 durable returned ActionHash, terminal HOLD and path-scoped `uiAmount` port (§4) | close the delivery-path gap before any transport review | **OBS + SEC** |
+| `8b22ac4` | CI | shared `ci.yml` installs Agave 4.1.2 from the SHA-256-pinned archive (`AGAVE_ARCHIVE_SHA256` in `toolchain.env`) via `scripts/ci/install-agave.sh`; the `release.anza.xyz` script is removed | closes the pinning gap SEC raised in #38; the digest was re-verified by an independent download | SEC |
+| `b6b0711` | CI (RAVE-owned workflow) | `rave-unyt-release.yml`: `workflow_dispatch` removed; `actual-non-economic-conductor-probe` set to `if: ${{ false }}`; new repository-wide static install gate; preservation workflow name quoted | the file is not on `main`, so merging #68 would have made a third-party conductor install dispatchable from `main` | **RAVE + SEC** |
+
+None of these changes alters a verification semantic, a denial literal, the historical installation request or the A0 refusal.

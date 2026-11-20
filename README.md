@@ -124,7 +124,7 @@ Two RPC endpoints are not a light client, and RPC output is never permission to 
 | `a0-own-dna-runtime.yml` | always | A0 static readiness (passes) + build gate that **intentionally fails** with `BLOCKED_NOT_ACCEPTED` until authorization exists |
 | `a0-dependency-bootstrap.yml` | `holochain/demo/**` changes | lock-preservation review proposal |
 | `installation-preparation.yml` | installation paths | re-verifies the ORIGINAL #66 artifacts; prepares an unapproved request; synthetic authorization refusals |
-| `rave-unyt-release.yml` | dispatch / historical branches only | third-party Unyt release proof. Contains a disposable conductor-install job; **not run by the consolidation** |
+| `rave-unyt-release.yml` | historical branches only (**no dispatch**) | third-party Unyt release proof. Its conductor-install job is **hard-disabled** (`if: ${{ false }}`), enforced for all workflows by `scripts/ci/workflow-install-gates.test.mjs`. Historical branches keep older copies: see `docs/consolidation/MAINLINE_MAINTENANCE.md` §5 |
 
 A red A0 build gate is the expected, honest state. Do not "fix" it by weakening the gate.
 

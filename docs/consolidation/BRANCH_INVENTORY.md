@@ -52,7 +52,7 @@ Generated 2026-11-20. `git fetch origin '+refs/heads/*:refs/remotes/origin/*' --
 
 | Branch | Reason |
 |---|---|
-| `agent/obs/2026-11-14-audit-outbox-review` (#48) | Partially included through #52. The remaining v2-proof-contract is superseded by the #57/#62 typed v2. The durable returned-ActionHash and path-scoped `uiAmount` commits need an OBS-owner port: they conflict with the consolidated outbox, and its own regression tests fail there. See INTEGRATION_REPORT.md §4. |
+| `agent/obs/2026-11-14-audit-outbox-review` (#48) | Partially included through #52. The remaining v2-proof-contract is superseded by the #57/#62 typed v2. The durable returned-ActionHash and path-scoped `uiAmount` commits conflict with the consolidated outbox. They were therefore **re-implemented by the integration in `98db651`** (2026-11-20) and await OBS + SEC review. See INTEGRATION_REPORT.md §4. |
 | `integration/demo/2026-11-14-a1-obs57-source-bound-candidate` (#60, closed) | Superseded by #61's same-run binder, which is included. |
 
 ## Dependency graph (ancestry of the 12 tips before consolidation)

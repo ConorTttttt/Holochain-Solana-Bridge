@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   preserve-verify-restore:
-    name: Verify, interim-copy and restore ORIGINAL #66 archives (not durable; no mutation)
+    name: 'Verify, interim-copy and restore ORIGINAL #66 archives (not durable; no mutation)'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
