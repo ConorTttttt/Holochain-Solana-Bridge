@@ -1,0 +1,40 @@
+{
+  "kind": "localnet-finalized-rpc-account-snapshot-not-consensus-proof",
+  "label": "active-receipt",
+  "genesisHash": "FcVMLgegDkZKX8ec4ELY41RwNDJFZE9nVfZvd9oSmQM8",
+  "programId": "FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG",
+  "slot": 33,
+  "signatures": {
+    "deposit": "5n2zYM3uEhP4EGLHRJWT8f2wYaR55TC1z3gygcevZe47jkrN4Nd3kgACYL9abv1jN96qkMg9AFLSrCAsUWMkE5eQ"
+  },
+  "accounts": [
+    {
+      "address": "BdR4H8M6pYafRkmEM57ydhH4yGKw2q1KokyvUkxLZ2VH",
+      "owner": "FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG",
+      "lamports": 2408160,
+      "executable": false,
+      "dataBase64": "QK8Yt4ptRk7gCZFRU2RQvh1VsL8W/uGzUBz/MQBLFpjTh573HgzSDmY9WneeSRal0o7f8pMFU4Y8BdioHRwc3VTImgU3tPCg3PBuLH2nru+5rm2r6k9IZBEBAGly1wYe0icEGylFuMpxJlbmF8Ow/7eoJZlp5rPLhmzPc5vcb8yc03yjGpPsmAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwchpAAAAAAAAJDQAwAAAAAAAPg="
+    },
+    {
+      "address": "8cgyh99E7fmUyAFshwss8ZQZacpxWTyCm1ApFJFC7999",
+      "owner": "FNXqx398dNAHfa6FGxyy8D6oM7wa1vxjpEB1uzJpWcNG",
+      "lamports": 1684320,
+      "executable": false,
+      "dataBase64": "KM4z6fYoslXgCZFRU2RQvh1VsL8W/uGzUBz/MQBLFpjTh573HgzSDmY9WneeSRal0o7f8pMFU4Y8BdioHRwc3VTImgU3tPCgBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcAkNADAAAAAAD/"
+    },
+    {
+      "address": "FsTLDdsAHYtbFCRXk1Px6mi47t1tYQadF42qQP5DWebT",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 2039280,
+      "executable": false,
+      "dataBase64": "Zj1ad55JFqXSjt/ykwVThjwF2KgdHBzdVMiaBTe08KBxJlbmF8Ow/7eoJZlp5rPLhmzPc5vcb8yc03yjGpPsmJDQAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "address": "7t6r6MTjf6RBMoLtkPmEpK9RkG3fdw28JoimYP61hKy9",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "lamports": 1461600,
+      "executable": false,
+      "dataBase64": "AQAAAOAJkVFTZFC+HVWwvxb+4bNQHP8xAEsWmNOHnvceDNIOQEIPAAAAAAAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  ]
+}

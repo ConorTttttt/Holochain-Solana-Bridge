@@ -1,0 +1,54 @@
+{
+  "kind": "HSC_A4_BINDING_REVIEW_SYNTHETIC_PRIMITIVE_VECTORS_NOT_FULL_WITNESS",
+  "domainPrefixUtf8": "HSC/solana-audit-demo-v2/source-to-dna",
+  "domainSeparatorHex": "00",
+  "algorithm": "sha256",
+  "objectKeyOrder": "UTF-16_code_unit_lexicographic_ascii_test_keys",
+  "encoding": "UTF-8_compact_JSON_no_trailing_newline",
+  "realKitSourceWitness": false,
+  "signedHolochainTransportApproved": false,
+  "vectors": [
+    {
+      "name": "positive_digest_primitive_not_admission",
+      "canonicalByteLength": 1484,
+      "canonicalUnsignedSha256": "97c3f9f018b74d7f91c4c44e65d26d5c18697abc1172394eca1c8578033f68ec",
+      "bindingDigest": "206c010fae05f66b0b3e807a39e97bc869a851e6e7799d2ab0962cadec42ca5e",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    },
+    {
+      "name": "negative_nonce_mutation",
+      "canonicalByteLength": 1484,
+      "canonicalUnsignedSha256": "39d90bb09337c7484e8b8a11854d90cdbe6a4e4d3017c011da23affe4c8f73ff",
+      "bindingDigest": "689ebccac4f98d16c820ed22922c0eb24a8e9dc09ea1cadd4650b2919f164789",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    },
+    {
+      "name": "negative_wire_hash_mutation",
+      "canonicalByteLength": 1484,
+      "canonicalUnsignedSha256": "f95fb24f5be1a9fdc01dfd621b40b0e2842d6c7f710e6f62848e4e1b5086de49",
+      "bindingDigest": "e902c847db713583cd915438bd2de5339cb8e5f43bd775d529cfd4a9869aa0e4",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    },
+    {
+      "name": "negative_raw_sidecar_byte_change",
+      "canonicalByteLength": 1485,
+      "canonicalUnsignedSha256": "2a3c2f6464ce8b1922f9da2fed47727efd63d4ef32e694a1fb99fb6ae9f4b4be",
+      "bindingDigest": "d690a5ff42e2dc91609c909985a6f0fb61b29f14b9a32e22119e2b1530dad515",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    },
+    {
+      "name": "negative_cellid_mutation",
+      "canonicalByteLength": 1485,
+      "canonicalUnsignedSha256": "e4a232bf14b2620cf49a57318870088a349107cc76516d311a38d7476e5c5f2f",
+      "bindingDigest": "0249c86aff0d605cba1ce88a4f9f562614eb8f739a50a9dccaba038b846a8216",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    },
+    {
+      "name": "negative_credit_eligibility_escalation",
+      "canonicalByteLength": 1483,
+      "canonicalUnsignedSha256": "a365d7df19f949dcb96f30ee5080dbf38be5fad4e0692191a535cd16e556be54",
+      "bindingDigest": "50d495e5cc5aea5dfd8525a578494127d23e34339fc744092e93736ef4a5032f",
+      "expectedReviewOnlyAdmission": "REFUSED_INCOMPLETE_SYNTHETIC_RECORD"
+    }
+  ]
+}

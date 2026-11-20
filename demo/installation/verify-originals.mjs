@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
+import {decode} from './msgpack.mjs';
+import {confirmSourceAndWitness} from '../a0-bind-same-run-dna.mjs';
+export const hash=b=>createHash('sha256').update(b).digest('hex');
+const pins=JSON.parse(readFileSync('demo/installation/baseline.json'));
+const base='work/installation-originals/';
+const read=(part,p)=>readFileSync(base+part+'/'+p);
+const json=(part,p)=>JSON.parse(read(part,p));
+const req=json('build','ci-artifacts/a0-install-authorization-request.json');
+const binding=json('build','ci-artifacts/a0-bound-dna/source-domain-binding.json');
+assert.equal(req.sourceCommit,pins.sourceCommit);assert.equal(req.authorization,'NOT_SUPPLIED');assert.equal(req.installed,false);
+const inventory={};
+for(const [p,v] of Object.entries(req.artifacts)){
+ assert.match(p,/^holochain\/demo\/[\w./-]+$/);assert.ok(!p.includes('..'));
+ const b=read('build',p);assert.equal(hash(b),v.sha256,'BUILD_ARTIFACT_DRIFT:'+p);
+ inventory[p]={sha256:hash(b),bytes:b.length};
+ if(p.endsWith('.wasm'))assert.ok(b.subarray(0,8).equals(Buffer.from([0,97,115,109,1,0,0,0])),'NOT_WASM');
+ if(p.endsWith('solana-audit-ham-adapter'))assert.equal(b.subarray(0,4).toString('hex'),'7f454c46','NOT_ELF');
+}
+const source=json('sol','target/localnet-evidence/demo-source-domain.json');
+const obsFile='observer-fresh-domain-reviewed-v2-original-signed-localnet.json';
+const obsBytes=read('obs',obsFile);const obs=JSON.parse(obsBytes);
+const verified=confirmSourceAndWitness(source,obs,obsBytes,hash(obsBytes),pins.sourceCommit);
+assert.equal(hash(obsBytes),binding.originalKitReplayArtifactSha256);
+assert.equal(hash(read('sol','target/localnet-evidence/demo-source-domain.json')),binding.originalSourceManifestSha256);
+assert.equal(hash(read('sol','target/localnet-evidence/evidence-manifest.sha256')),binding.originalArchiveManifestSha256);
+assert.equal(hash(read('build','ci-artifacts/a0-bound-dna/source-domain-binding.json')),req.sourceBindingSha256);
+const yaml=read('build','ci-artifacts/a0-bound-dna/bound-dna-source.yaml');assert.equal(hash(yaml),binding.derivedDnaSourceSha256);
+const path='holochain/demo/';
+const dna=read('build',path+'holochain_solana_audit_demo.dna');const happ=read('build',path+'holochain_solana_audit_demo.happ');
+const unpack=b=>decode(gunzipSync(b,{maxOutputLength:64*1024*1024}));
+const d=unpack(dna),h=unpack(happ);
+assert.equal(d.manifest.name,'holochain_solana_audit_demo');
+assert.ok(Object.values(h.resources).some(x=>Buffer.isBuffer(x)&&x.equals(dna)),'HAPP_EMBEDDED_DNA_DIFFERS');
+for(const name of ['solana_audit_integrity','solana_audit']){
+ const wasm=read('build',path+'target/wasm32-unknown-unknown/release/'+name+'.wasm');
+ assert.ok(Object.values(d.resources).some(x=>Buffer.isBuffer(x)&&x.equals(wasm)),'DNA_EMBEDDED_WASM_DIFFERS');
+}
+const props=d.manifest.integrity.properties;
+assert.equal(props.demoOnly,true);assert.equal(props.genesisHash,source.genesisHash);assert.equal(props.program,source.programId);assert.equal(props.mint,source.mint);assert.equal(props.holochainScope,source.initializedScopeHex);
+assert.equal(d.manifest.integrity.network_seed,binding.deterministicPublicDemoNetworkSeed);
+const log=read('build','ci-artifacts/a0-source-bound-build.log').toString();
+assert.ok((log.match(/Finished/g)||[]).length>=2,'BOTH_COMPILE_COMPLETIONS_REQUIRED');
+for(const marker of ['rustc 1.95.0','cargo 1.95.0','0.7.1','Finished'])assert.ok(log.includes(marker),'COMPILER_LOG_MARKER_MISSING:'+marker);
+assert.equal(req.builtDnaHash,read('build',path+'demo-build-dna-hash.txt').toString().trim());
+const ciVerification=JSON.parse(readFileSync(base+'baseline-api-verification.json'));
+assert.equal(ciVerification.sourceCommit,pins.sourceCommit);
+const report={ciVerification,schema:'hsc-original-artifact-independent-inventory-v1',...pins,verification:'ORIGINAL_ZIP_AND_EMBEDDED_BINARY_BYTES_CHECKED',artifacts:inventory,dnaHash:req.builtDnaHash,sourceBinding:binding,originalSignedWireSha256:verified.originalSignedWireSha256,compilerLogSha256:hash(Buffer.from(log)),installed:false,actionHash:null};
+writeFileSync('work/installation-originals/verified-inventory.json',JSON.stringify(report,null,2)+'\n');
+console.log('::notice title=Original build inventory::'+JSON.stringify(report));

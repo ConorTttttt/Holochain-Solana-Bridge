@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-/** Pure JavaScript base58 is used only to parse/display addresses, NEVER signatures. */
+/** Base58 helpers are for address/field serialization, never signature verification. */
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const INDEX = new Map([...ALPHABET].map((x, i) => [x, BigInt(i)]));
 
@@ -32,7 +32,7 @@ export function encode58(bytes) {
 
 export function addressBytes(value) {
   const raw = decode58(value);
-  if (raw.length !== 32) throw new Error(`Address ${value} is not 32 bytes`);
+  if (raw.length !== 32 || encode58(raw) !== value) throw new Error(`Invalid 32-byte canonical address: ${value}`);
   return raw;
 }
 
@@ -45,6 +45,12 @@ function bool(raw, index) {
   return raw[index] === 1;
 }
 
+function coption(raw, offset, label) {
+  const option = raw.readUInt32LE(offset);
+  if (option !== 0 && option !== 1) throw new Error(`Noncanonical ${label} option`);
+  return option === 1;
+}
+
 function check(raw, name, n) {
   if (!Buffer.isBuffer(raw) || raw.length !== n) throw new Error(`${name} account length is not ${n}`);
   if (!raw.subarray(0, 8).equals(discriminator(name))) throw new Error(`${name} discriminator mismatch`);
@@ -53,6 +59,7 @@ function check(raw, name, n) {
 function addr(raw, at) { return encode58(raw.subarray(at, at + 32)); }
 function hex(raw, at) { return raw.subarray(at, at + 32).toString('hex'); }
 
+/** Anchor/Borsh account offsets from current source; generated IDL still required. */
 export function decodeReceipt(raw) {
   check(raw, 'DepositReceipt', 218);
   return Object.freeze({
@@ -81,18 +88,35 @@ export function decodeConfig(raw) {
   });
 }
 
+/** Classic SPL token Account (165 bytes), not Token-2022. */
 export function decodeTokenAccount(raw) {
   if (!Buffer.isBuffer(raw) || raw.length !== 165) throw new Error('Not a classic SPL token account (165 bytes)');
-  const delegateOption = raw.readUInt32LE(72);
-  const closeOption = raw.readUInt32LE(129);
-  if (delegateOption > 1 || closeOption > 1) throw new Error('Invalid token optional authorities');
+  const hasDelegate = coption(raw, 72, 'delegate');
+  const isNative = coption(raw, 109, 'native');
+  const hasCloseAuthority = coption(raw, 129, 'close authority');
+  if (raw[108] > 2) throw new Error('Invalid token account state');
   return Object.freeze({
     mint: addr(raw, 0),
     authority: addr(raw, 32),
     amount: raw.readBigUInt64LE(64).toString(),
-    hasDelegate: delegateOption === 1,
+    hasDelegate,
     state: raw[108],
-    hasCloseAuthority: closeOption === 1,
+    isNative,
+    hasCloseAuthority,
+  });
+}
+
+/** Classic SPL token Mint (82 bytes), not Token-2022. */
+export function decodeMint(raw) {
+  if (!Buffer.isBuffer(raw) || raw.length !== 82) throw new Error('Not a classic SPL mint (82 bytes)');
+  const hasMintAuthority = coption(raw, 0, 'mint authority');
+  const hasFreezeAuthority = coption(raw, 46, 'freeze authority');
+  return Object.freeze({
+    hasMintAuthority,
+    supply: raw.readBigUInt64LE(36).toString(),
+    decimals: raw[44],
+    initialized: bool(raw, 45),
+    hasFreezeAuthority,
   });
 }
 

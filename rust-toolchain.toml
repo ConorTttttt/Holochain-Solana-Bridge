@@ -1,0 +1,6 @@
+# Host Rust >=1.95 required: solana-sbpf 0.23.0 uses Layout::dangling_ptr. SBPF compiler is separately
+# supplied by Solana platform-tools v1.57 (recommended with Solana 4.1.2).
+[toolchain]
+channel = "1.95.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
