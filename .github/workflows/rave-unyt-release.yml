@@ -1,9 +1,15 @@
 name: RAVE Unyt v0.117.0 release proof (non-economic)
 
+# AUTHORIZATION LOCK (2026-11-20, PR #68): `workflow_dispatch` is REMOVED and the
+# conductor install/restart job below is hard-disabled (`if: ${{ false }}`).
+# Installing a third-party hApp into a conductor is a Holochain mutation; no
+# independent exact-call authorization exists. Re-enabling either requires a
+# reviewed PR with RAVE + SEC approval. Guarded by
+# scripts/ci/workflow-install-gates.test.mjs. Historical branches named below
+# keep their OWN copies of this file; see docs/consolidation/MAINLINE_MAINTENANCE.md.
 on:
   push:
     branches: [agent/rave/9-rave-validation, integration/s0/11-all-agent-snapshot, integration/s0/2026-11-14-agent1-candidate, integration/s0/2026-11-14-sol38-review-pending, integration/demo/2026-11-14-a1-rave5-required-review, integration/demo/2026-11-14-a1-a0-evidence-gated, integration/demo/2026-11-14-a1-bootstrap-source-v2]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -122,8 +128,10 @@ jobs:
           retention-days: 14
 
   actual-non-economic-conductor-probe:
-    name: Actual disposable Unyt conductor install/restart (NO zome economics)
+    name: Actual disposable Unyt conductor install/restart (DISABLED - authorization absent)
     needs: [release-integrity, compatible-cli-bundle-inspection]
+    # Installation/genesis mutate Holochain; no independent exact-call authorization exists.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:

@@ -1,4 +1,4 @@
-name: Original #66 evidence preservation and restore check (NO MUTATION)
+name: 'Original #66 evidence preservation and restore check (NO MUTATION)'
 
 # Downloads the ORIGINAL #66 run 43648980986 archives through the authenticated
 # Actions API, verifies their exact SHA-256 / size / CRC against

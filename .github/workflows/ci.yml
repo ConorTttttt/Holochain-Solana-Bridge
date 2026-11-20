@@ -103,6 +103,8 @@ jobs:
         run: bash scripts/ci/record.sh guard-tests node --test scripts/ci/guard.test.mjs
       - name: Examine Git-tracked paths and text
         run: bash scripts/ci/record.sh guard-scan node scripts/ci/guard.mjs
+      - name: Conductor-install/genesis/mutating-zome workflow gates (positive and adversarial)
+        run: bash scripts/ci/record.sh workflow-install-gates node --test scripts/ci/workflow-install-gates.test.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

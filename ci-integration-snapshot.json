@@ -172,6 +172,18 @@
     {
       "path": "observer/test/rpc-meta-equivalence.test.mjs",
       "reason": "SHA-exact Agent 3 original source-owned negative regression copied into integration review; provisional until explicit handoff"
+    },
+    {
+      "path": "observer/src/demo-outbox.mjs",
+      "reason": "PR #48 port (durable returned ActionHash, terminal HOLD, path-scoped uiAmount) until OBS reviews and lands it upstream; OBS + SEC review required"
+    },
+    {
+      "path": "observer/test/demo-outbox.test.mjs",
+      "reason": "PR #48 port (durable returned ActionHash, terminal HOLD, path-scoped uiAmount) until OBS reviews and lands it upstream; OBS + SEC review required"
+    },
+    {
+      "path": ".github/workflows/rave-unyt-release.yml",
+      "reason": "Authorization lock: workflow_dispatch removed and conductor install probe hard-disabled until RAVE + SEC approve an exact-call authorization path"
     }
   ],
   "conductorStatus": "REAL DISPOSABLE Holochain 0.7.1 local conductor install/restart and matching app/cell identity VERIFIED at RAVE 17a3623 / Actions 43537089670; NO approved zome call or source-to-WASM equivalence, no B2/C authorization.",
@@ -557,11 +569,6 @@
       "sha": "9c8e950eef7d50e832a3c097257a19d08de86249",
       "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
     },
-    "observer/src/demo-outbox.mjs": {
-      "lane": "OBS",
-      "sha": "fa80ac6035b47c2017f5d097360aa54a251a8689",
-      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
-    },
     "observer/src/demo-witness-v2.mjs": {
       "lane": "OBS",
       "sha": "0678d614797c29db3ca6a9a4264dd885381fc9c5",
@@ -606,11 +613,6 @@
       "lane": "OBS",
       "sha": "70ad8499007c316440681d27866560ee73f28f39",
       "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
-    },
-    "observer/test/demo-outbox.test.mjs": {
-      "lane": "OBS",
-      "sha": "9001a088ec4f9a6646617d0467a5b6d1c1a7d971",
-      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
     },
     "observer/test/history.test.mjs": {
       "lane": "OBS",
@@ -1119,7 +1121,53 @@
       "reason": "CI flips decodable wire byte for signature-negative test; SEC source still mutates trailing compact count"
     },
     ".github/workflows/rave-unyt-release.yml": {
-      "reason": "RAVE-owned workflow content from prior reviewed source, CI-only new immutable staging branch push trigger; no specialist branch edited"
+      "reason": "RAVE-owned workflow content from prior reviewed source, CI-only new immutable staging branch push trigger; no specialist branch edited. 2026-11-20 authorization lock (PR #68 P0 phase 2D): workflow_dispatch removed and actual-non-economic-conductor-probe hard-disabled with if: ${{ false }} (third-party hApp install into a conductor is a Holochain mutation without independent exact-call authorization); enforced by scripts/ci/workflow-install-gates.test.mjs. Re-enabling requires a reviewed PR with RAVE + SEC approval."
+    },
+    "observer/src/demo-outbox.mjs": {
+      "blobSha": "0e972ec939ade93276cca2ec49b4819324cbb6e8",
+      "lane": "OBS",
+      "priorUpstreamBlob": "fa80ac6035b47c2017f5d097360aa54a251a8689",
+      "priorUpstreamSourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03",
+      "portedFrom": {
+        "pr": 48,
+        "prHead": "3258cb9eb70f2e11e7092a8894617e1a2ad0daea",
+        "commits": [
+          "63403b87444e8d7c7faf653fc0e672bb59dfa28c",
+          "cafc19e78d2f2f73715cbbcd34e4483955e6cef1",
+          "b29e4690dd8d2bd41ef07fba92e94ae7ab820d1a",
+          "3288d114063162afc5d2005229327a03b413f0c7",
+          "2802d957ce8559a5e28b3941601f0cb6d3d0b5e0"
+        ],
+        "integrationCommit": "98db651dd5fa557eb1d36a714149f36f4fd88a0e"
+      },
+      "reason": "Integration port of PR #48 (OBS) onto the consolidated outbox: durable returnedActionHash persisted before readback, contradiction/malformed/substituted returned ActionHash => terminal HOLD (also across restart), and uiAmount non-integer/negative rules scoped to the exact uiTokenAmount.uiAmount path. Malformed-response HOLD is stricter than #48. v2 transport remains refused. Not byte-identical to any OBS upstream blob: OBS + SEC review required before it can be re-attributed to the OBS lane.",
+      "reviewRequired": [
+        "OBS",
+        "SEC"
+      ]
+    },
+    "observer/test/demo-outbox.test.mjs": {
+      "blobSha": "f36697efd9e017ebdf6e5b4110d62ea8c3fd6609",
+      "lane": "OBS",
+      "priorUpstreamBlob": "9001a088ec4f9a6646617d0467a5b6d1c1a7d971",
+      "priorUpstreamSourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447",
+      "portedFrom": {
+        "pr": 48,
+        "prHead": "3258cb9eb70f2e11e7092a8894617e1a2ad0daea",
+        "commits": [
+          "63403b87444e8d7c7faf653fc0e672bb59dfa28c",
+          "cafc19e78d2f2f73715cbbcd34e4483955e6cef1",
+          "b29e4690dd8d2bd41ef07fba92e94ae7ab820d1a",
+          "3288d114063162afc5d2005229327a03b413f0c7",
+          "2802d957ce8559a5e28b3941601f0cb6d3d0b5e0"
+        ],
+        "integrationCommit": "98db651dd5fa557eb1d36a714149f36f4fd88a0e"
+      },
+      "reason": "Integration port of PR #48 adversarial tests (ActionHash authenticity, durable ACK, terminal HOLD, replay/substitution, uiAmount ambiguity, restart) onto the consolidated test file; test 18 strengthened from uncertain to durable HOLD. OBS + SEC review required.",
+      "reviewRequired": [
+        "OBS",
+        "SEC"
+      ]
     }
   },
   "currentAcceptance": {
