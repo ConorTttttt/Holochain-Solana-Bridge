@@ -12,7 +12,8 @@ const observation = { kind: 'solana-receipt-observation-v1', id: 'g:p:r', genesi
   configDigest: 'b'.repeat(64), vaultDigest: 'c'.repeat(64), mintDigest: 'd'.repeat(64),
   configBump: 252, receiptBump: 249, mintSupplyBaseUnits: '1000', activeVaultBaseUnits: '500',
   activeLiabilitiesBaseUnits: '200', commitmentRequested: 'finalized', transactionVerified: false,
-  evidenceTrust: 'untrusted_rpc_snapshot', refunded: false, state: 'active_refundable', creditEligible: false };
+  evidenceTrust: 'untrusted_rpc_snapshot', refunded: false, state: 'active_refundable', creditEligible: false,
+  independentConsensusVerified: false, spendableBaseUnits: '0', withdrawalAuthorized: false };
 function run(changes = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'rave-s0-cli-'));
   try {
