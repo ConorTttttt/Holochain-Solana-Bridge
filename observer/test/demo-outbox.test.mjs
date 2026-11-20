@@ -147,11 +147,15 @@ test('17 remote readback with wrong denial flags never ACKs',async t=>{
   assert.equal(await outbox.deliver(evidence.id,client),'pending');
   assert.equal(client.writes,0);
 });
-test('18 signed write response mismatched readback ActionHash stays uncertain',async t=>{
-  const {outbox,evidence,queue}=make(t);queue();const client=remote();
+// Ported from PR #48 cafc19e. Previously this test asserted that a later
+// reconcile ACKed the contradicting readback; that is the weakness 63403b8 fixed.
+test('18 signed write response/readback ActionHash contradiction is durable HOLD',async t=>{
+  const {outbox,evidence,queue,path}=make(t);queue();const client=remote();
   const orig=client.write.bind(client);client.write=async (...args)=>{await orig(...args);return {actionHash:'not-the-readback-action'}};
   assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
-  assert.equal(await outbox.reconcile(evidence.id,client),'acked');assert.equal(client.writes,1);
+  assert.equal(JSON.parse(readFileSync(path,'utf8')).rows[evidence.id].returnedActionHash,'not-the-readback-action');
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');assert.equal(client.writes,1);
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');
 });
 test('19 arbitrary JSON cannot claim reviewed provenance via production queue API',async t=>{
   const {outbox,ledger,evidence,tx}=make(t);
@@ -546,4 +550,137 @@ test('45 rehashed reviewed-proof kind and verification claims must stay pinned',
     assert.throws(()=>verifyReviewedWitnessV2(w),
       /OBS_V2_REFUSED:REVIEWED_PROOF_CONTRACT/);
   }
+});
+
+// ---- PR #48 port (63403b8 / cafc19e / b29e469 / 3288d11 / 2802d95), adapted to
+// the Kit v2 outbox. Synthetic transport only: no conductor, Lair, signing,
+// capability grant or v2 transport is involved or enabled.
+test('46 restart retains returned ActionHash and refuses a contradictory later source record',async t=>{
+  const {path,outbox,evidence,queue}=make(t);queue();const client=remote();
+  const write=client.write.bind(client);
+  client.write=async(...args)=>{await write(...args);client.records.delete(evidence.id);
+    return {actionHash:'source-action-A'}};
+  assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
+  assert.equal(JSON.parse(readFileSync(path,'utf8')).rows[evidence.id].returnedActionHash,'source-action-A');
+  outbox.close();
+  const restored=new DemoOutbox(path,{expected,destination});
+  client.records.set(evidence.id,{
+    actionHash:'different-source-action-B',observation:restored.state.rows[evidence.id].observation,...DENIALS,
+  });
+  assert.equal(await restored.reconcile(evidence.id,client),'hold');
+  assert.equal(await restored.deliver(evidence.id,client),'hold');
+  assert.equal(client.writes,1,'no second write after an ambiguous prior write');
+  restored.close();
+});
+test('47 exact returned ActionHash may ACK only the matching later readback after restart',async t=>{
+  const {path,outbox,evidence,queue}=make(t);queue();const client=remote();
+  const write=client.write.bind(client);
+  client.write=async(...args)=>{await write(...args);client.records.delete(evidence.id);
+    return {actionHash:'expected-source-action'}};
+  assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
+  outbox.close();
+  const restored=new DemoOutbox(path,{expected,destination});
+  client.records.set(evidence.id,{
+    actionHash:'expected-source-action',observation:restored.state.rows[evidence.id].observation,...DENIALS,
+  });
+  assert.equal(await restored.reconcile(evidence.id,client),'acked');
+  assert.equal(restored.status.rows[evidence.id].actionHash,'expected-source-action');
+  assert.equal(client.writes,1);
+  restored.close();
+});
+test('48 HOLD is terminal: a later perfectly matching readback never ACKs and never writes',async t=>{
+  const {outbox,evidence,queue,path}=make(t);queue();const client=remote();
+  assert.equal(await outbox.deliver(evidence.id,client,{crashAt:'after_uncertain'}),'uncertain');
+  client.preflight=async()=>{throw Error('conductor offline')};
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');
+  client.preflight=async()=>structuredClone(destination);
+  client.records.set(evidence.id,{actionHash:'uhCkk-LATER-VALID',
+    observation:outbox.state.rows[evidence.id].observation,...DENIALS});
+  for(let i=0;i<3;i++){
+    assert.equal(await outbox.reconcile(evidence.id,client),'hold');
+    assert.equal(await outbox.deliver(evidence.id,client),'hold');
+  }
+  assert.equal(client.writes,0);assert.equal(outbox.status.rows[evidence.id].actionHash,null);
+  outbox.close();
+  const again=new DemoOutbox(path,{expected,destination});
+  assert.equal(await again.reconcile(evidence.id,client),'hold','HOLD survives restart');
+  again.close();
+});
+test('49 malformed returned ActionHash (empty, oversized, non-string) is a terminal HOLD',async t=>{
+  for(const bad of ['','x'.repeat(256),{actionHash:'nested'},42,null]){
+    const {outbox,evidence,queue,path}=make(t);queue();const client=remote();
+    const write=client.write.bind(client);
+    client.write=async(...args)=>{await write(...args);return {actionHash:bad}};
+    assert.equal(await outbox.deliver(evidence.id,client),'hold',JSON.stringify(bad));
+    const row=JSON.parse(readFileSync(path,'utf8')).rows[evidence.id];
+    assert.equal(row.state,'hold');assert.equal(row.actionHash,null);assert.equal(row.returnedActionHash,null);
+    assert.equal(await outbox.reconcile(evidence.id,client),'hold');
+    assert.equal(client.writes,1);
+  }
+});
+test('50 returned ActionHash substituted from another source never ACKs either source twice',async t=>{
+  const {outbox,ledger,tx,evidence,queue}=make(t);queue();
+  const second=queueSecondSource({outbox,ledger,tx,evidence});
+  let n=0;const client=remote();
+  client.write=async(item)=>{n++;const actionHash='uhCkk-UNIQUE-'+n;
+    client.records.set(item.source.id,{actionHash,observation:structuredClone(item),...DENIALS});
+    return {actionHash}};
+  assert.equal(await outbox.deliver(evidence.id,client),'acked');
+  const firstHash=outbox.status.rows[evidence.id].actionHash;
+  client.write=async(item)=>{client.records.set(item.source.id,{actionHash:'uhCkk-UNIQUE-2',
+    observation:structuredClone(item),...DENIALS});return {actionHash:firstHash}};
+  assert.equal(await outbox.deliver(second.id,client),'uncertain');
+  assert.equal(await outbox.reconcile(second.id,client),'hold');
+  assert.equal(outbox.status.rows[second.id].actionHash,null);
+  assert.equal(outbox.status.rows[evidence.id].actionHash,firstHash);
+});
+test('51 replayed or substituted readback payload with the returned ActionHash is refused',async t=>{
+  const {outbox,evidence,queue}=make(t);queue();const client=remote();
+  const write=client.write.bind(client);
+  client.write=async(item,dest)=>{await write(item,dest);
+    const forged=structuredClone(item);forged.source.amountBaseUnits='250001';
+    client.records.set(item.source.id,{actionHash:'uhCkk-RETURNED',observation:forged,...DENIALS});
+    return {actionHash:'uhCkk-RETURNED'}};
+  assert.equal(await outbox.deliver(evidence.id,client),'uncertain');
+  assert.equal(await outbox.reconcile(evidence.id,client),'hold');
+  assert.equal(outbox.status.rows[evidence.id].actionHash,null);
+  assert.equal(client.writes,1);
+});
+test('52 tampered journal: remote hash on pending, ACK/returned disagreement or bad format refuse to load',async t=>{
+  for(const [label,mutate,code] of [
+    ['pending-has-returned',row=>{row.returnedActionHash='uhCkk-X'},/PENDING_HAS_REMOTE_ACTION/],
+    ['ack-disagrees',row=>{row.state='acked';row.actionHash='uhCkk-A';row.returnedActionHash='uhCkk-B'},/RETURNED_ACTION_CONFLICT/],
+    ['oversized',row=>{row.state='uncertain';row.returnedActionHash='x'.repeat(256)},/RETURNED_ACTION_FORMAT/],
+    ['non-string',row=>{row.state='uncertain';row.returnedActionHash=7},/RETURNED_ACTION_FORMAT/],
+  ]){
+    const {outbox,evidence,queue,path}=make(t);queue();outbox.close();
+    const state=JSON.parse(readFileSync(path,'utf8'));mutate(state.rows[evidence.id]);
+    writeFileSync(path,JSON.stringify(state));
+    assert.throws(()=>new DemoOutbox(path,{expected,destination}),code,label);
+  }
+});
+test('53 uiAmount: fractions only at uiTokenAmount.uiAmount, non-negative, no -0; valid digests unchanged',()=>{
+  const meta={err:null,fee:5000,preBalances:[1000,2],postBalances:[995,2],computeUnitsConsumed:12345,
+    preTokenBalances:[{accountIndex:1,mint:'M',owner:'O',programId:'T',uiTokenAmount:{amount:'250000',decimals:6,uiAmount:0.25,uiAmountString:'0.25'}}],
+    postTokenBalances:[{accountIndex:1,mint:'M',owner:'O',programId:'T',uiTokenAmount:{amount:'0',decimals:6,uiAmount:0,uiAmountString:'0'}}],
+    rewards:null,logMessages:['Program log: x'],loadedAddresses:{writable:[],readonly:[]}};
+  // Pinned with the pre-port encoder: valid genuine-shaped metadata keeps its digest.
+  assert.equal(domainDigest('HSC/observer-demo-outbox/v1/rpc-meta',meta),
+    '13384d3d7134918e38c59903d9c96e7ac584fc3bc8c0326aa9e6b844371a54bf');
+  for(const [label,bad] of [
+    ['fraction-elsewhere',{fee:0.5}],
+    ['uiAmount-not-under-uiTokenAmount',{uiAmount:0.25}],
+    ['fractional-decimals',{uiTokenAmount:{decimals:6.5}}],
+    ['negative-fraction',{uiTokenAmount:{uiAmount:-0.25}}],
+    ['negative-integer-display',{uiTokenAmount:{uiAmount:-1}}],
+    ['negative-zero-display',{uiTokenAmount:{uiAmount:-0}}],
+    ['negative-zero-anywhere',{fee:-0}],
+    ['negative-zero-in-array',{preBalances:[0,-0]}],
+    ['top-level-fraction',[0.5]],
+    ['unsafe-display-integer',{uiTokenAmount:{uiAmount:2**60}}],
+    ['nan-display',{uiTokenAmount:{uiAmount:NaN}}],
+  ])assert.throws(()=>canonicalJSON(bad),/NON_CANONICAL_NUMBER/,label);
+  // Ambiguity: "-0" and "0" must not share a canonical form, so -0 is refused.
+  assert.equal(canonicalJSON({uiTokenAmount:{uiAmount:0}}),'{"uiTokenAmount":{"uiAmount":0}}');
+  assert.equal(canonicalJSON({a:[{uiTokenAmount:{uiAmount:1e-6}}]}),'{"a":[{"uiTokenAmount":{"uiAmount":0.000001}}]}');
 });

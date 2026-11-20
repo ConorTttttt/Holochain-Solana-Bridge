@@ -20,23 +20,34 @@ function obj(x){return x!==null&&typeof x==='object'&&!Array.isArray(x)&&Object.
 function exact(x,fields,label){
   need(obj(x)&&Object.keys(x).length===fields.length&&Object.keys(x).every(k=>fields.includes(k)),label+'_SHAPE');
 }
-function encode(x){
+// Port of PR #48 b29e469/3288d11, path-scoped inside the ONE shared encoder
+// (the reviewed v2 witness digest also encodes original block metadata, so the
+// rule cannot live only in a separate rpc-meta encoder). Solana JSON-RPC token
+// balances carry a UI-only display number at `...uiTokenAmount.uiAmount`
+// (e.g. 0.25); authoritative amounts are separately checked u64 decimal
+// strings. A finite, non-negative, non-integer number is therefore permitted
+// ONLY at that display path; everywhere else canonical numbers are strictly
+// safe integers. -0 is refused everywhere because it would canonicalize to the
+// same text as 0. Output for every previously accepted valid value is unchanged.
+function isDisplayAmountPath(path){
+  return path.length>=2&&path[path.length-1]==='uiAmount'&&path[path.length-2]==='uiTokenAmount';
+}
+function encodeAt(x,path){
   if(x===null||typeof x==='string'||typeof x==='boolean')return JSON.stringify(x);
   if(typeof x==='number'){
-    // Original RPC execution metadata includes uiTokenAmount.uiAmount as a
-    // finite non-integer display number (e.g. 0.25). Preserve original JSON
-    // representation without treating it as an exact token amount. Every
-    // authoritative amount in our schema is separately checked as a u64 string.
-    need(Number.isFinite(x)&&(!Number.isInteger(x)||Number.isSafeInteger(x)),
-      'NON_CANONICAL_NUMBER');
+    need(Number.isFinite(x)&&!Object.is(x,-0),'NON_CANONICAL_NUMBER');
+    if(isDisplayAmountPath(path))need(x>=0,'NON_CANONICAL_NUMBER');
+    if(Number.isInteger(x))need(Number.isSafeInteger(x),'NON_CANONICAL_NUMBER');
+    else need(isDisplayAmountPath(path)&&x<=Number.MAX_SAFE_INTEGER,'NON_CANONICAL_NUMBER');
     return JSON.stringify(x);
   }
-  if(Array.isArray(x))return '['+x.map(encode).join(',')+']';
+  if(Array.isArray(x))return '['+x.map((v,i)=>encodeAt(v,[...path,String(i)])).join(',')+']';
   need(obj(x),'NON_CANONICAL_OBJECT');
   const keys=Object.keys(x).sort();
   need(keys.every(k=>!['__proto__','constructor','prototype'].includes(k)),'PROTOTYPE_KEY');
-  return '{'+keys.map(k=>JSON.stringify(k)+':'+encode(x[k])).join(',')+'}';
+  return '{'+keys.map(k=>JSON.stringify(k)+':'+encodeAt(x[k],[...path,k])).join(',')+'}';
 }
+function encode(x){return encodeAt(x,[]);}
 export const canonicalJSON=encode;
 const sha256=(x)=>createHash('sha256').update(x).digest('hex');
 export const domainDigest=(domain,data)=>sha256(Buffer.concat([Buffer.from(domain,'utf8'),Buffer.from([0]),Buffer.from(encode(data),'utf8')]));
@@ -176,6 +187,15 @@ function checkRow(row,expected,destination){
   }),'WORK_FINGERPRINT');
   need(row.state!=='acked'||typeof row.actionHash==='string'&&row.actionHash.length>0,'ACK_WITHOUT_ACTION');
   if(row.state!=='acked')need(row.actionHash===null,'UNACKED_HAS_ACTION');
+  // Port of PR #48 63403b8: an ActionHash returned by a signed write is
+  // durable. It may only be absent (legacy rows) or null before any write, and
+  // an acknowledged row can never disagree with it.
+  need(row.returnedActionHash===undefined||row.returnedActionHash===null||
+    typeof row.returnedActionHash==='string'&&row.returnedActionHash.length>0&&
+    row.returnedActionHash.length<256,'RETURNED_ACTION_FORMAT');
+  if(row.state==='pending')need(row.returnedActionHash==null,'PENDING_HAS_REMOTE_ACTION');
+  if(row.state==='acked'&&row.returnedActionHash!=null)
+    need(row.returnedActionHash===row.actionHash,'RETURNED_ACTION_CONFLICT');
 }
 function verifyRemote(remote,row){
   exact(remote,['actionHash','observation',...BASE],'REMOTE_RECORD');deny(remote,'REMOTE_RECORD');
@@ -315,7 +335,7 @@ export class DemoOutbox {
     need(!Object.values(this.state.rows).some(x=>x.observation.source.occurrenceId===evidence.occurrenceId),
       'OCCURRENCE_REPLAY');
     this.state.rows[evidence.id]={state:'pending',observation,components,destination:this.destination,
-      ...(reviewedWitnessV2?{reviewedWitnessV2}:{}),fingerprint,actionHash:null};
+      ...(reviewedWitnessV2?{reviewedWitnessV2}:{}),fingerprint,actionHash:null,returnedActionHash:null};
     try{this.persist();}
     catch(e){
       // Never leave an unflushed in-memory row eligible for signed delivery.
@@ -336,8 +356,13 @@ export class DemoOutbox {
   }
   #ack(row,remote){
     const actionHash=verifyRemote(remote,row);
+    // A readback can only ACK the exact ActionHash a prior signed write
+    // returned (if one was recorded), and never a hash already acknowledged
+    // or returned for another source.
+    need(row.returnedActionHash==null||row.returnedActionHash===actionHash,
+      'RETURNED_ACTION_CONFLICT');
     need(!Object.values(this.state.rows).some(other=>
-      other!==row&&other.state==='acked'&&other.actionHash===actionHash),
+      other!==row&&(other.actionHash===actionHash||other.returnedActionHash===actionHash)),
       'REUSED_SIGNED_ACTION_HASH');
     const priorState=row.state,priorActionHash=row.actionHash;
     row.state='acked';row.actionHash=actionHash;
@@ -359,6 +384,9 @@ export class DemoOutbox {
     need(row.observation.proof.evidenceOrigin!=='observer_reviewed_outbox',
       'REVIEWED_V2_SIGNED_TRANSPORT_NOT_APPROVED');
     if(row.state==='acked')return 'acked';
+    // HOLD is terminal: only an operator-reviewed conflict resolution (not
+    // implemented; no API) may move it. A later matching readback never ACKs.
+    if(row.state==='hold')return 'hold';
     try{
       const remote=await this.#read(client,row);
       if(remote)return this.#ack(row,remote);
@@ -392,6 +420,15 @@ export class DemoOutbox {
       if(crashAt==='after_uncertain')throw Error('SIMULATED_PROCESS_CRASH');
       const response=await client.write(structuredClone(row.observation),structuredClone(this.destination));
       if(crashAt==='after_signed_write')throw Error('SIMULATED_PROCESS_CRASH');
+      // A known response hash must survive lost readback, timeout and restart,
+      // and a contradicting later record may NEVER replace it silently.
+      if(response?.actionHash!==undefined){
+        // A present but malformed returned hash is a broken or hostile
+        // transport answer: terminal HOLD (stricter than #48, review item).
+        if(!(typeof response.actionHash==='string'&&response.actionHash.length>0&&
+          response.actionHash.length<256)){row.state='hold';this.persist();return 'hold';}
+        row.returnedActionHash=response.actionHash;this.persist();
+      }
       const readback=await this.#read(client,row);
       need(readback,'MISSING_SIGNED_READBACK');
       const actionHash=verifyRemote(readback,row);
