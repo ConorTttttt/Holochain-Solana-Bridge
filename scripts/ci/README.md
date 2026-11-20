@@ -41,8 +41,8 @@ source scripts/ci/toolchain.env
 rustup toolchain install "$RUST_VERSION" --profile minimal
 rustup default "$RUST_VERSION"
 export RUSTUP_TOOLCHAIN="$RUST_VERSION"
-sh -c "$(curl -fsSL "https://release.anza.xyz/v${SOLANA_VERSION}/install")"
-export PATH="$HOME/.local/share/solana/install/active_release/bin:$HOME/.cargo/bin:$PATH"
+bash scripts/ci/install-agave.sh   # SHA-256-pinned Agave archive (AGAVE_ARCHIVE_SHA256), verified before extraction
+export PATH="$HOME/.local/share/solana/solana-release/bin:$HOME/.cargo/bin:$PATH"
 cargo install --git https://github.com/otter-sec/anchor --tag "v$ANCHOR_VERSION" anchor-cli --locked
 bash scripts/ci/record.sh tool-versions bash scripts/ci/tool-versions.sh
 bash scripts/ci/record.sh prepare-localnet bash scripts/ci/prepare-localnet-program.sh

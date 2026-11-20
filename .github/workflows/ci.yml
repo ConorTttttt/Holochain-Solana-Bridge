@@ -190,11 +190,8 @@ jobs:
           source scripts/ci/toolchain.env
           bash scripts/ci/record.sh rust-setup rustup toolchain install "$RUST_VERSION" --profile minimal
           rustup default "$RUST_VERSION"
-      - name: Install exact Solana CLI
-        run: |
-          source scripts/ci/toolchain.env
-          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install exact Solana CLI (SHA-256-pinned Agave archive; no remote installer script)
+        run: bash scripts/ci/record.sh solana-setup bash scripts/ci/install-agave.sh
       - name: Install exact Anchor CLI
         run: |
           source scripts/ci/toolchain.env
@@ -264,11 +261,8 @@ jobs:
         with:
           node-version: '22.16.0'
           package-manager-cache: false
-      - name: Install exact Solana CLI
-        run: |
-          source scripts/ci/toolchain.env
-          bash scripts/ci/record.sh solana-setup bash -c 'sh -c "$(curl -fsSL "https://release.anza.xyz/v${1}/install")"' _ "$SOLANA_VERSION"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install exact Solana CLI (SHA-256-pinned Agave archive; no remote installer script)
+        run: bash scripts/ci/record.sh solana-setup bash scripts/ci/install-agave.sh
       - name: Capture runtime versions
         run: bash scripts/ci/record.sh validator-versions bash scripts/ci/tool-versions.sh
       - name: Liveness and invalid-RPC negative case
