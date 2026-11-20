@@ -1,5 +1,5 @@
 {
-  "status": "P0 DRAFT: reviewed A4 build remediation adopted; installation and all Holochain mutation require independent exact-call authorization",
+  "status": "CONSOLIDATION DRAFT 2026-11-20: #67 lineage + OBS #62, RAVE #65/#44, SOL #63/#64/#47/#42, SEC #33/#53 merged; installation and all Holochain mutation still require independent exact-call authorization",
   "base": {
     "branch": "agent/ci/16-a0-build-pr-preflight-20261114",
     "sha": "093a7454a36c3a26cc107b06b1334a289940811e"
@@ -9,26 +9,63 @@
       "sha": "c071e4c98e7b2dd04a18374f3792c0a90ce4b284",
       "pr": 55,
       "upstream": "PR #50 640714a14ba338c615cf2ada55ca4166646a2d96",
-      "status": "DRAFT_EXACT_HEAD_STANDALONE_VALIDATOR_SUCCESS_SEPARATE_SEC_REVIEW_REQUIRED"
+      "status": "DRAFT_EXACT_HEAD_STANDALONE_VALIDATOR_SUCCESS_SEPARATE_SEC_REVIEW_REQUIRED",
+      "additionalSourceCommits": [
+        {
+          "sha": "768f463a921998431f17007ffb1a79ac5577da6e",
+          "pr": 64,
+          "adopted": "original PR55 ZIP + review (evidence only)"
+        },
+        {
+          "sha": "02a89b799ca06dd656684799ddce94597a4c3f52",
+          "pr": 63,
+          "adopted": "read-only ZIP verifier + epoch HOLD review"
+        },
+        {
+          "sha": "9d62b8ee5eb760092610193c77eeb49270dfc29e",
+          "pr": 47,
+          "adopted": "produced-slot archive producer (research tooling)"
+        },
+        {
+          "sha": "f2491e0311e51879f8f22aad4d322b3e8f5946b7",
+          "pr": 42,
+          "adopted": "custody ADRs (research only, not implemented)"
+        }
+      ]
     },
     "OBS": {
-      "sha": "38847cf1399c59fd1a1665c8bef2249479d7da03",
-      "pr": 57,
-      "status": "A3_SOURCE_BLOBS_ADOPTED_V2_REVIEW_NOT_APPROVAL"
+      "sha": "e70a178a927e74326abfff6732bf49e66df4f447",
+      "pr": 62,
+      "upstream": "PR #59 52bd850da4db70eb25b621f727c3a52b16153001 <- PR #57 38847cf1399c59fd1a1665c8bef2249479d7da03",
+      "status": "A3_V2_FREEZE_CANDIDATE_NESTED_DENIALS_AND_REPLAY_GUARD_ADOPTED_REVIEW_NOT_APPROVAL"
     },
     "RAVE": {
       "sha": "7ccee3db4a86125bd914a9821f62cba783af0660",
       "pr": 65,
       "status": "A4_REVIEWED_LOCKS_PLUS_RAVE_COMPILER_AND_HOLONIX_FIXES_REVIEW_PENDING_NO_MUTATION_AUTHORIZATION",
-      "upstream": "PR #44 c6b60ac3ab405e4b73509f6cd6a77d8d107da45c"
+      "upstream": "PR #44 c6b60ac3ab405e4b73509f6cd6a77d8d107da45c",
+      "additionalSourceCommits": [
+        {
+          "sha": "f0c0ec00653c9323a2e166f8687c1971c2098d72",
+          "pr": 44,
+          "adopted": "historical INSTALLED_AUDIT_RUNTIME_TUPLE record only; #44 coordinator variant NOT adopted; agent4-real-build.yml and a4-install-readonly.sh NOT adopted"
+        }
+      ]
     },
     "SEC": {
       "sha": "da98cc24f6bda74c4282175c8e2d7cc0d7494f35",
       "pr": 53,
-      "status": "FIXTURE_SYNC_6_OF_6_GREEN_NOT_INDEPENDENT_WRITE_APPROVAL"
+      "status": "FIXTURE_SYNC_6_OF_6_GREEN_NOT_INDEPENDENT_WRITE_APPROVAL",
+      "additionalSourceCommits": [
+        {
+          "sha": "53bc4110583892e6d7bba5533025670e396e5ed7",
+          "pr": 33,
+          "adopted": "SEC evidence, ADR, verify-signed-operations, external-checkpoint-reference; transaction-provenance-adversarial keeps integration-only f16e461"
+        }
+      ]
     }
   },
-  "parentIntegrationCommit": "bc7c8020e2a623cd3a7ce1c8be697fb88faf3365",
+  "parentIntegrationCommit": "d0409a1d85bc377139285c39f9303f3b97470b29",
   "sourceUpdatePaths": {
     "CI": [
       "scripts/ci/verify-integration-provenance.mjs",
@@ -112,7 +149,7 @@
     },
     "solana": "reached negative mint freeze-authority path but failed transaction serialization on missing signer"
   },
-  "latestExecutionStatus": "New candidate CI pending. No new compiled, installed, signed-action or runtime identity claim.",
+  "latestExecutionStatus": "Consolidation candidate CI pending at its own SHA. No new compiled, installed, signed-action or runtime identity claim.",
   "economicPolicy": "creditEligible:false; CREDITING_DISABLED; WITHDRAWALS_DISABLED; P0 STOP; no mainnet",
   "created": "2026-11-13",
   "integrationOnlyPatches": [
@@ -527,8 +564,8 @@
     },
     "observer/src/demo-witness-v2.mjs": {
       "lane": "OBS",
-      "sha": "228754b36de37ac5d018a5a5e01e45728bd0f028",
-      "sourceCommit": "a2338f965916ffac982527f6dc7696e9c5706345"
+      "sha": "0678d614797c29db3ca6a9a4264dd885381fc9c5",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
     },
     "observer/src/history.mjs": {
       "lane": "OBS",
@@ -572,8 +609,8 @@
     },
     "observer/test/demo-outbox.test.mjs": {
       "lane": "OBS",
-      "sha": "325bee81301fff5884cdeb7562f4cdb3cb218a9f",
-      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+      "sha": "9001a088ec4f9a6646617d0467a5b6d1c1a7d971",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
     },
     "observer/test/history.test.mjs": {
       "lane": "OBS",
@@ -782,13 +819,13 @@
     },
     "observer/src/v2-binding-review.mjs": {
       "lane": "OBS",
-      "sha": "9cdf0c7ed6f506839d770773f3837c8fc6babcaa",
-      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+      "sha": "711cb7b10de0598aa7b195ab6ae26a2f5698833a",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
     },
     "observer/test/v2-binding-review.test.mjs": {
       "lane": "OBS",
-      "sha": "86e03b06b389ce4041859d11536963a1813d642d",
-      "sourceCommit": "38847cf1399c59fd1a1665c8bef2249479d7da03"
+      "sha": "01c68e5fff0977b469e4fe39ceb6708917bd5caf",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
     },
     "holochain/demo/Cargo.lock": {
       "lane": "RAVE",
@@ -819,6 +856,261 @@
       "lane": "RAVE",
       "sha": "49588255a7cd44fa966d9722fd5cdf8b637ed0c4",
       "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "observer/test/replay-guard-boundary.test.mjs": {
+      "lane": "OBS",
+      "sha": "94e982c81a4c60b5808f99165f4dde735eca32d5",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
+    },
+    "observer/docs/OBS_A3_A4_REPLAY_AND_V2_FREEZE_CANDIDATE_2026-11-14.md": {
+      "lane": "OBS",
+      "sha": "79c6e343797f5add6192eaa95ca7870d9224f87a",
+      "sourceCommit": "e70a178a927e74326abfff6732bf49e66df4f447"
+    },
+    "holochain/shadow-review.mjs": {
+      "lane": "RAVE",
+      "sha": "cd588e4fd7f7f21b222811bfe2a3ce55efc63e16",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/test-only-adapter.mjs": {
+      "lane": "RAVE",
+      "sha": "1ffca1a8a1d9e0f133c9f28dfceddb685bc6ee4a",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/transaction-shadow.mjs": {
+      "lane": "RAVE",
+      "sha": "05b9c76217564e6bdb7ea8847300424c1a17e73e",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/shadow-cli.test.mjs": {
+      "lane": "RAVE",
+      "sha": "0930198fc2c9876cf298230993bdd52bafa1ce57",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/shadow-review.test.mjs": {
+      "lane": "RAVE",
+      "sha": "82cb9294f355d2a155aa97602b56d417fc12b18c",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/test-only-adapter.test.mjs": {
+      "lane": "RAVE",
+      "sha": "2a646e2104a1906625e3538d471d92e731143d91",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/transaction-provenance-journal.test.mjs": {
+      "lane": "RAVE",
+      "sha": "4ed004fb59d073bea2ee02f9dda9f0a31ded3ad1",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/transaction-shadow.test.mjs": {
+      "lane": "RAVE",
+      "sha": "551f7fd467dd7c080c49aac3e096e751208c7499",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/sandbox/probe-verified-unyt-conductor.sh": {
+      "lane": "RAVE",
+      "sha": "d000884abac204578306adfb2cf1ec6ec05f87f4",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/scale-guard.mjs": {
+      "lane": "RAVE",
+      "sha": "2f70f4b2821374f74a009d24c532984644a5a89c",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/scale-guard.test.mjs": {
+      "lane": "RAVE",
+      "sha": "659c8008cc219bf7d7ae61d0ef0b8c013e8061f1",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/two-conductor-preflight.test.mjs": {
+      "lane": "RAVE",
+      "sha": "ffecc3e3485606211ea38d496485b3a466dafc8d",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/sandbox/assert-verified-unyt-wasm-inventory.mjs": {
+      "lane": "RAVE",
+      "sha": "7aed5a55b35e49c24cb711dc5aa98966c597cee4",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/sandbox/audit-two-conductor-preflight.mjs": {
+      "lane": "RAVE",
+      "sha": "cce876dfe22ccd659f2bae90b76c57c88d1c0e9a",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "tests/holochain/sandbox/inventory-verified-unyt-wasm.mjs": {
+      "lane": "RAVE",
+      "sha": "48826cb10c5e686f6d6ceb50bf7190163e20dd3f",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/demo/bootstrap-locks.sh": {
+      "lane": "RAVE",
+      "sha": "962632c3888fa412d96dd86c3a6b57dd1fb0735d",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/demo/ABI_V2_A3_CONVERGENCE_GATE.md": {
+      "lane": "RAVE",
+      "sha": "e50bee15b8cfce3c14f5fc656be0138dfbee32ac",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/demo/NATIVE_LOCK_REVIEW_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "0837e788fb0777bb4eadf91849c0b5985c64044e",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/demo/SOURCE_DOMAIN_DEMO55_A4_REVIEW.md": {
+      "lane": "RAVE",
+      "sha": "8f55aa7ca1c32ab102f7ed38a83482003d3bbb96",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/research/RAVE_0117_CONTINUATION_HANDOFF.md": {
+      "lane": "RAVE",
+      "sha": "c3a9d9bfe8031a714e50fbc0a7db122673c52365",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/research/UNYT_0117_EXACT_HEAD_VALIDATION_MATRIX.md": {
+      "lane": "RAVE",
+      "sha": "a415b3f1e285e75fe6e3290e7b2b95f76c106437",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/research/UNYT_0117_WASM_EXPORT_AND_SOURCE_GATE.md": {
+      "lane": "RAVE",
+      "sha": "9644bc4da922ea5956e747f2b55812fd02d20596",
+      "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660"
+    },
+    "holochain/demo/INSTALLED_AUDIT_RUNTIME_TUPLE_2026-11-14.md": {
+      "lane": "RAVE",
+      "sha": "22971515b54850fbb9061f080531f17c2ff92fca",
+      "sourceCommit": "f0c0ec00653c9323a2e166f8687c1971c2098d72"
+    },
+    "security/evidence/solana-pr55-original-43604140724/artifact-14118166967-original.zip": {
+      "lane": "SOL",
+      "sha": "eb7de4ddea29d9b1b485b32dc941691cdd2f071c",
+      "sourceCommit": "768f463a921998431f17007ffb1a79ac5577da6e"
+    },
+    "tests/solana/ORIGINAL_PR55_PRESERVATION_AND_SOURCE_REVIEW_2026-11-14.md": {
+      "lane": "SOL",
+      "sha": "41b891d816aa6e25a2ee2c3a1f5e8b1a63596095",
+      "sourceCommit": "768f463a921998431f17007ffb1a79ac5577da6e"
+    },
+    "tests/solana/verify-pr55-original-zip.py": {
+      "lane": "SOL",
+      "sha": "76dd91a45285724b2fc1f9e81d6acd78a455dda2",
+      "sourceCommit": "02a89b799ca06dd656684799ddce94597a4c3f52"
+    },
+    "tests/solana/ORIGINAL_PR55_ARCHIVE_SOURCE_EPOCH_REVIEW_2026-11-14.md": {
+      "lane": "SOL",
+      "sha": "55791a6baa31594e57a4e76948d1f590fe82202d",
+      "sourceCommit": "02a89b799ca06dd656684799ddce94597a4c3f52"
+    },
+    "tests/solana/produce-history-archive.mjs": {
+      "lane": "SOL",
+      "sha": "7c37cf8aa0e6ffefb0871224ae228489e3bd84ff",
+      "sourceCommit": "9d62b8ee5eb760092610193c77eeb49270dfc29e"
+    },
+    "tests/solana/produce-history-archive.test.mjs": {
+      "lane": "SOL",
+      "sha": "529dc9f699e1113d6b155e05aff46ced746ea8b9",
+      "sourceCommit": "9d62b8ee5eb760092610193c77eeb49270dfc29e"
+    },
+    "tests/solana/OBS_ARCHIVE_PRODUCER_HANDOFF.md": {
+      "lane": "SOL",
+      "sha": "cb3730b9ad724098b5cbb7bed489283f9469b427",
+      "sourceCommit": "9d62b8ee5eb760092610193c77eeb49270dfc29e"
+    },
+    "docs/adr/2026-11-14-future-solana-custody-research.md": {
+      "lane": "SOL",
+      "sha": "4aa6036dcf2f67a3e97261fe88935fe221ca8d44",
+      "sourceCommit": "f2491e0311e51879f8f22aad4d322b3e8f5946b7"
+    },
+    "docs/adr/2026-11-14-solana-produced-slot-archive-handoff.md": {
+      "lane": "SOL",
+      "sha": "b5fa1df9e24a41896a97565ade2eaba0ebd63d74",
+      "sourceCommit": "f2491e0311e51879f8f22aad4d322b3e8f5946b7"
+    },
+    "security/evidence/2026-11-14-6004-authenticated-ledger-independent-review.md": {
+      "lane": "SEC",
+      "sha": "1392401be0f929e2be0d61562928e6515e72238f",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/scripts/verify-signed-operations.mjs": {
+      "lane": "SEC",
+      "sha": "f115f0ea6ee5d0e5892488151a692e1cc4a672ac",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/test/external-checkpoint-reference.test.mjs": {
+      "lane": "SEC",
+      "sha": "4d77f50286db9e23ff94a3863020c89dc743d00f",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/adr/2026-11-14-attestation-custody-options.md": {
+      "lane": "SEC",
+      "sha": "6403fca517a35193d3b988d49bd5b0627142f90e",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-a0-current-sha-security-gate.md": {
+      "lane": "SEC",
+      "sha": "31f3212556e0bfd6fd008464f386a2e29b01d227",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-a0-independent-negative-matrix.md": {
+      "lane": "SEC",
+      "sha": "b057997b924a35f2b8c89bcc19e00083b68c2c4b",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-pr58-exact-sha-domain-v2-authorization-decision.md": {
+      "lane": "SEC",
+      "sha": "e2a423b0361b11a2b2ae64d1f5a8dc4fb3d440d0",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-pr60-pr61-source-native-v2-authorization-review.md": {
+      "lane": "SEC",
+      "sha": "eb6185a673f987b2a1589be2c2041d1f2180a22a",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-sec38-demo-re-review.md": {
+      "lane": "SEC",
+      "sha": "6816e073247cd73c6525a9a8f48e9a340c997617",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-sec38-e46-a0-exact-sha-review.md": {
+      "lane": "SEC",
+      "sha": "97573746907e631aebf8ddf30f46846f7567fe5f",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-sec38-f9d65-demo-convergence-review.md": {
+      "lane": "SEC",
+      "sha": "a4e5d00ea8de67d28ae26e0403027eb4f35d5c16",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-agent5-sol55-obs57-integration56-demo44-authorization-handoff.md": {
+      "lane": "SEC",
+      "sha": "721bf283c197dffa9cf64bf5a7c73b478186002f",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-external-checkpoint-reference-node-tap.log": {
+      "lane": "SEC",
+      "sha": "60cc7e0b6def65efb7b9c2ecc50dc8560e4f3420",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-pr38-independent-solana-security-review.md": {
+      "lane": "SEC",
+      "sha": "7c6fdb0bb0f08782407055da9feea56fc68a871c",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-sec-final-a0-live-source-review-and-distinct-reviewer-handoff.md": {
+      "lane": "SEC",
+      "sha": "8140397c6e416713c3b4c73f22192ee7871e8735",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-sec-sol50-obs52-own-dna-milestone-gates.md": {
+      "lane": "SEC",
+      "sha": "7cfb87f214feecb19f51050e3c9537c16907a156",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
+    },
+    "security/evidence/2026-11-14-sec38-remediation-observer-checkpoint-review.md": {
+      "lane": "SEC",
+      "sha": "c61c7ffc8fd4616467ad13bee23373bf03bcca92",
+      "sourceCommit": "53bc4110583892e6d7bba5533025670e396e5ed7"
     }
   },
   "integrationOnlyProvenance": {
@@ -901,5 +1193,21 @@
     "sourceCommit": "7ccee3db4a86125bd914a9821f62cba783af0660",
     "reason": "real Cargo binary rejects rustup-only +toolchain syntax with exit 101; verify exact compiler versions and use directly",
     "approval": false
+  },
+  "consolidation": {
+    "date": "2026-11-20",
+    "branch": "claude/holochain-solana-consolidation-3l2lqm",
+    "mainBase": "e1651fec77f1ed5c5f8e760e486c8757adc5e69c",
+    "integrationParent": {
+      "pr": 67,
+      "sha": "d0409a1d85bc377139285c39f9303f3b97470b29"
+    },
+    "method": "Git merges of every adopted specialist head (ancestry-verifiable); conflicts resolved per docs/consolidation/INTEGRATION_REPORT.md; fileProvenance blobs verified byte-identical to the recorded sourceCommit.",
+    "historicalEvidenceInherited": false,
+    "note": "CI results for d0409a1, 03b567a or any earlier SHA are historical only. The consolidation SHA requires its own runs (docs/consolidation/TEST_RESULTS.md).",
+    "deferred": [
+      "PR #48 3258cb9: v2-proof-contract superseded by #57/#62 typed v2; durable returnedActionHash (63403b8/cafc19e) and path-scoped uiAmount (b29e469/3288d11/2802d95) need OBS-owner port to the Kit v2 outbox before any transport activation",
+      "PR #44 16b60ea redacting coordinator error variant: RAVE/SEC decision"
+    ]
   }
 }
