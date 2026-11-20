@@ -18,7 +18,7 @@ GitHub deletes those archives at **2026-11-28 22:37–22:58 UTC**. After that, `
 
 Prerequisites: `gh` authenticated as a user with write access, and Python 3 on a trusted machine. Run from a checkout of PR #68's branch (or `main` after it merges).
 
-1. Download the originals through the authenticated API. The script verifies size, SHA-256, CRC, entry count, path safety and the run/job metadata, then writes `SHA256SUMS` and `PRESERVATION_RECORD.json`:
+1. Download the originals through the authenticated API. The script verifies size, SHA-256, CRC, entry count, path safety and the run/job metadata, then writes `SHA256SUMS` and `PRESERVATION_RECORD.json`. Transient GitHub API errors (HTTP 429/5xx, timeouts) are retried up to 5 times with backoff. Any 4xx fails closed immediately (`PRESERVATION_REFUSED:GITHUB_API_ERROR:<status>`). If the run fails part-way, delete the partial output directory and run it again:
 
    ```bash
    python3 -I scripts/installation/preserve-originals.py download --out pr66-originals

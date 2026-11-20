@@ -20,7 +20,7 @@ Subcommands
 
 DIR must contain <artifactId>.zip files named by the pinned manifest.
 """
-import argparse, datetime, hashlib, json, pathlib, shutil, stat, subprocess, sys, zipfile
+import argparse, datetime, hashlib, json, math, os, pathlib, re, shutil, stat, subprocess, sys, time, zipfile
 
 MANIFEST = pathlib.Path('demo/installation/preservation/pr66-originals-manifest.json')
 BASELINE = pathlib.Path('demo/installation/baseline.json')
@@ -109,9 +109,47 @@ def check_metadata(m, meta):
              x['workflow_run']['head_sha'] == m['sourceCommit'], 'ARTIFACT_API_METADATA:%s' % a['artifactId'])
 
 
+GH_ATTEMPTS = 5
+# Only server-side / transport failures are retried. 4xx (e.g. 403, 404, 410 for
+# an expired artifact) fail closed immediately. Retrying never weakens
+# verification: every byte is still checked against the pinned SHA-256 later.
+GH_TRANSIENT = re.compile(r'HTTP (?:429|5\d\d)\b|timed? ?out|connection (?:reset|refused)|'
+                          r'unexpected EOF|TLS handshake', re.I)
+
+
+def gh_retry_base():
+    raw = os.environ.get('PRESERVE_GH_RETRY_BASE_SECONDS', '2')
+    try:
+        base = float(raw)
+    except ValueError:
+        fail('RETRY_BASE_INVALID')
+    need(math.isfinite(base) and 0 <= base <= 30, 'RETRY_BASE_INVALID')
+    return base
+
+
 def gh(path, binary=False):
-    out = subprocess.check_output(['gh', 'api', path])
-    return out if binary else json.loads(out)
+    base = gh_retry_base()
+    for attempt in range(1, GH_ATTEMPTS + 1):
+        try:
+            p = subprocess.run(['gh', 'api', path], capture_output=True)
+        except FileNotFoundError:
+            fail('GH_CLI_UNAVAILABLE')
+        if p.returncode == 0:
+            if binary:
+                return p.stdout
+            try:
+                return json.loads(p.stdout)
+            except ValueError:
+                fail('GITHUB_API_MALFORMED_JSON')
+        err = p.stderr.decode('utf-8', 'replace')
+        last = (err.strip().splitlines() or ['gh exited %d' % p.returncode])[-1][:200]
+        print('gh api %s: %s (attempt %d/%d)' % (path, last, attempt, GH_ATTEMPTS), file=sys.stderr)
+        if not GH_TRANSIENT.search(err):
+            code = re.search(r'HTTP (\d{3})', err)
+            fail('GITHUB_API_ERROR:' + (code.group(1) if code else 'EXIT_%d' % p.returncode))
+        if attempt < GH_ATTEMPTS:
+            time.sleep(base * 2 ** (attempt - 1))
+    fail('GITHUB_API_UNAVAILABLE_AFTER_RETRIES')
 
 
 def api_snapshot(m, require_unexpired=True):

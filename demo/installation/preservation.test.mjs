@@ -167,3 +167,80 @@ test('restore never overwrites an existing installation work tree', t => {
   refused(run(root, 'restore', '--dir', store, '--metadata', 'record'), 'RESTORE_TARGET_NOT_EMPTY');
   assert.equal(readFileSync(join(root, 'work/installation-originals/sol.zip'), 'utf8'), 'previous');
 });
+
+// --- `download` through a FAKE `gh` on PATH (no network). Proves bounded retry of
+// transient GitHub API failures, immediate fail-closed on 4xx, and that a retry
+// can never substitute bytes (the pinned SHA-256 still decides).
+const FAKE_GH = `#!/usr/bin/env python3
+import json, os, pathlib, sys
+d = pathlib.Path(os.environ['FAKE_GH_DIR'])
+path = sys.argv[2]
+with open(d / 'calls.log', 'a') as f:
+    f.write(path + '\\n')
+n = len((d / 'calls.log').read_text().splitlines())
+plan = json.loads((d / 'plan.json').read_text())
+if n <= plan['failFirst']:
+    sys.stderr.write('gh: HTTP %d\\n' % plan['status']); sys.exit(1)
+r = plan['routes'].get(path)
+if r is None:
+    sys.stderr.write('gh: Not Found (HTTP 404)\\n'); sys.exit(1)
+if 'file' in r:
+    sys.stdout.buffer.write(pathlib.Path(r['file']).read_bytes())
+else:
+    sys.stdout.write(json.dumps(r['json']))
+`;
+function fakeGh(t, {failFirst = 0, status = 503, substitute = false} = {}) {
+  const fx = fixture(t);
+  const meta = JSON.parse(readFileSync(join(fx.root, 'meta.json')));
+  const gh = join(fx.root, 'fake-gh'); mkdirSync(join(gh, 'bin'), {recursive: true});
+  writeFileSync(join(gh, 'bin', 'gh'), FAKE_GH, {mode: 0o755});
+  const routes = {};
+  for (const rid of ['1', '2'])
+    routes[`repos/x/y/actions/runs/${rid}`] = {json: {id: +rid, status: 'completed', path: 'w.yml', ...meta.runs[rid]}};
+  routes['repos/x/y/actions/jobs/3'] = {json: meta.buildJob};
+  for (const k of KINDS) {
+    routes[`repos/x/y/actions/artifacts/${k.id}`] = {json: {id: k.id, created_at: 'T', expires_at: 'T', expired: false, ...meta.artifacts[k.id]}};
+    let file = join(fx.store, `${k.id}.zip`);
+    if (substitute && k.kind === 'sol') {
+      const b = readFileSync(file); b[b.length - 30] ^= 1; file = join(gh, 'substitute.zip'); writeFileSync(file, b);
+    }
+    routes[`repos/x/y/actions/artifacts/${k.id}/zip`] = {file};
+  }
+  writeFileSync(join(gh, 'plan.json'), JSON.stringify({failFirst, status, routes}));
+  const env = {...process.env, PATH: join(gh, 'bin') + ':' + process.env.PATH, FAKE_GH_DIR: gh,
+    PRESERVE_GH_RETRY_BASE_SECONDS: '0'};
+  const out = join(fx.root, 'dl');
+  const r = spawnSync('python3', ['-I', SCRIPT, 'download', '--out', out], {cwd: fx.root, encoding: 'utf8', env});
+  const calls = existsSync(join(gh, 'calls.log')) ? readFileSync(join(gh, 'calls.log'), 'utf8').trim().split('\n') : [];
+  return {...fx, r, out, calls, routes};
+}
+
+test('download retries transient GitHub API failures (503) and still seals only the pinned bytes', t => {
+  const {r, out, store, calls, routes} = fakeGh(t, {failFirst: 2, status: 503});
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /SEALED_4_ORIGINAL_ARCHIVES/);
+  assert.match(r.stderr, /HTTP 503 \(attempt 1\/5\)/);
+  assert.equal(calls.length, Object.keys(routes).length + 2, 'exactly two retried calls');
+  for (const k of KINDS) assert.ok(readFileSync(join(out, `${k.id}.zip`)).equals(readFileSync(join(store, `${k.id}.zip`))));
+  const rec = JSON.parse(readFileSync(join(out, 'PRESERVATION_RECORD.json')));
+  assert.equal(rec.durableLocation, null);
+  for (const [k, v] of Object.entries(DENIALS)) assert.deepEqual(rec[k], v);
+});
+
+test('download fails closed after bounded retries, and never retries 4xx', t => {
+  let x = fakeGh(t, {failFirst: 99, status: 503});
+  refused(x.r, 'GITHUB_API_UNAVAILABLE_AFTER_RETRIES');
+  assert.equal(x.calls.length, 5, 'bounded: 5 attempts, no infinite retry');
+  assert.ok(!existsSync(join(x.out, 'PRESERVATION_RECORD.json')) && !existsSync(join(x.out, 'SHA256SUMS')), 'nothing sealed');
+  for (const status of [403, 404, 410]) {
+    x = fakeGh(t, {failFirst: 99, status});
+    refused(x.r, 'GITHUB_API_ERROR:' + status);
+    assert.equal(x.calls.length, 1, status + ' is not retried');
+  }
+});
+
+test('bytes substituted by the API after a retry are still refused by the pinned digest', t => {
+  const {r, out} = fakeGh(t, {failFirst: 1, status: 502, substitute: true});
+  refused(r, 'ARCHIVE_SHA256_MISMATCH');
+  assert.ok(!existsSync(join(out, 'PRESERVATION_RECORD.json')), 'nothing sealed');
+});
