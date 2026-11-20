@@ -4,9 +4,10 @@
 
 | Item | Value |
 |---|---|
-| Validated code commit | **`8bf0d7411a05380e76284db2356d1555ab97f636`** (branch `claude/holochain-solana-consolidation-3l2lqm`, PR #68) |
+| Validated code commit (current) | **`96bf5b7d7260a4177507cf5e3763e19e982a9c3d`** (P0 follow-up: preservation tooling, #48 port, Agave pin, release-workflow lock; branch `claude/holochain-solana-consolidation-3l2lqm`, PR #68) |
+| Validated code commit (initial consolidation) | `8bf0d7411a05380e76284db2356d1555ab97f636`; its results are kept below as history |
 | Base | `main` `e1651fec77f1ed5c5f8e760e486c8757adc5e69c` |
-| Commits after `8bf0d74` | documentation only (`docs/consolidation/*.md`, `README.md`, `docs/LOCALNET.md` banner). Their own CI runs are listed in the PR #68 description; `git diff --stat 8bf0d74..<head>` touches no code, workflow, lockfile or fixture |
+| Commits after `96bf5b7` | documentation / `.gitignore` only. Their own CI runs are listed in the PR #68 description |
 | Historical evidence | #66 `03b567a` / #67 `d0409a1` runs are **not** cited as evidence for this commit |
 
 ## Toolchain at the validated commit
@@ -23,7 +24,48 @@ Read from CI job logs, not from configuration:
 | Runner | ubuntu-24.04 (24.04.5) | job logs |
 | Local (this session) | Node v22.23.5, Python 3.13.18 (`cryptography` 50.0.1); no Anchor / Solana / hc locally | local shell |
 
-## GitHub Actions at `8bf0d74`
+## GitHub Actions at `96bf5b7` (current validated code commit)
+
+| Workflow | Run | Result | Jobs |
+|---|---|---|---|
+| Sprint 0 CI (fail-closed) | [44772038807](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038807) | ✅ **success** | **7/7** |
+| S0 cross-agent integration snapshot (same-run) | [44772038779](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038779) | ⏳ **in progress** at the time of this commit | 3/4 ✅ so far: SOL lifecycle (job 136411937554), RAVE crate (136411937829), cross-lane-js (136419026862). The Holochain build job (136419484328) was still compiling; its result is recorded in the next commit / PR #68 description |
+| Original #66 evidence preservation and restore check (new) | [44772038825](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038825) | ✅ **success** | 1/1 |
+| Original installation evidence and authorization denials | [44772038977](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038977) | ✅ **success** | 1/1 |
+| A0 non-authorizing Cargo dependency bootstrap | [44772038834](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038834) | ✅ **success** | 1/1 |
+| A0 own-DNA reproducible build gate | [44772038783](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44772038783) | ❌ **INTENTIONALLY BLOCKED** | static-readiness ✅; own-dna-build ❌ by design (job 136412117398: `BLOCKED_NOT_ACCEPTED`, same five blockers, exit 3); install job skipped (`if: ${{ false }}`) |
+| RAVE Unyt v0.117.0 release proof | **not run; dispatch removed; probe job hard-disabled** | — | see MAINLINE_MAINTENANCE.md §5 |
+
+Key evidence at `96bf5b7`, read from job logs:
+
+| Job / step | Evidence |
+|---|---|
+| Observer unit tests (job 136411927412) | `# tests 164 # pass 164 # fail 0 # skipped 0` (156 before the #48 port; 8 new) |
+| Guard job: workflow install gates (job 136411927451) | `workflow-install-gates.test.mjs`: `# tests 5 # pass 5 # fail 0` |
+| Validator RPC smoke (job 136411927274) | `install-agave.sh`: `/tmp/agave-4.1.2.*.tar.bz2: OK` (SHA-256 pinned) → `AGAVE_4.1.2_INSTALLED_FROM_SHA256_PINNED_ARCHIVE`; `solana-cli 4.1.2 (src:182084b8; feat:c763ae0a, client:Agave)`; positive + negative RPC smoke |
+| Anchor compile (job 136411926726) | same pinned installer; `cargo check` + `anchor build` passed; IDL SHA-256 `056caec07d3d52769c545fce378cd771512e788cf8d57f5ba125f1015e271162`, `.so` `5377409716e5163e2f2f07e91274bdbd6a33d1886b4343600151defd423aef59` (disposable per-run program ID); `Cargo.lock` `9700366d…` (reviewed) |
+| Cross-lane fixture tests (job 136417290682) | `CROSS_LANE_MODE: INTEGRATED_REQUIRED`; 31 declared suites, unchanged since `8bf0d74`, 204 tests. The runner fails on any skip or failure, and the job passed |
+| Preservation (job 136411927278) | `ORIGINAL_ARCHIVES_VERIFIED 4/4`; `sha256sum -c` 4× `OK`; interim artifact 14648401319 (`sha256:0f9c3f06…`, 9,031,141 B, expires 2027-02-18, **not durable**); `RESTORED_ORIGINAL_BYTES_REPRODUCE_COMMITTED_INVENTORY uhC0kCn-ld2PREMKI6nDVq4XssTKHgs8QHOszCC3a32pXCZjowgXt 7` |
+| Installation preparation (job 136411927105) | **41/41** (34 installation + 7 preservation; includes the 2 A0 refusal files); new **unapproved** candidate request artifact 14647028398 (`sha256:310faf4f…`), not committed |
+
+## Local execution at `b6b0711` (code identical to `96bf5b7` except a YAML name quote and docs)
+
+| Suite | Command | Result |
+|---|---|---|
+| Observer | `node --test observer/test/*.test.mjs` | 164/164 |
+| Cross-lane | `node scripts/ci/run-cross-lane-tests.mjs` | 203 pass + 1 skip (no local Anchor IDL) → exit 1 locally by design; CI passes with no skips |
+| Installation | `node --test demo/installation/*.test.mjs` | 34/34 (CI adds 2 A0 files → 41) |
+| Demo | `node --test demo/*.test.mjs` | 65/65 |
+| Holochain JS | `node --test tests/holochain/*.test.mjs tests/holochain/demo/*.test.mjs` | 84/84 |
+| Security | `node --test security/test/*.test.mjs` | 73/73 |
+| scripts/ci | `node --test scripts/ci/*.test.mjs` (guard + workflow gates) | 8/8 |
+| Integration fixtures | `node --test tests/integration/*.test.mjs` | 0/6: **environmental**. Fixtures such as `sprint1-lifecycle-transactions.json` are produced only by the CI validator job; they pass in same-run CI |
+| Provenance | `node scripts/ci/verify-integration-provenance.mjs` | `PASS: 166 committed source-owned Git blobs, integration-only fixtures, four reviewed dependency locks`; a one-byte edit to the ported outbox is refused |
+| Workflow gates | `node scripts/ci/workflow-install-gates.mjs` | `WORKFLOW_INSTALL_GATES_OK`; against the pre-lock `rave-unyt-release.yml`: 3 violations, exit 1 |
+| Guard | `node scripts/ci/guard.mjs` | `REPOSITORY_GUARD_OK` |
+| Agave digest | independent `curl` of the v4.1.2 x86_64 archive + `sha256sum` | 218,318,551 B, `5991d027…f770` (= pin) |
+
+## GitHub Actions at `8bf0d74` (initial consolidation; historical)
 
 | Workflow | Run | Result | Jobs |
 |---|---|---|---|
@@ -110,7 +152,7 @@ These are the same five blockers as #66 run 43648980995. The workflow comments d
   - all four denials
 - The candidate is **not committed and not approved**. The committed historical request is unchanged.
 
-## Local execution at `8bf0d74`
+## Local execution at `8bf0d74` (historical)
 
 Run in this session; every command is invoked exactly as its workflow does.
 
@@ -148,7 +190,8 @@ Run in this session; every command is invoked exactly as its workflow does.
 |---|---|---|
 | A0 own-DNA build gate | BLOCKED (red by design) | five authorization / review blockers |
 | Install, genesis, Lair, capability grant, zome call | BLOCKED (`if: ${{ false }}`) | no independently authorized exact request |
-| RAVE Unyt release proof incl. conductor probe | NOT RUN | performs a disposable Unyt cell genesis; not authorized by this task |
-| #48 durable returned-ActionHash tests | NOT INCLUDED | fix not ported; its 2 tests fail on the consolidated outbox (INTEGRATION_REPORT §4) |
+| RAVE Unyt release proof incl. conductor probe | NOT RUN; **dispatch removed and probe hard-disabled** (`b6b0711`) | performs a disposable Unyt cell genesis; not authorized. Historical branches still carry the old enabled copy (owner action) |
+| #48 durable returned-ActionHash tests | **PORTED** (`98db651`) | 8 new + test 18 strengthened; 164/164. OBS + SEC review still required |
+| Durable copy of the original #66 archives | **BLOCKED (owner action)** | public repository; no owner-authorized private storage. Verified and restore-tested; interim 90-day copy only |
 | Cross-lane artifact download for re-hash | NOT DONE | egress proxy blocks `*.blob.core.windows.net`; counts were taken from job logs |
 | Local Anchor / validator / Holochain builds | NOT RUN LOCALLY | toolchains unavailable in session; executed in GitHub Actions above |
