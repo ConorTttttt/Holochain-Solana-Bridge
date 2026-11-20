@@ -31,8 +31,8 @@ Two different questions, kept apart deliberately:
 | Observer | Durable returned-ActionHash pin / terminal HOLD on the delivery path | **NOT IMPLEMENTED** in the consolidated outbox (#48 fix not ported). Must land before any transport activation |
 | Observer → Holochain | v2 transport (deliver observations to a DNA) | **BLOCKED** (`deliveryAuthorized:false`; ABI unratified) |
 | Holochain | RAVE shadow reviewer: quarantine-only, four literal denials | COMPLETED · TESTED |
-| Holochain | Native HAM adapter + integrity/coordinator WASM, locked (`--locked`, Rust 1.95, Holonix `a6cdfbd`) | COMPLETED · TESTED **iff** the same-run job is green at this SHA (TEST_RESULTS.md) |
-| Holochain | Source-bound DNA / hApp packaging (properties from the **same** Solana run) and artifact hashing | COMPLETED · TESTED under the same condition |
+| Holochain | Native HAM adapter + integrity/coordinator WASM, locked (`--locked`, Rust 1.95, Holonix `a6cdfbd`) | COMPLETED · TESTED (same-run run 44714083624 at `8bf0d74`; digests in TEST_RESULTS.md) |
+| Holochain | Source-bound DNA / hApp packaging (properties from the **same** Solana run) and artifact hashing | COMPLETED · TESTED (DNA `uhC0khasELjjRHDaRK7qAXjSCPbOvPbb8rjDfgH7qg_J5E5IyUFWS` at `8bf0d74`; install skipped) |
 | Holochain | DNA installation, cell genesis, keystore provisioning, capability grants, signed audit write, read-back | **BLOCKED**: steps are `if: ${{ false }}`; no authorized request |
 | Authorization | Canonical installation request, Ed25519 grant verification, one-use broker redemption, identity checks | COMPLETED · TESTED (34 synthetic-key refusal tests) · not exercised with any real authority |
 | Economics | Holochain credit, settlement, withdrawals, redemption, mainnet assets | **NOT IMPLEMENTED and BLOCKED** (`evidence-gate.mjs` throws; Gate C NO-GO) |

@@ -28,7 +28,7 @@ Read from CI job logs, not from configuration:
 | Workflow | Run | Result | Jobs |
 |---|---|---|---|
 | Sprint 0 CI (fail-closed) | [44714083657](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714083657) | ✅ **success** | **7/7** |
-| S0 cross-agent integration snapshot (same-run) | [44714083624](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714083624) | ⏳ **IN PROGRESS when this file was committed**: 3/4 jobs ✅; final result recorded in a follow-up commit and the PR description | 3/4 completed ✅ (solana-lifecycle, rave-rust, cross-lane-js); own-dna-same-run-build running |
+| S0 cross-agent integration snapshot (same-run) | [44714083624](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714083624) | ✅ **success** | **4/4** (install/identity steps skipped by `if: ${{ false }}`) |
 | Original installation evidence and authorization denials | [44714083662](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714083662) | ✅ **success** | 1/1 |
 | A0 non-authorizing Cargo dependency bootstrap | [44714083641](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714083641) | ✅ **success** | 1/1 |
 | A0 own-DNA reproducible build gate | [44714084009](https://github.com/ConorTttttt/Holochain-Solana-Bridge/actions/runs/44714084009) | ❌ **INTENTIONALLY BLOCKED** | static-readiness ✅; own-dna-build ❌ by design (exit 3); install job skipped (`if: ${{ false }}`) |
@@ -53,7 +53,36 @@ Read from CI job logs, not from configuration:
 | Real local-validator Anchor lifecycle (SOL runner; disposable only) | ✅ | SHA-256-pinned Agave 4.1.2 archive. `localnet-build.sh`: real `anchor build` and deploy, then four isolated `anchor test` validator modes, each followed by the witness-bundle and tamper verifiers:<br>• `lifecycle`: freeze-enabled mint rejected with atomic rollback; initialize pins one classic SPL mint + PDA authority; deposit creates nonce-keyed receipt and conserves base units; duplicate nonce / wrong signer / wrong mint / wrong source fail atomically; admin-only pause; refund works once; concurrent deposits, rollback and authority attacks<br>• `init-capture`<br>• `u64-max`<br>• `demo-domain`: source-bound initialize / deposit / refund + demo-domain tamper verifier<br>Then a retained-ledger validator restart and reconcile |
 | RAVE 0.15.0 real crate tests (NOT deployed DNA) | ✅ | crate integrity verified; published-crate harness |
 | Required SOL layout / SEC adversarial / RAVE shadow fixtures (real SDK) | ✅ | provenance (168 pinned blobs, 4 locks); IDL / ELF vs disposable program ID; all offline cross-lane suites, no skips; original Anchor key-sync patch replay; **complete 54-transaction finalized witness inventory + tamper denials**; genuine signed-wire replay through OBS; real Kit-reviewed v2 **pending** queue + explicit NO-ACK; fresh same-SHA demo-domain → OBS Kit v2 (no ACK); seven-stage preauthorization runner (no write); real finalized snapshots → OBS → **quarantine-only** shadow; SHA-bound A0 BLOCKED inventory |
-| Same-run SOL/OBS-bound real Holochain 0.7.1 build and admin-only install | ⏳ IN PROGRESS at commit time | prerequisites ✅ (same-run SOL/OBS artifacts retrieved; original bytes + source domain + derived DNA binding negatives verified; both A4-reviewed locks committed); "Locked native HAM and WASMs; pack source-bound DNA and hApp (no zome call)" running. Install / identity steps are `if: ${{ false }}` and will be skipped |
+| Same-run SOL/OBS-bound real Holochain 0.7.1 build and admin-only install | ✅ | prerequisites ✅ (this run's SOL/OBS artifacts retrieved; original bytes, source domain and derived-DNA binding negatives verified; both A4-reviewed locks committed). **Locked native HAM** (`cargo build --locked`, release, 5m38s) and **integrity + coordinator WASM** (47.49s) compiled with rustc/cargo 1.95.0 and `holochain_cli 0.7.1`. `hc dna pack` / `hc app pack` wrote the source-bound bundles; all 7 digests re-checked `OK`. **Install** and **seven-stage publish** steps were **skipped** (`if: ${{ false }}`); the mutation-boundary step printed `STOPPED_BEFORE_ANY_HOLOCHAIN_MUTATION` |
+
+### Same-run build artifacts (run 44714083624, job 136218800217)
+
+Build source printed by `build.sh`: `8bf0d7411a05380e76284db2356d1555ab97f636`.
+
+| Artifact | SHA-256 |
+|---|---|
+| `holochain/demo/ham-adapter/target/release/solana-audit-ham-adapter` (native HAM) | `e3e40f1c3d50959082569206a0f5cd6e1f72a3c20751ec9a26dbe13aba60b5b9` |
+| `target/wasm32-unknown-unknown/release/solana_audit_integrity.wasm` | `1e5bbdf9eeec4edfea66748e65bd539b5d69a17c3122c0ec361c8e212f46b4ca` |
+| `target/wasm32-unknown-unknown/release/solana_audit.wasm` (coordinator) | `552d0392d33004e18e8f0533866a470c7e03afce4eabac4c19717a48e6f7a7ba` |
+| `holochain_solana_audit_demo.dna` | `eb0d7bc50bd371247e4cc4fec83e194e0f9ac44dc697956b49b45b820b5db720` |
+| `holochain_solana_audit_demo.happ` | `8b273581491f4c7bd698fa65f1daece5c9df31ce90d7351f0fe9f28e5b8f7bd1` |
+| `holochain/demo/Cargo.lock` (reviewed) | `c5774a18ba821005d80e51c7bf1663062817ce06e585a2bc2245e09da3b4d6c6` |
+| `holochain/demo/ham-adapter/Cargo.lock` (reviewed) | `08347c32d9f0fd5c479c8a28c1c1766c8497abbb45d0219c4b4fa96e2c3cc399` |
+
+- **Holochain DNA ID** (`hc dna hash`, not the bundle SHA-256): **`uhC0khasELjjRHDaRK7qAXjSCPbOvPbb8rjDfgH7qg_J5E5IyUFWS`**.
+  - This differs from the historical #66 DNA `uhC0kCn-ld2PREMKI6nDVq4XssTKHgs8QHOszCC3a32pXCZjowgXt` **by design**: `dna.yaml` properties are bound to *this* run's disposable Solana execution.
+  - No grant or request for either DNA applies to the other.
+- **Uploaded artifacts:**
+
+  | Artifact | ID | Digest |
+  |---|---|---|
+  | `a0-same-run-source-bound-own-dna-8bf0d74…` | 14618799354 | `sha256:dcfe70141693c4054ab53ca1a62c54d1df727c6ce7ea5b505d3dc74a80c84ae4` |
+  | `integration-localnet-evidence-NO-KEYS` | 14619651251 | `sha256:4cb7bde99c6a6a29d602a1a450fcc5b82f1f2dcbf359a98f1b244c2d4f643841` |
+  | `integration-cross-lane-js` | 14619197515 | `sha256:8e4fcdc71373b6d5e5c560cb19afbcdb0f41d8d0a0a210eb5ea8805fdef42778` |
+  | `integration-rave-rust` | 14618172874 | `sha256:7eb39ede0e8e75baf1fdb80b88680f0d48e068f11f260d04b8b5404db9cb3c66` |
+
+  All four expire **2026-12-04**. Preserve them before then if this build is ever proposed for an authorization request.
+- The build log states: `BUILT ONLY: external Lair, installed CellId, SEC-scoped write approval, signed ActionHash and readback remain separate gates.`
 
 ### A0 gate refusal (run 44714084009, job 136213005946): intentionally BLOCKED
 
